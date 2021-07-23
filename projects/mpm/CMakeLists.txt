@@ -1,0 +1,8 @@
+file(GLOB_RECURSE SOURCES  "*.cpp")
+# message(${SOURCES})
+foreach(proj_source ${SOURCES})
+    get_filename_component(proj_name ${proj_source} NAME_WLE)
+    message(STATUS "Compiling project ${proj_name}")
+    add_executable(${proj_name} ${proj_source})
+    target_link_libraries(${proj_name} bow::bow bow::warnings)
+endforeach()
