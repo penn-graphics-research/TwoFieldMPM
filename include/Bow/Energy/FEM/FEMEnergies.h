@@ -1,0 +1,6 @@
+#include "ElasticityEnergy.h"
+#include "ExternalForceEnergy.h"
+#include "InertialEnergy.h"
+#include "IpcEnergy.h"
+#include "Shell/MembraneEnergy.h"
+#include "Shell/BendingEnergy.h"
