@@ -1,4 +1,4 @@
-# Bow
+# TwoFieldMPM - Run by Bow
 ![C/C++ CI](https://github.com/penn-graphics-research/Bow/workflows/C/C++%20CI/badge.svg)
 
 # Compile
