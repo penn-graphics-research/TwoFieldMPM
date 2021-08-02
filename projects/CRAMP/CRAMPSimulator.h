@@ -528,7 +528,7 @@ public:
     void writeStressSnapshot(T elapsedTime){
         std::string filepath = outputPath + "/stressSnapshot" + std::to_string(elapsedTime) + ".csv";
         std::ofstream file(filepath);
-        file << "Radius,SigmaYY,PosX,Idx\n";
+        file << "Radius,SigmaYY,X Dist From Crack Tip,Idx\n";
         for(unsigned int i = 0; i < m_r.size(); i++){
             file << std::to_string(m_r[i]);
             file << ",";
@@ -820,15 +820,18 @@ public:
         grid.crackParticlesStartIdx = crackPlane_startIdx; //we'll use this in DFGMPMOp to make sure we don't access these particles for other operations!
         grid.crackInitialized = true;
 
+        int crackTipIdx = topPlane_startIdx - 1;
+
         //Now we need to mark particles near the crack as fully damaged
         for(int i = 0; i < crackPlane_startIdx; i++){ //iter normal material particles
             TV p = Base::m_X[i];
+            TV crackTip = Base::m_X[crackTipIdx];
             for(int j = crackPlane_startIdx; j < topPlane_startIdx; j++){ //check material particles against every crack plane particle
                 TV c = Base::m_X[j];
                 T dX = p(0) - c(0);
                 T dY = p(1) - c(1);
                 T dist = std::sqrt(dX*dX + dY*dY);
-                if(dist < radius){
+                if(dist < radius && p(0) < crackTip(0)){
                     Dp[i] = 1.0;
                 }
             }

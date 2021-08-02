@@ -232,6 +232,11 @@ public:
         //First let's iterate separable grid nodes and compute v_cm and store it in fi1 (since we won't apply dynamic impulses for cramp)
         BOW_TIMER_FLAG("evolveCrackPlanes");
 
+        //set some indeces so we can always set the top and bottom plane tips to be equal to the central crack tip
+        int crackTipIdx = topPlane_startIdx - 1;
+        int topTipIdx = bottomPlane_startIdx - 1;
+        int bottomTipIdx = m_X.size() - 1;
+
         //Iterate separable nodes and compute V_cm for each
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             //For separable nodes, compute the frictional contact forces for each field
@@ -346,6 +351,11 @@ public:
                 }
                 
                 m_X[i] += m_V[i] * dt; //advect using velocity either from PIC (APIC or full PIC) or from FLIP (PIC blend FLIP)
+
+                //if this is the top plane tip, set it equal to the updated crackTip
+                if(i == topTipIdx){
+                    m_X[topTipIdx] = m_X[crackTipIdx];
+                }
             }
         });
 
@@ -390,6 +400,11 @@ public:
                 }
                 
                 m_X[i] += m_V[i] * dt; //advect using velocity either from PIC (APIC or full PIC) or from FLIP (PIC blend FLIP)
+
+                //if this is the bottom plane tip, set it equal to the updated crackTip
+                if(i == bottomTipIdx){
+                    m_X[bottomTipIdx] = m_X[crackTipIdx];
+                }
             }
         });
         
@@ -445,7 +460,7 @@ public:
 
                     p_sigmaYY.push_back(sigmaYY);
                     p_r.push_back(radius);
-                    p_posX.push_back(pos[0]);
+                    p_posX.push_back(pos[0] - crackTip[0]);
                     p_idx.push_back(i);
                 }
             }

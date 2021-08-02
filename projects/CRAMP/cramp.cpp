@@ -42,14 +42,14 @@ int main(int argc, char *argv[])
     if (testcase == 201) {
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-6_wDFG_wDamping");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-4_wDFG_woDamping_E200e4");
 
         //Params
-        sim.dx = 0.25e-3; //0.5 mm
+        sim.dx = 0.5e-3; //0.5 mm
         sim.symplectic = true;
         sim.end_frame = 2000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
-        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.frame_dt = 1e-4; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
         sim.writeGrid = true;
 
         //material
-        T E = 200e9; //200 GPa
+        T E = 200e4; //200e9 = 200 GPa
         T nu = 0.3; //0.3
         T rho = 5000; //5.0 g/cm^3 -> 5000 kg/m^3
         
@@ -106,9 +106,9 @@ int main(int argc, char *argv[])
         rampTime = 0.0;
         sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
 
-        T simpleDampFactor = 0.5;
-        T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
-        sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
+        // T simpleDampFactor = 0.5;
+        // T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
+        // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
         T snapshotTime = sim.frame_dt * 1950; //take snapshot after damping, around 1600
         T halfEnvelope = sim.dx;
