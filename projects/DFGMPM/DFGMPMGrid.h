@@ -153,6 +153,7 @@ public:
     //These are for CRAMP implementations using DFGMPMGrid
     int crackParticlesStartIdx = 1000000; //1 million to start
     bool crackInitialized = false;
+    bool horizontalCrack = false;
 
 public:
     DFGMPMGrid()

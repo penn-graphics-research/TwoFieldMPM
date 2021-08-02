@@ -150,6 +150,265 @@ public:
     }
 };
 
+/* CRAMP Partitioned P2G: for each particle to grid mapping, check whether the line between them crosses the explicit crack path 
+    if it does not, transfer particle quantity to field 1 and separable = 0
+    if it does, transfer particle quantity either to field 1 or 2 (depending on CRAMP partitioning algorithm), and separable = 1 
+    NOTE: we also need to set particleAF so we can map backwards in G2P */
+template <class T, int dim>
+class CRAMPPartitionedP2GOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<Vector<T, dim>>& m_V;
+    std::vector<T>& m_mass;
+    Field<Matrix<T, dim, dim>>& m_C;
+    Field<Matrix<T, dim, dim>>& stress;
+
+    int topPlane_startIdx; //so we know the end point of the crackParticles
+
+    Bow::Field<std::vector<int>>& particleAF;
+
+    T gravity;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+    T dt;
+
+    bool symplectic;
+    bool useAPIC;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("CRAMP Partitioned P2G");
+        
+        //Compute extent of crack segments
+        Vector<T,dim> crackStart = m_X[grid.crackParticlesStartIdx];
+        Vector<T,dim> crackTip = m_X[topPlane_startIdx - 1];
+        T crackMinX = std::min(crackStart[0], crackTip[0]);
+        T crackMaxX = std::max(crackStart[0], crackTip[0]);
+        T crackMinY = std::min(crackStart[1], crackTip[1]);
+        T crackMaxY = std::max(crackStart[1], crackTip[1]);
+        
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> x1 = m_X[i];
+                const Vector<T, dim> v = m_V[i];
+                const T mass = m_mass[i];
+                const Matrix<T, dim, dim> C = m_C[i] * mass; //C * m_p
+                const Vector<T, dim> momentum = mass * v; //m_p * v_p
+                const Matrix<T, dim, dim> delta_t_tmp_force = -dt * stress[i]; //stress holds Vp^0 * PF^T
+                BSplineWeights<T, dim> spline(x1, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    Vector<T, dim> x2 = node.template cast<T>() * dx;
+                    Vector<T, dim> xi_minus_xp = x2 - x1;
+                    Vector<T, dim> velocity_term_APIC = Vector<T, dim>::Zero();
+                    velocity_term_APIC = momentum + C * xi_minus_xp; //mv + (C @ dpos)
+                    Vector<T, dim> stress_term_dw = Vector<T, dim>::Zero();
+                    if (symplectic) {
+                        stress_term_dw = delta_t_tmp_force * dw; //only add forces if symplectic, else added in residual
+                    }
+                    Vector<T, dim> delta_APIC = w * velocity_term_APIC + stress_term_dw;
+                    Vector<T, dim> delta_FLIP = w * momentum + stress_term_dw;
+                    Vector<T, dim> delta_vn = w * momentum; //we'll use this to compute v1^n and v2^n for FLIP
+
+                    //Now we need to determine for this particle/node pairing whether we should transfer to field 1 or 2 and whether this node is separable or not.
+
+                    //SUBTASK 1: determine if rectangle defined by x1 and x2 intersects the extent of the crack
+                    T minX = std::min(x1[0], x2[0]);
+                    T maxX = std::max(x1[0], x2[0]);
+                    T minY = std::min(x1[1], x2[1]);
+                    T maxY = std::max(x1[1], x2[1]);
+
+                    bool intersectCrack = true;
+                    if(crackMinX >= maxX || minX >= crackMaxX){
+                        intersectCrack = false;
+                    }
+                    if(crackMinY >= maxY || minY >= crackMaxY){
+                        intersectCrack = false;
+                    }
+
+                    //SUBTASKS 2-4
+                    int numCrossings = 0;
+                    bool aboveCrack = false;
+                    bool belowCrack = false;
+                    if(intersectCrack){
+                        
+                        //SUBTASK 2/3: for each crack segment with endpoints x3 and x4, compute the signs of the areas of triangles 123, 124, 341, and 342
+                        for(int j = grid.crackParticlesStartIdx; j < topPlane_startIdx - 1; j++){
+                            Vector<T,dim> x3 = m_X[j];
+                            Vector<T,dim> x4 = m_X[j+1];
+                            int a1 = signedTriangleArea(x1, x2, x3); //123
+                            int a2 = signedTriangleArea(x1, x2, x4); //124
+                            
+                            if(a1 == 1 && a2 == 1){
+                                intersectCrack = false; //if these are +,+ there is never an intersect
+                            }
+                            else if(a1 == -1 && a2 == -1){
+                                intersectCrack = false; // -,- never intersects
+                            }
+                            else if(a1 == 0 && a2 == 0){
+                                intersectCrack = false; // 0,0 never intersects
+                            }
+                            else{
+                                int a3 = signedTriangleArea(x3, x4, x1); //341
+                                int a4 = signedTriangleArea(x3, x4, x2); //342
+
+                                //check for the exact 8 cases that indicate intersection
+                                numCrossings++; //pre-emptively increase this, we will decrease it if there was no intersection
+                                if(a1 == -1 && a2 == 1 && a3 == 1 && a4 == -1){         //-++-
+                                    aboveCrack = true;
+                                }
+                                else if(a1 == -1 && a2 == 1 && a3 == 1 && a4 == 0){     //-++0
+                                    aboveCrack = true;
+                                }
+                                else if(a1 == 0 && a2 == 1 && a3 == 1 && a4 == 0){      //0++0
+                                    aboveCrack = true;
+                                }
+                                else if(a1 == -1 && a2 == 0 && a3 == 1 && a4 == 0){     //-0+0
+                                    aboveCrack = true;
+                                }
+                                else if(a1 == 1 && a2 == -1 && a3 == -1 && a4 == 1){    //+--+
+                                    belowCrack = true;
+                                }
+                                else if(a1 == 1 && a2 == -1 && a3 == -1 && a4 == 0){    //+--0
+                                    belowCrack = true;
+                                }
+                                else if(a1 == 0 && a2 == -1 && a3 == -1 && a4 == 0){    //0--0
+                                    belowCrack = true;
+                                }
+                                else if(a1 == 1 && a2 == 0 && a3 == -1 && a4 == 0){     //+0-0
+                                    belowCrack = true;
+                                }
+                                else{
+                                    numCrossings--; //no intersect
+                                    intersectCrack = false;
+                                }
+                            }
+                        }
+
+                        //SUBTASK 3/4: determine whether there was an intersection or not based on crossing count
+                        if(numCrossings % 2 == 0){ //if number of crossings was even, ignore the intersections
+                            intersectCrack = false;
+                        }
+                    }
+
+                    //TODO: if we want CRAMP partitioning, we need to completely change some other parts of the MPM data flow because it requires THREE fields, not just two
+                    // //Now, set separable, particleAF, and do two field P2G all based on intersectCrack and above/belowCrack!
+                    // if(intersectCrack){
+                    //     if(aboveCrack){ //particle goes into field 1
+
+                    //     }
+                    //     else if(belowCrack){ //particle goes into field 2
+
+                    //     }
+                    //     else{
+                    //         std::cout << "ERROR: Shouldn't get here... :c" << std::endl;
+                    //     }
+                    // }
+                    // else{
+                    //     //this particle goes into this field 0
+                    // }
+
+                    // //Notice we treat single-field and two-field nodes differently
+                    // //NOTE: remember we are also including explicit force here if symplectic!
+                    // if (g.separable != 1 || !useDFG) {
+                    //     //Single-field treatment if separable = 0 OR if we are using single field MPM
+                    //     if (useAPIC) {
+                    //         g.v1 += delta_APIC;
+                    //     }
+                    //     else {
+                    //         g.v1 += delta_FLIP;
+                    //         g.vn1 += delta_vn; //transfer momentum to compute v^n
+                    //     }
+
+                    //     //Now transfer mass if we aren't using DFG (this means we skipped massP2G earlier)
+                    //     if (!useDFG) {
+                    //         g.m1 += mass * w;
+                    //     }
+
+                    //     //Transfer volume so we can add our Mode 1 loading
+                    //     //g.gridViYi1 += vol * w;
+                    // }
+                    // else if (g.separable == 1 && useDFG) {
+                    //     //Treat node as having two fields
+                    //     int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                    //     if (fieldIdx == 0) {
+                    //         if (useAPIC) {
+                    //             g.v1 += delta_APIC;
+                    //         }
+                    //         else {
+                    //             g.v1 += delta_FLIP;
+                    //             g.vn1 += delta_vn; //transfer momentum to compute v^n
+                    //         }
+                    //         //Compute normal for field 1 particles
+                    //         g.n1 += mass * dw; //remember to normalize this later!
+                    //     }
+                    //     else if (fieldIdx == 1) {
+                    //         if (useAPIC) {
+                    //             g.v2 += delta_APIC;
+                    //         }
+                    //         else {
+                    //             g.v2 += delta_FLIP;
+                    //             g.vn2 += delta_vn; //transfer momentum to compute v^n
+                    //         }
+                    //         //Compute normal for field 2 particles
+                    //         g.n2 += mass * dw; //remember to normalize this later!
+                    //     }
+                    // }
+                });
+            }
+        });
+
+        // grid.countNumNodes();
+
+        // /* Iterate grid to divide out the grid masses from momentum and then add gravity */
+        // grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+        //     Vector<T, dim> gravity_term = Vector<T, dim>::Zero();
+        //     if (symplectic) {
+        //         gravity_term[1] = gravity * dt; //only nonzero if symplectic, else we add gravity in residual of implicit solve
+        //     }
+        //     T mass1 = g.m1;
+        //     Vector<T, dim> alpha1;
+        //     alpha1 = Vector<T, dim>::Ones() * ((T)1 / mass1);
+        //     g.v1 = g.v1.cwiseProduct(alpha1);
+        //     g.v1 += gravity_term;
+        //     g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
+        //     g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
+        //     if (g.separable == 1) {
+        //         T mass2 = g.m2;
+        //         Vector<T, dim> alpha2;
+        //         alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
+        //         g.v2 = g.v2.cwiseProduct(alpha2);
+        //         g.v2 += gravity_term;
+        //         g.vn2 = g.vn2.cwiseProduct(alpha2); //this is how we get v2^n
+        //     }
+        // });
+    }
+};
+
+//Compute signed triangle area
+template<class T, int dim>
+int signedTriangleArea(Vector<T,dim> _x1, Vector<T,dim> _x2, Vector<T,dim> _x3){
+    T x1 = _x1[0];
+    T x2 = _x2[0];
+    T x3 = _x3[0];
+    T y1 = _x1[1];
+    T y2 = _x2[1];
+    T y3 = _x3[1];
+    T area = (x1 * (y2 - y3)) + (x2 * (y3 - y1)) + (x3 * (y1 - y2));
+    
+    if(area > 0){
+        return 1;
+    }
+    else if(area < 0){
+        return -1;
+    }
+    
+    return 0;
+}
+
+
 /*Iterate grid to apply a mode I loading to the configuration based on y1, y2, and sigmaA */
 template <class T, int dim>
 class ApplyMode1LoadingOp : public AbstractOp {

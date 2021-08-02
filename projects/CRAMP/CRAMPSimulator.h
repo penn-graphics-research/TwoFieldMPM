@@ -819,6 +819,7 @@ public:
 
         grid.crackParticlesStartIdx = crackPlane_startIdx; //we'll use this in DFGMPMOp to make sure we don't access these particles for other operations!
         grid.crackInitialized = true;
+        grid.horizontalCrack = true;
 
         int crackTipIdx = topPlane_startIdx - 1;
 
