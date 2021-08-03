@@ -362,6 +362,11 @@ public:
             Bow::CRAMP::StressSnapshotOp<T,dim>stressSnapshot{ {}, Base::m_X, crackTip, cauchy, grid, Base::dx, m_sigmaYY, m_r, m_posX, m_idx, halfEnvelope };
             stressSnapshot();
             writeStressSnapshot(elapsedTime);
+
+            //As part of the stress snapshot let's also compute the J-integral!
+            int contourRadius = 2;
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, cauchy, grid, Base::dx, contourRadius };
+            computeJIntegral();
         }
 
 

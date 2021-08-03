@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
         // T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
         // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
-        T snapshotTime = sim.frame_dt * 1950; //take snapshot after damping, around 1600
+        T snapshotTime = sim.frame_dt * 2;//1950; //take snapshot after damping, around 1600
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
 

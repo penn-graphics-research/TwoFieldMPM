@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <Bow/Math/MathTools.h>
 #include <iostream>
+#include "tgmath.h"
 
 namespace Bow {
 
@@ -29,6 +30,7 @@ public:
     Vector<T, interpolation_degree + 1> dw[dim];
     const T one_over_dx;
     Vector<int, dim> base_node;
+    Vector<int, dim> closest_node;
 
     BSplineWeights(const Vector<T, dim>& X, T dx)
         : dx(dx), one_over_dx(1 / dx), base_node(Vector<int, dim>::Zero())
@@ -39,6 +41,9 @@ public:
     void compute(const Vector<T, dim>& X)
     {
         Vector<T, dim> X_index_space = one_over_dx * X;
+        for(int d = 0; d < dim; d++){
+            closest_node[d] = round(X_index_space[d]);
+        }
         for (int d = 0; d < dim; d++)
             computeBSplineWeights(X_index_space[d], base_node[d], w[d], &dw[d]);
     }

@@ -751,5 +751,34 @@ public:
     }
 };
 
+/* Compute the J Integral using a rectangular path of grid nodes centered on the closest node to the crack tip */
+template <class T, int dim>
+class ComputeJIntegralOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    
+    Vector<T,dim> crackTip;
+
+    Field<Matrix<T, dim, dim>>& stress;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+
+    int contourRadius;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("Compute J-Integral");
+
+        //Iterate a rectangular contour around the closest node to the crack tip
+        BSplineWeights<T, dim> spline(crackTip, dx);
+        grid.iterateRectangularContour(spline, contourRadius, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            Vector<T,dim> xi = node.template cast<T>() * dx;
+            std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
+        });
+    }
+};
+
 }
 } // namespace Bow::DFGMPM
