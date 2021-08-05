@@ -365,7 +365,7 @@ public:
 
             //As part of the stress snapshot let's also compute the J-integral!
             int contourRadius = 2;
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, cauchy, grid, Base::dx, dt, contourRadius };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, contourRadius };
             computeJIntegral();
         }
 

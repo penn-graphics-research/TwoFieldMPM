@@ -759,6 +759,8 @@ public:
     Field<Vector<T, dim>>& m_X;
     
     Vector<T,dim> crackTip;
+    int topPlane_startIdx;
+    int bottomPlane_startIdx;
 
     Field<Matrix<T, dim, dim>>& stress;
 
@@ -772,14 +774,130 @@ public:
     {
         BOW_TIMER_FLAG("Compute J-Integral");
 
-        //Iterate a rectangular contour around the closest node to the crack tip
+        //NOTE: This routine is designed for HORIZONTAL LEFT SIDE CRACKS (b.c. of contour intersection assumptions --> clockwise path hits bottom of crack first)
+
+        //STEP 0: Grab an iterable list of unprocessed contour points
+        //Iterate a rectangular contour around the closest node to the crack tip --> CLOCKWISE STARTING FROM BOTTOM LEFT NODE
+        std::vector<Vector<T,dim>> contourPoints;
+        std::vector<DFGMPM::GridState<T,dim>*> contourGridStates;
         BSplineWeights<T, dim> spline(crackTip, dx);
         grid.iterateRectangularContour(spline, contourRadius, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             Vector<T,dim> xi = node.template cast<T>() * dx;
-            std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
+            //Grab data
+            contourPoints.push_back(xi);
+            contourGridStates.push_back(&g);
+
+            //std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
         });
 
-        //TODO: Compute the intersection points between contour and the crack top plane and bottom plane! Then interpolate values to them
+        //STEP 1: Construct ordered list of contour points starting with intersection with top of crack, clockwise around contour, and then ending with intersection with bottom of crack
+        bool foundBottomIntersection = false;
+        bool foundTopIntersection = false;
+        unsigned int bottomIntersectionIdx, topIntersectionIdx; //store the first point index for the segment intersecting with bottom and top crack planes
+        Vector<T, dim> bottomIntersection, topIntersection;
+        //STEP 1a: find bottom intersection
+        for(unsigned int i = 0; i < contourPoints.size() - 1; i++){
+            //check each contour line segment for intersections with bottom crack
+            Vector<T, dim> A = contourPoints[i];
+            Vector<T, dim> B = contourPoints[i+1];
+            
+            for(unsigned int j = bottomPlane_startIdx; j < m_X.size() - 1; j++){
+                Vector<T, dim> C = m_X[j];
+                Vector<T, dim> D = m_X[j+1];
+
+                if(intersect(A, B, C, D)){
+                    bottomIntersectionIdx = i;
+                    getIntersection(A, B, C, D, bottomIntersection);
+                    foundBottomIntersection = true;
+                    break;
+                }
+            }
+            if(foundBottomIntersection){
+                break;
+            }            
+        }
+
+        //STEP 1b: Now look for the upper intersection -> start with bottomIntersectionIdx since this is the first segment that can have an intersection with the top points
+        for(unsigned int i = bottomIntersectionIdx; i < contourPoints.size() - 1; i++){
+            //check each contour line segment for intersections with top crack
+            Vector<T, dim> A = contourPoints[i];
+            Vector<T, dim> B = contourPoints[i+1];
+            
+            for(int j = topPlane_startIdx; j < bottomPlane_startIdx - 1; j++){
+                Vector<T, dim> C = m_X[j];
+                Vector<T, dim> D = m_X[j+1];
+
+                if(intersect(A, B, C, D)){
+                    topIntersectionIdx = i;
+                    getIntersection(A, B, C, D, topIntersection);
+                    foundTopIntersection = true;
+                    break;
+                }
+            }
+            if(foundTopIntersection){
+                break;
+            }  
+        }
+
+        //STEP 1c: Check that crack is actually open (if it is not, we cannot compute J integral)
+        std::vector<Vector<T,dim>> finalContourPoints;
+        std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
+        if(topIntersection == bottomIntersection){
+            std::cout << "Crack is not opened at the intersection points, cannot compute J-integral!" << std::endl;
+        }
+        else{
+            //Else we construct all of the pieces we need to finally compute the J integral!
+            //Specifically, a list of contour points starting with top intersection and going clockwise around to the bottom intersection
+
+            //Top intersection
+            finalContourPoints.push_back(topIntersection);
+            finalContourGridStates.push_back(contourGridStates[topIntersectionIdx]); //store the grid state for the START point of the contour segment that intersected the crack
+
+            //now add points clockwise until hit end of list (then we will start from beginning until bottom intersecting segment)
+            for(unsigned int i = topIntersectionIdx + 1; i < contourPoints.size(); ++i){ //end of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+            for(unsigned int i = 0; i < bottomIntersectionIdx + 1; ++i){ //begin of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+
+            //bottom intersection
+            finalContourPoints.push_back(bottomIntersection);
+            finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]); //store grid state from START of bottom intersecting segment
+
+        }
+
+        std::cout << "Bottom | Idx: " << bottomIntersectionIdx << "Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << ")" << std::endl;
+        std::cout << "Top | Idx: " << topIntersectionIdx << "Point: (" << topIntersection[0] << "," << topIntersection[1] << ")" << std::endl;
+        
+        for(unsigned int i = 0; i < finalContourPoints.size(); ++i){
+            std::cout << "idx:" << i << "Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << ")" << std::endl;;
+        }
+
+    }
+
+    //Elegant line segment intersection check from https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
+    //NOTE: this ignores intersections in the colinear case
+    bool ccw(Vector<T, dim>& A, Vector<T, dim>& B, Vector<T, dim>& C){
+        return (C[1] - A[1]) * (B[0] - A[0]) > (B[1]-A[1]) * (C[0]-A[0]);
+    }
+
+    //return true if line segments AB and CD intersect
+    bool intersect(Vector<T, dim>& A, Vector<T, dim>& B, Vector<T, dim>& C, Vector<T, dim>& D){
+        return ccw(A,C,D) != ccw(B,C,D) && ccw(A,B,C) != ccw(A,B,D);
+    }
+
+    //Function to compute the intersection point (we'll only use this if we know there is an intersection)
+    void getIntersection(Vector<T, dim>& A, Vector<T, dim>& B, Vector<T, dim>& C, Vector<T, dim>& D, Vector<T,dim>& intersection){
+        T s1x = B[0] - A[0];
+        T s1y = B[1] - A[1];
+        T s2x = D[0] - C[0];
+        T s2y = D[1] - C[1];
+        T t = (s2x * (A[1] - C[1]) - s2y * (A[0] - C[0])) / (-s2x * s1y + s1x * s2y);
+        intersection[0] = A[0] + (t * s1x);
+        intersection[1] = A[1] + (t * s1y);
     }
 };
 
