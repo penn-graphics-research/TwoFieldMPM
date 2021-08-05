@@ -599,17 +599,17 @@ public:
                 target(coord, g);
             }
 
-            //Right side (minus the top most)
+            //Right side (minus the top most) -> setup to continue the contour clockwise
             coord[0] = base_coord[0] + contourRadius;
-            for (int j = -1 * contourRadius; j < contourRadius; ++j) {
+            for (int j = contourRadius - 1; j > ((-1 * contourRadius) - 1); --j) {
                 coord[1] = base_coord[1] + j;
                 auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(contourRadius, j));
                 GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                 target(coord, g);
             }
 
-            //Bottom (minus the left and right most)
-            for (int i = -1 * contourRadius + 1; i < contourRadius; ++i) {
+            //Bottom (minus the left and right most) -> clockwise
+            for (int i = contourRadius - 1; i > -1 * contourRadius; --i) {
                 coord[0] = base_coord[0] + i;
                 coord[1] = base_coord[1] - contourRadius;
                 auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, -1*contourRadius));

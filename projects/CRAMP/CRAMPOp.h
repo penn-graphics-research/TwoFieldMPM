@@ -764,6 +764,7 @@ public:
 
     DFGMPM::DFGMPMGrid<T, dim>& grid;
     T dx;
+    T dt;
 
     int contourRadius;
 
@@ -777,6 +778,8 @@ public:
             Vector<T,dim> xi = node.template cast<T>() * dx;
             std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
         });
+
+        //TODO: Compute the intersection points between contour and the crack top plane and bottom plane! Then interpolate values to them
     }
 };
 
