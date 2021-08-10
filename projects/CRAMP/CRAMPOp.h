@@ -885,14 +885,14 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1 = computeFm(gi1);
-                T Fmi2 = computeFm(gi2); 
+                T Fmi1 = computeFm(gi1, x2 - x1);
+                T Fmi2 = computeFm(gi2, x2 - x1); 
                 T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
                 T FmIntersect = (Fmi1 * (1 - blendRatio)) + (Fmi2 * blendRatio);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                T Fm2 = computeFm(g2);
+                T Fm2 = computeFm(g2, x2 - x1);
 
                 //Compute Fsum
                 Fsum = FmIntersect + Fm2;
@@ -904,14 +904,14 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1 = computeFm(gi1);
-                T Fmi2 = computeFm(gi2);
+                T Fmi1 = computeFm(gi1, x2 - x1);
+                T Fmi2 = computeFm(gi2, x2 - x1);
                 T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
                 T FmIntersect = (Fmi1 * (1 - blendRatio)) + (Fmi2 * blendRatio);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
-                T Fm1 = computeFm(g1);
+                T Fm1 = computeFm(g1, x2 - x1);
 
                 //Compute Fsum
                 Fsum = Fm1 + FmIntersect;
@@ -919,7 +919,7 @@ public:
             else{ //rest of the non-intersect segments
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                Fsum = computeFm(g1) + computeFm(g2);
+                Fsum = computeFm(g1, x2 - x1) + computeFm(g2, x2 - x1);
             }
 
             //Now after computing Fsum using one of three cases, we can add this contribution to the Jintegral!
@@ -935,7 +935,27 @@ public:
     }
 
     //TODO: Write this function!!!!
-    T computeFm(DFGMPM::GridState<T,dim>* g){
+    T computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment){
+        Vector<T, dim> normal;
+        if(lineSegment[0] == 0){ //normal = left or right
+            normal[1] = 0;
+            if(lineSegment[1] > 0){ //normal = left
+                normal[0] = -1;
+            }
+            else{ //normal = right
+                normal[1] = 1;
+            }
+        }
+        else{ //normal = up or down
+            normal[0] = 0;
+            if(lineSegment[0] > 0){ //normal = up
+                normal[1] = 1;
+            }
+            else{ //normal = down
+                normal[1] = -1;
+            }
+        }
+        
         return g->m1;
     }
 
