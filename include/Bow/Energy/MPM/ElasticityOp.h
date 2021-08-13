@@ -24,6 +24,7 @@ public:
     std::vector<int> m_global_index;
     virtual void append(int start, int end, T vol) = 0;
     virtual void compute_stress(Field<Matrix<T, dim, dim>>& stress) {}
+    virtual void compute_piola(Field<Matrix<T, dim, dim>>& piola) {}
     virtual void compute_cauchy(Field<Matrix<T, dim, dim>>& stress) {}
     virtual void compute_von_mises(Field<T>& stress) {}
     virtual void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy) { BOW_NOT_IMPLEMENTED }
@@ -182,6 +183,17 @@ public:
             Matrix<T, dim, dim> P;
             first_piola(F, m_mu[i], m_lambda[i], P);
             stress[m_global_index[i]] = m_vol[i] * P * F.transpose();
+        });
+    }
+
+    void compute_piola(Field<Matrix<T, dim, dim>>& piola) override
+    {
+        BOW_TIMER_FLAG("compute piola");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            Matrix<T, dim, dim> P;
+            first_piola(F, m_mu[i], m_lambda[i], P);
+            piola[m_global_index[i]] = P;
         });
     }
 

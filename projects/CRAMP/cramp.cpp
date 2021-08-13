@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
-        using T = float;
+        using T = double;
         static const int dim = 3;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
@@ -35,10 +35,19 @@ int main(int argc, char *argv[])
         //Float3D: 288 B -> add 224 B -> 56 Ts
         //Double2D: 448 B -> add 64 B -> 8 Ts
         //Double3D: 576 B -> add 448 B -> 56 Ts
+        //Vector<T, (48 * dim) - 88> padding; //dim2 = 8 Ts, dim3 = 56 Ts --> y = 48x - 88
+
+        //AFTER ADDING Pi1, Pi2, Fi1, Fi2 (without padding) - 8/13/21
+        //Float2D: 304 B -> add 208 B -> 52 Ts
+        //Float3D: 432 B -> add 80 B -> 20 Ts
+        //Double2D: 608 B -> add 416 B -> 52 Ts
+        //Double3D: 864 B -> add 160 B -> 20 Ts
+        //Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
     }
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
 
+    //SENT specimen with large deformation (lower E)
     if (testcase == 201) {
         using T = double;
         static const int dim = 2;
@@ -90,7 +99,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 
-        T crackSegmentLength = sim.dx / 2.0;
+        T crackSegmentLength = sim.dx / 5.0;
         T damageRadius = sim.dx / 2.0;
         T crackLength = 5e-3;
         T crackY = y1 + height/2.0;
@@ -117,7 +126,85 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
+    //SENT specimen with small deformation (true E = 200e9)
     if (testcase == 202) {
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-6_wDFG_woDamping_E200e9");
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm
+        sim.symplectic = true;
+        sim.end_frame = 2000;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        sim.useDFG = true;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //material
+        T E = 200e9; //200e9 = 200 GPa
+        T nu = 0.3; //0.3
+        T rho = 5000; //5.0 g/cm^3 -> 5000 kg/m^3
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        //auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
+
+        int ppc = 9;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+
+        T crackSegmentLength = sim.dx / 5.0;
+        T damageRadius = sim.dx / 2.0;
+        T crackLength = 5e-3;
+        T crackY = y1 + height/2.0;
+        T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
+        sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
+
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 15e-3), Vector<T, dim>(0, -1)));
+
+        T yTop = y2 - 0.5e-3;
+        T yBottom = y1 + 0.5e-3;
+        T sigmaA = 400e6; //400 MPa
+        T rampTime = 0; //500e-6; //ramp up to full sigmaA over 500 microseconds
+        sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+
+        // T simpleDampFactor = 0.5;
+        // T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
+        // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
+
+        T snapshotTime = sim.frame_dt * 7;//1950; //take snapshot after damping, around 1600
+        T halfEnvelope = sim.dx;
+        sim.addStressSnapshot(snapshotTime, halfEnvelope);
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 203) {
         using T = double;
         static const int dim = 2;
         MPM::CRAMPSimulator<T, dim> sim("output/hangingCube2D_CRAMP");

@@ -59,6 +59,8 @@ public:
     //Additional Particle Data
     Field<T> m_vol;
     Field<T> m_mu, m_la;
+    Field<TM> m_P; //piola kirchhoff -> for j integral
+    Field<TM> m_F; //def grad --> for j integral
 
     //Sim Data
     std::string outputPath;
@@ -363,6 +365,14 @@ public:
             stressSnapshot();
             writeStressSnapshot(elapsedTime);
 
+            //Collect grid forces, grid nominal stress (P), and grid def grad (F) -- all to compute J-Integral!
+            for (auto& model : Base::elasticity_models){
+                model->compute_piola(m_P);
+                m_F = model->m_F;
+            }
+            Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_F, particleAF, grid, Base::dx, dt, useDFG };
+            collectJIntegralGridData();
+
             //As part of the stress snapshot let's also compute the J-integral!
             int contourRadius = 2;
             Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, contourRadius };
@@ -468,6 +478,7 @@ public:
     //Setup sim for an impulse of user defined strength and duration
     void addImpulse(TV _center, T _strength, T _startTime, T _duration)
     {
+        BOW_ASSERT(0); //NOTE: disabling this for now just in case
         useImpulse = true;
         impulseCenter = _center;
         impulseStrength = _strength;
@@ -572,6 +583,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -601,6 +613,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             m_marker.push_back(0);
             
@@ -654,6 +667,7 @@ public:
                 Base::m_C.push_back(TM::Zero());
                 Base::m_mass.push_back(density * vol);
                 Base::stress.push_back(TM::Zero());
+                m_P.push_back(TM::Zero());
                 cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
@@ -690,6 +704,7 @@ public:
                 Base::m_V.push_back(velocity);
                 Base::m_C.push_back(TM::Zero());
                 Base::stress.push_back(TM::Zero());
+                m_P.push_back(TM::Zero());
                 cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
@@ -737,6 +752,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -774,6 +790,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -792,6 +809,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -810,6 +828,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
+            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);

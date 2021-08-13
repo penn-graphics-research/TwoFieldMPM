@@ -33,6 +33,10 @@ public:
     Vector<T, dim> fct1, fct2; //contact force
     Vector<T, dim> fi1, fi2; //impulse force
 
+    //Hold grid P and F (we need this to compute the J-integral)
+    Matrix<T, dim, dim> Pi1, Pi2;
+    Matrix<T, dim, dim> Fi1, Fi2;
+
     //DOF Tracking
     typename std::conditional<std::is_same<T, float>::value, int32_t, int64_t>::type idx;
     typename std::conditional<std::is_same<T, float>::value, int32_t, int64_t>::type sep_idx;
@@ -52,11 +56,12 @@ public:
 
     //PADDING to ensure GridState is power of 2
     //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
-    //Float2D: 224 B -> add 32 B -> 8 Ts
-    //Float3D: 288 B -> add 224 B -> 56 Ts
-    //Double2D: 448 B -> add 64 B -> 8 Ts
-    //Double3D: 576 B -> add 448 B -> 56 Ts
-    Vector<T, (48 * dim) - 88> padding; //dim2 = 8 Ts, dim3 = 56 Ts --> y = 48x - 88
+    //AFTER ADDING Pi1, Pi2, Fi1, Fi2 (without padding)
+    //Float2D: 304 B -> add 208 B -> 52 Ts
+    //Float3D: 432 B -> add 80 B -> 20 Ts
+    //Double2D: 608 B -> add 416 B -> 52 Ts
+    //Double3D: 864 B -> add 160 B -> 20 Ts
+    Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
 
     GridState()
     {
@@ -74,6 +79,10 @@ public:
         fct2 = Vector<T, dim>::Zero();
         fi1 = Vector<T, dim>::Zero();
         fi2 = Vector<T, dim>::Zero();
+        Pi1 = Matrix<T,dim,dim>::Zero();
+        Pi2 = Matrix<T,dim,dim>::Zero();
+        Fi1 = Matrix<T,dim,dim>::Zero();
+        Fi2 = Matrix<T,dim,dim>::Zero();
         gridDG = Vector<T, dim>::Zero();
         gridMaxNorm = 0.0;
         gridSeparability = Vector<T, 4>::Zero();

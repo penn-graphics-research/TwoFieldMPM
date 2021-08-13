@@ -873,9 +873,11 @@ public:
         }
 
         //STEP 2: Compute J-integral!
-        T J = 0; //set J integral to 0 for now
+        T J_I = 0; //set J integral mode I to 0 for now
+        T J_II = 0; //set J integral mode II to 0 for now
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
-            T Fsum = 0; //this is what we focus on setting for each segment (three cases below)
+            T Fsum_I = 0; //this is what we focus on setting for each segment (three cases below)
+            T Fsum_II = 0; //mode II
             Vector<T,dim> x1 = finalContourPoints[i];
             Vector<T,dim> x2 = finalContourPoints[i+1];
             if(i == 0){ //first segment
@@ -885,17 +887,22 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1 = computeFm(gi1, x2 - x1);
-                T Fmi2 = computeFm(gi2, x2 - x1); 
+                T Fmi1_I = computeFm(gi1, x2 - x1, 0);
+                T Fmi2_I = computeFm(gi2, x2 - x1, 0); 
+                T Fmi1_II = computeFm(gi1, x2 - x1, 1);
+                T Fmi2_II = computeFm(gi2, x2 - x1, 1);
                 T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
-                T FmIntersect = (Fmi1 * (1 - blendRatio)) + (Fmi2 * blendRatio);
+                T FmIntersect_I = (Fmi1_I * (1 - blendRatio)) + (Fmi2_I * blendRatio);
+                T FmIntersect_II = (Fmi1_II * (1 - blendRatio)) + (Fmi2_II * blendRatio);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                T Fm2 = computeFm(g2, x2 - x1);
+                T Fm2_I = computeFm(g2, x2 - x1, 0);
+                T Fm2_II = computeFm(g2, x2 - x1, 1);
 
                 //Compute Fsum
-                Fsum = FmIntersect + Fm2;
+                Fsum_I = FmIntersect_I + Fm2_I;
+                Fsum_II = FmIntersect_II + Fm2_II;
             }
             else if(i == (int)finalContourPoints.size() - 2){ //last segment
                 //If last segment, first we compute interpolations for bottom intersection point
@@ -904,38 +911,60 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1 = computeFm(gi1, x2 - x1);
-                T Fmi2 = computeFm(gi2, x2 - x1);
+                T Fmi1_I = computeFm(gi1, x2 - x1, 0);
+                T Fmi2_I = computeFm(gi2, x2 - x1, 0);
+                T Fmi1_II = computeFm(gi1, x2 - x1, 1);
+                T Fmi2_II = computeFm(gi2, x2 - x1, 1);
                 T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
-                T FmIntersect = (Fmi1 * (1 - blendRatio)) + (Fmi2 * blendRatio);
+                T FmIntersect_I = (Fmi1_I * (1 - blendRatio)) + (Fmi2_I * blendRatio);
+                T FmIntersect_II = (Fmi1_II * (1 - blendRatio)) + (Fmi2_II * blendRatio);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
-                T Fm1 = computeFm(g1, x2 - x1);
+                T Fm1_I = computeFm(g1, x2 - x1, 0);
+                T Fm1_II = computeFm(g1, x2 - x1, 1);
 
                 //Compute Fsum
-                Fsum = Fm1 + FmIntersect;
+                Fsum_I = Fm1_I + FmIntersect_I;
+                Fsum_II = Fm1_II + FmIntersect_II;
             }
             else{ //rest of the non-intersect segments
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                Fsum = computeFm(g1, x2 - x1) + computeFm(g2, x2 - x1);
+                Fsum_I = computeFm(g1, x2 - x1, 0) + computeFm(g2, x2 - x1, 0);
+                Fsum_II = computeFm(g1, x2 - x1, 1) + computeFm(g2, x2 - x1, 1);
             }
 
             //Now after computing Fsum using one of three cases, we can add this contribution to the Jintegral!
             T deltaI = std::sqrt((x1[0] - x2[0])*(x1[0] - x2[0]) + (x1[1] - x2[1])*(x1[1] - x2[1])); //compute distance from x1 to x2 (the end points of current segment)
-            J += Fsum * (deltaI / 2.0);
+            J_I += Fsum_I * (deltaI / 2.0);
+            J_II += Fsum_II * (deltaI / 2.0);
         }
+
+        //STEP 3: Compute thetaC and G
+        Vector<T, dim> x1 = m_X[topPlane_startIdx - 2];
+        Vector<T, dim> x2 = m_X[topPlane_startIdx - 1];
+        Vector<T, dim> crackTipDirection = (x2 - x1).normalized();
+        Vector<T, dim> xDir(1,0);
+        T thetaC = acos(crackTipDirection.dot(xDir));
+        T G = (J_I * cos(thetaC)) + (J_II * sin(thetaC));
 
         std::cout << "Bottom | Idx: " << bottomIntersectionIdx << "Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << ")" << std::endl;
         std::cout << "Top | Idx: " << topIntersectionIdx << "Point: (" << topIntersection[0] << "," << topIntersection[1] << ")" << std::endl;
         for(int i = 0; i < (int)finalContourPoints.size(); ++i){
-            std::cout << "idx:" << i << "Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << ")" << std::endl;
+            std::cout << "idx:" << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << ")" << std::endl;
         }
+        std::cout << "J_I: " << J_I << std::endl; 
+        std::cout << "J_II: " << J_II << std::endl; 
+        std::cout << "thetaC: " << thetaC << std::endl; 
+        std::cout << "G: " << G << std::endl; 
     }
 
-    //TODO: Write this function!!!!
-    T computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment){
+    //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)
+    T computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode){
+        T Fm = 0;
+        
+        //Compute normal
         Vector<T, dim> normal;
         if(lineSegment[0] == 0){ //normal = left or right
             normal[1] = 0;
@@ -955,8 +984,24 @@ public:
                 normal[1] = -1;
             }
         }
+
+        //Compute work
+        T W = 0;
+        W += (-1 * g->fi1).dot(dt * g->v1); //compute field 1 work
+        if(g->separable == 1){
+            W += (-1 * g->fi2).dot(dt * g->v2); //compute field 2 work
+        }
         
-        return g->m1;
+        //Compute first term -> mode = 0 or 1
+        Fm += W * normal[mode];
+
+        //Compute second term (field 1)
+        Fm -= normal.dot(g->Pi1 * g->Fi1.col(mode));
+        if(g->separable == 1){
+            Fm -= normal.dot(g->Pi2 * g->Fi2.col(mode)); //additionally compute field 2 term
+        }
+        
+        return Fm;
     }
 
     //Elegant line segment intersection check from https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
@@ -979,6 +1024,87 @@ public:
         T t = (s2x * (A[1] - C[1]) - s2y * (A[0] - C[0])) / (-s2x * s1y + s1x * s2y);
         intersection[0] = A[0] + (t * s1x);
         intersection[1] = A[1] + (t * s1y);
+    }
+};
+
+/* Transfer particle stress, nominal stress, and def grad to grid so we can compute J Integral*/
+template <class T, int dim>
+class CollectJIntegralGridDataOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<Matrix<T, dim, dim>>& m_stress; //holds Vp^0 * PF^T 
+    Field<Matrix<T, dim, dim>>& m_P; //holds particle P
+    Field<Matrix<T,dim,dim>>& m_F; //holds particle def grad F
+
+    Bow::Field<std::vector<int>>& particleAF;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+    T dt;
+
+    bool useDFG;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("Collect Grid Data for J Integral");
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                const Matrix<T, dim, dim> stress = m_stress[i];
+                const Matrix<T, dim, dim> P = m_P[i];
+                const Matrix<T, dim, dim> F = m_F[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    
+                    ///NOTES
+                    //Storing grid force in fi1 and fi2 (if separable)
+                    //Storing accumulated weights (for transferring P and F) in gridSeparability in order of Pi1, Pi2, Fi1, Fi2 (weight sum for Pi1 = that of Fi1 so we only need to track first two values)
+
+                    //Notice we treat single-field and two-field nodes differently
+                    if (g.separable != 1 || !useDFG) {
+                        //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        g.fi1 += stress * dw; //transfer stress to grid, fi
+                        g.Pi1 += P * w; //transfer P
+                        g.Fi1 += F * w; //transfer F
+                        g.gridSeparability[0] += w; //sum up the total weight
+                    }
+                    else if (g.separable == 1 && useDFG) {
+                        //Treat node as having two fields
+                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                        if (fieldIdx == 0) {
+                            g.fi1 += stress * dw; //transfer stress to grid, fi
+                            g.Pi1 += P * w; //transfer P
+                            g.Fi1 += F * w; //transfer F
+                            g.gridSeparability[0] += w; //sum up the total weight
+                        }
+                        else if (fieldIdx == 1) {
+                            g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
+                            g.Pi2 += P * w; //transfer P (second field)
+                            g.Fi2 += F * w; //transfer F (second fgield)
+                            g.gridSeparability[1] += w; //sum up the total weight (second field)
+                        }
+                    }
+                });
+            }
+        });
+
+        std::cout << "Before dividing..." << std::endl;
+
+        /* Iterate grid to divide out the total weight sums for P and F since we transfer these intrinsically */
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.gridSeparability[0] != 0){
+                g.Pi1 /= g.gridSeparability[0];
+                g.Fi1 /= g.gridSeparability[0]; //both in field 1 use same weight sum
+            }
+            if (g.separable == 1) {
+                if(g.gridSeparability[1] != 0){
+                    g.Pi2 /= g.gridSeparability[1];
+                    g.Fi2 /= g.gridSeparability[1]; //both in field 2 use same weight sum
+                }
+            }
+        });
     }
 };
 
