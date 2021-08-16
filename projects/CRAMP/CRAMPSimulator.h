@@ -74,8 +74,6 @@ public:
     T st; //surfaceThreshold
 
     //Sim Flags
-    bool crackInitialized = false;
-    bool loading = false;
     bool verbose = false; //true = write every substep, false = write only frames
     bool writeGrid = false;
     bool useAPIC = false;
@@ -86,6 +84,9 @@ public:
     bool useAnisoMPMDamage = false;
     bool initialized = false;
     bool useImpulse = false;
+    bool crackInitialized = false;
+    bool loading = false;
+    bool particlesMarkedForLoading = false;
     
 
     //Particle Data
@@ -382,12 +383,19 @@ public:
 
         //If Loading this specimen:
         if(loading){
+            //If we've not yet marked particles for loading, do so!
+            if(!particlesMarkedForLoading){
+                Bow::CRAMP::MarkParticlesForLoadingOp<T, dim> markParticles{ {}, Base::m_X, m_marker, y1, y2, grid };
+                markParticles();
+                particlesMarkedForLoading = true;
+            }
+            
             //Pass the right portion of sigmaA to the loading (based on the user defined rampTime)
             T scaledSigmaA = sigmaA;
             if(elapsedTime < rampTime && rampTime > 0.0){
                 scaledSigmaA *= (elapsedTime / rampTime);
             }
-            Bow::CRAMP::ApplyMode1LoadingOp<T, dim>mode1Loading{ {}, Base::m_X, y1, y2, scaledSigmaA, Base::dx, dt, grid, m_vol };
+            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, Base::dx, dt, grid, m_vol };
             mode1Loading();
         }
 

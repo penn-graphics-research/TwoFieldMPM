@@ -49,6 +49,12 @@ int main(int argc, char *argv[])
 
     //SENT specimen with large deformation (lower E)
     if (testcase == 201) {
+        
+        //Fibrin Parameters from Tutwiler2020
+        // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
+        // folded state stiffness,      cf = 4.4e4 N/m^2
+        // unfolded state stiffness,    cu = 2.6e6 N/m^2
+
         using T = double;
         static const int dim = 2;
         MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-4_wDFG_woDamping_E200e4");
@@ -128,16 +134,20 @@ int main(int argc, char *argv[])
 
     //SENT specimen with small deformation (true E = 200e9)
     if (testcase == 202) {
+        
+        //Simulation notes
+        // Without damping, this sim comes to equilibrium within 2e-3 seconds (two frames of 1e-3 frame dt), BUT there is still no crack opening displacement
+        
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-6_wDFG_woDamping_E200e9");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_wDFG_woDamping_E200e9");
 
         //Params
         sim.dx = 0.5e-3; //0.5 mm
         sim.symplectic = true;
         sim.end_frame = 2000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
-        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -202,6 +212,8 @@ int main(int argc, char *argv[])
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
 
         sim.run(start_frame);
+
+        
     }
 
     if (testcase == 203) {

@@ -408,6 +408,36 @@ int signedTriangleArea(Vector<T,dim> _x1, Vector<T,dim> _x2, Vector<T,dim> _x3){
     return 0;
 }
 
+/*Mark particles for loading, takes in upper and lower boundaries for Mode 1 loading */
+template <class T, int dim>
+class MarkParticlesForLoadingOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<int>& m_marker;
+    T y1;
+    T y2;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("Mark Particles for Mode 1 Loading");
+
+        //Iterate particles and mark as either 4 (up) or 5 (down)
+        grid.parallel_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                if(pos[1] > y1 || pos[1] < y2){ //ONLY set to 4 or 5 if particle is above y1 and below y2!
+                    m_marker[i] = 4;
+                    if(pos[1] < y2){
+                        m_marker[i] = 5; //set as 5 for particles below y2
+                    }
+                }
+            }
+        });
+    }
+};
 
 /*Iterate grid to apply a mode I loading to the configuration based on y1, y2, and sigmaA */
 template <class T, int dim>
@@ -415,8 +445,7 @@ class ApplyMode1LoadingOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
-    T y1;
-    T y2;
+    Field<int> m_marker;
     T scaledSigmaA;
 
     T dx;
@@ -435,10 +464,11 @@ public:
         grid.colored_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
+                const int marker = m_marker[i];
                 stress = scaledSigmaA;
 
-                if(pos[1] > y1 || pos[1] < y2){ //ONLY apply this force to particles above y1 and below y2!
-                    if(pos[1] < y2){
+                if(marker == 4 || marker == 5){ //ONLY apply this force to particles above y1 and below y2!
+                    if(marker == 5){
                         stress *= -1; //apply negative here for particles below y2
                     }
 
