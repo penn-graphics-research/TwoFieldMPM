@@ -798,6 +798,9 @@ public:
     T dx;
     T dt;
 
+    T mu;
+    T la;
+
     int contourRadius;
 
     void operator()()
@@ -979,6 +982,24 @@ public:
         T thetaC = acos(crackTipDirection.dot(xDir));
         T G = (J_I * cos(thetaC)) + (J_II * sin(thetaC));
 
+        //STEP 4: Compute K_I and K_II
+        x1 = m_X[bottomPlane_startIdx - 2]; //second to last top plane
+        x2 = m_X[m_X.size() - 2]; //second to last bottom plane
+        T xDisplacement = abs(x2[0] - x1[0]);
+        T yDisplacement = abs(x2[1] - x1[1]);
+        T magnitude = sqrt((xDisplacement * xDisplacement) + (yDisplacement * yDisplacement));
+        T E = (mu*(3*la + 2*mu)) / (la + mu);
+        T nu = la / (2 * (la + mu));
+        T planeStressFactor = sqrt(G * E);
+        T planeStrainFactor = sqrt((G*E) / (1 - (nu * nu)));
+        T K_I_factor = yDisplacement / magnitude;
+        T K_II_factor = xDisplacement / magnitude;
+        T K_I_planeStress = K_I_factor * planeStressFactor;
+        T K_I_planeStrain = K_I_factor * planeStrainFactor;
+        T K_II_planeStress = K_II_factor * planeStressFactor;
+        T K_II_planeStrain = K_II_factor * planeStrainFactor;
+
+        //Print it all out (later write to a simple file)
         std::cout << "Bottom | Idx: " << bottomIntersectionIdx << "Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << ")" << std::endl;
         std::cout << "Top | Idx: " << topIntersectionIdx << "Point: (" << topIntersection[0] << "," << topIntersection[1] << ")" << std::endl;
         for(int i = 0; i < (int)finalContourPoints.size(); ++i){
@@ -988,6 +1009,10 @@ public:
         std::cout << "J_II: " << J_II << std::endl; 
         std::cout << "thetaC: " << thetaC << std::endl; 
         std::cout << "G: " << G << std::endl; 
+        std::cout << "K_I (plane stress): " << K_I_planeStress << std::endl; 
+        std::cout << "K_I (plane strain): " << K_I_planeStrain << std::endl; 
+        std::cout << "K_II (plane stress): " << K_II_planeStress << std::endl; 
+        std::cout << "K_II (plane strain): " << K_II_planeStrain << std::endl;
     }
 
     //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)

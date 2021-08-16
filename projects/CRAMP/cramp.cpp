@@ -47,24 +47,30 @@ int main(int argc, char *argv[])
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
 
-    //SENT specimen with large deformation (lower E)
+    //SENT specimen with fibrin parameters
     if (testcase == 201) {
         
         //Fibrin Parameters from Tutwiler2020
         // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
         // folded state stiffness,      cf = 4.4e4 N/m^2
         // unfolded state stiffness,    cu = 2.6e6 N/m^2
+        // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-4_wDFG_woDamping_E200e4");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_yesDamp500_fibrinParams_sigma400e5");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
 
         //Params
         sim.dx = 0.5e-3; //0.5 mm
         sim.symplectic = true;
-        sim.end_frame = 2000;
+        sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
-        sim.frame_dt = 1e-4; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -79,11 +85,6 @@ int main(int argc, char *argv[])
         //Debug mode
         sim.verbose = false;
         sim.writeGrid = true;
-
-        //material
-        T E = 200e4; //200e9 = 200 GPa
-        T nu = 0.3; //0.3
-        T rho = 5000; //5.0 g/cm^3 -> 5000 kg/m^3
         
         //Compute time step for symplectic
         sim.cfl = 0.4;
@@ -116,23 +117,23 @@ int main(int argc, char *argv[])
 
         T yTop = y2 - 0.5e-3;
         T yBottom = y1 + 0.5e-3;
-        T sigmaA = 400e6; //400 MPa
+        T sigmaA = 400e5;
         T rampTime = 500e-6; //ramp up to full sigmaA over 500 microseconds
         rampTime = 0.0;
         sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
 
-        // T simpleDampFactor = 0.5;
-        // T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
-        // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
+        T simpleDampFactor = 0.5;
+        T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
+        sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
-        T snapshotTime = sim.frame_dt * 7;//1950; //take snapshot after damping, around 1600
+        T snapshotTime = sim.frame_dt * (sim.end_frame); //1950; //take snapshot after damping, around 1600
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
 
         sim.run(start_frame);
     }
 
-    //SENT specimen with small deformation (true E = 200e9)
+    //SENT specimen from CRAMP paper with small deformation (true E = 200e9)
     if (testcase == 202) {
         
         //Simulation notes

@@ -369,6 +369,8 @@ public:
             //Collect grid forces, grid nominal stress (P), and grid def grad (F) -- all to compute J-Integral!
             for (auto& model : Base::elasticity_models){
                 model->compute_piola(m_P);
+                m_mu = model->m_mu;
+                m_la = model->m_lambda;
                 m_F = model->m_F;
             }
             Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_F, particleAF, grid, Base::dx, dt, useDFG };
@@ -376,7 +378,7 @@ public:
 
             //As part of the stress snapshot let's also compute the J-integral!
             int contourRadius = 2;
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, contourRadius };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], contourRadius };
             computeJIntegral();
         }
 
