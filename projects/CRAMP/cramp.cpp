@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_yesDamp500_fibrinParams_sigma400e5");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_rampTime500_fibrinParams_sigma400e5_FCR");
 
         //material
         T E = 2.6e6;
@@ -92,8 +92,8 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 0.9 * maxDt;
 
         // Using `new` to avoid redundant copy constructor
-        //auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
-        auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
 
         int ppc = 9;
         T height = 32e-3; //32mm
@@ -118,17 +118,27 @@ int main(int argc, char *argv[])
         T yTop = y2 - 0.5e-3;
         T yBottom = y1 + 0.5e-3;
         T sigmaA = 400e5;
-        T rampTime = 500e-6; //ramp up to full sigmaA over 500 microseconds
-        rampTime = 0.0;
+        T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
+        //rampTime = 0.0;
         sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
 
-        T simpleDampFactor = 0.5;
-        T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
-        sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
+        // T simpleDampFactor = 0.5;
+        // T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
+        // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
-        T snapshotTime = sim.frame_dt * (sim.end_frame); //1950; //take snapshot after damping, around 1600
+        T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
+        //snapshotTime = sim.frame_dt * 50;
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
+        sim.contourRadii.push_back(1);
+        sim.contourRadii.push_back(2);
+        sim.contourRadii.push_back(3);
+        sim.contourRadii.push_back(4);
+        sim.contourRadii.push_back(5);
+        sim.contourRadii.push_back(6);
+        sim.contourRadii.push_back(7);
+        sim.contourRadii.push_back(8);
+        sim.contourRadii.push_back(9); //contour Radii to test
 
         sim.run(start_frame);
     }

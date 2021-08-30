@@ -88,7 +88,6 @@ public:
     bool loading = false;
     bool particlesMarkedForLoading = false;
     
-
     //Particle Data
     Field<TM> cauchy; //for anisoMPM
     std::vector<T> Dp; //particle damage
@@ -100,7 +99,7 @@ public:
     Field<std::vector<int>> particleAF; //store which activefield each particle belongs to for the 3^d grid nodes it maps to
     Field<std::vector<int>> p_cached_idx; //store which DOF index each particle maps to for each of the 3^dim nodes
 
-    //Data for Stress Snapshot
+    //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
     Field<T> m_sigmaYY;
     Field<T> m_r;
@@ -108,6 +107,8 @@ public:
     Field<int> m_idx;
     T stressSnapshotTime = 0;
     T halfEnvelope = 0;
+    std::vector<int> contourRadii;
+    int contourRadius = 2;
 
     //Data for Simple Damping
     bool useSimpleDamping = true;
@@ -377,9 +378,14 @@ public:
             collectJIntegralGridData();
 
             //As part of the stress snapshot let's also compute the J-integral!
-            int contourRadius = 2;
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], contourRadius };
-            computeJIntegral();
+            //We will compute the J integral using however many contour radii the user asks for
+            std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
+            std::ofstream jIntFile(jIntFilePath);
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
+            for(int i = 0; i < (int)contourRadii.size(); ++i){
+                computeJIntegral(contourRadii[i], jIntFile);
+            }
+            jIntFile.close();
         }
 
 

@@ -580,6 +580,7 @@ public:
         }
     }
 
+    //Iterate a rectangular contour of radius contourRadius starting from top left and running counter clockwise
     template <typename OP>
     inline void iterateRectangularContour(const BSplineWeights<T, dim, interpolation_degree>& spline, int contourRadius, const OP& target)
     {
@@ -590,38 +591,38 @@ public:
         Vector<int, dim> coord;
         if constexpr (dim == 2) {
             
-            //Left side
+            //Left side, starting with top left
             coord[0] = base_coord[0] - contourRadius;
-            for (int j = -1 * contourRadius; j < contourRadius + 1; ++j) {
+            for (int j = contourRadius; j > (-1 * contourRadius) - 1; --j) {
                 coord[1] = base_coord[1] + j;
-                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(-1*contourRadius, j));
+                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(-1 * contourRadius, j));
                 GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                 target(coord, g);
             }
 
-            //Top (minus the left most)
+            //Bottom (minus the left most)
+            coord[1] = base_coord[1] - contourRadius;
             for (int i = -1 * contourRadius + 1; i < contourRadius + 1; ++i) {
                 coord[0] = base_coord[0] + i;
-                coord[1] = base_coord[1] + contourRadius;
-                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, contourRadius));
+                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, -1 * contourRadius));
                 GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                 target(coord, g);
             }
 
-            //Right side (minus the top most) -> setup to continue the contour clockwise
+            //Right side (minus the bottom most) -> setup to continue the contour counter-clockwise
             coord[0] = base_coord[0] + contourRadius;
-            for (int j = contourRadius - 1; j > ((-1 * contourRadius) - 1); --j) {
+            for (int j = (-1 * contourRadius) + 1; j < contourRadius + 1 ; ++j) {
                 coord[1] = base_coord[1] + j;
                 auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(contourRadius, j));
                 GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                 target(coord, g);
             }
 
-            //Bottom (minus the left and right most) -> clockwise
+            //Top (minus the right and left most) -> counter clockwise
+            coord[1] = base_coord[1] + contourRadius;
             for (int i = contourRadius - 1; i > -1 * contourRadius; --i) {
                 coord[0] = base_coord[0] + i;
-                coord[1] = base_coord[1] - contourRadius;
-                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, -1*contourRadius));
+                auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, contourRadius));
                 GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                 target(coord, g);
             }

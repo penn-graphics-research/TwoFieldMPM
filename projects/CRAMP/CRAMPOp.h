@@ -10,6 +10,8 @@
 #include <tbb/tbb.h>
 #include <SPGrid/Core/SPGrid_Allocator.h>
 #include <SPGrid/Core/SPGrid_Page_Map.h>
+#include <Bow/Math/SVD.h>
+#include <Bow/Math/PolarDecomposition.h>
 
 using namespace SPGrid;
 
@@ -801,16 +803,14 @@ public:
     T mu;
     T la;
 
-    int contourRadius;
-
-    void operator()()
+    void operator()(int contourRadius, std::ofstream& file)
     {
-        BOW_TIMER_FLAG("Compute J-Integral");
+        BOW_TIMER_FLAG("computeJIntegral");
 
         //NOTE: This routine is designed for HORIZONTAL LEFT SIDE CRACKS (b.c. of contour intersection assumptions --> clockwise path hits bottom of crack first)
 
         //STEP 0: Grab an iterable list of unprocessed contour points
-        //Iterate a rectangular contour around the closest node to the crack tip --> CLOCKWISE STARTING FROM BOTTOM LEFT NODE
+        //Iterate a rectangular contour around the closest node to the crack tip --> COUNTER CLOCKWISE STARTING FROM TOP LEFT NODE
         std::vector<Vector<T,dim>> contourPoints;
         std::vector<DFGMPM::GridState<T,dim>*> contourGridStates;
         BSplineWeights<T, dim> spline(crackTip, dx);
@@ -818,43 +818,21 @@ public:
             Vector<T,dim> xi = node.template cast<T>() * dx;
             //Grab data
             contourPoints.push_back(xi);
-            contourGridStates.push_back(&g);
+            contourGridStates.push_back(&g); //hold pointers to grid node data
 
             //std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
         });
 
-        //STEP 1: Construct ordered list of contour points starting with intersection with top of crack, clockwise around contour, and then ending with intersection with bottom of crack
+        //STEP 1: Construct ordered list of contour points starting with intersection with bottom of crack, counter-clockwise around contour, and then ending with intersection with top of crack
         bool foundBottomIntersection = false;
         bool foundTopIntersection = false;
         //store the first point index for the segment intersecting with bottom and top crack planes
         int bottomIntersectionIdx = -1;
         int topIntersectionIdx = -1; 
         Vector<T, dim> bottomIntersection, topIntersection;
-        //STEP 1a: find bottom intersection
+        //STEP 1a: find top intersection
         for(int i = 0; i < (int)contourPoints.size() - 1; i++){
             //check each contour line segment for intersections with bottom crack
-            Vector<T, dim> A = contourPoints[i];
-            Vector<T, dim> B = contourPoints[i+1];
-            
-            for(unsigned int j = bottomPlane_startIdx; j < m_X.size() - 1; j++){
-                Vector<T, dim> C = m_X[j];
-                Vector<T, dim> D = m_X[j+1];
-
-                if(intersect(A, B, C, D)){
-                    bottomIntersectionIdx = i;
-                    getIntersection(A, B, C, D, bottomIntersection);
-                    foundBottomIntersection = true;
-                    break;
-                }
-            }
-            if(foundBottomIntersection){
-                break;
-            }            
-        }
-
-        //STEP 1b: Now look for the upper intersection -> start with bottomIntersectionIdx since this is the first segment that can have an intersection with the top points
-        for(int i = bottomIntersectionIdx; i < (int)contourPoints.size() - 1; i++){
-            //check each contour line segment for intersections with top crack
             Vector<T, dim> A = contourPoints[i];
             Vector<T, dim> B = contourPoints[i+1];
             
@@ -871,41 +849,74 @@ public:
             }
             if(foundTopIntersection){
                 break;
+            }            
+        }
+
+        //STEP 1b: Now look for the lower intersection -> start with topIntersectionIdx since this is the first segment that can have an intersection with the top points
+        for(int i = topIntersectionIdx; i < (int)contourPoints.size() - 1; i++){
+            //check each contour line segment for intersections with top crack
+            Vector<T, dim> A = contourPoints[i];
+            Vector<T, dim> B = contourPoints[i+1];
+            
+            for(unsigned int j = bottomPlane_startIdx; j < m_X.size() - 1; j++){
+                Vector<T, dim> C = m_X[j];
+                Vector<T, dim> D = m_X[j+1];
+
+                if(intersect(A, B, C, D)){
+                    bottomIntersectionIdx = i;
+                    getIntersection(A, B, C, D, bottomIntersection);
+                    foundBottomIntersection = true;
+                    break;
+                }
+            }
+            if(foundBottomIntersection){
+                break;
             }  
         }
 
         //STEP 1c: Check that crack is actually open (if it is not, we cannot compute J integral)
         std::vector<Vector<T,dim>> finalContourPoints;
         std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
-        T epsilon = 1e-6;
+        T epsilon = 1e-9;
         if(topIntersection[1] - bottomIntersection[1] < epsilon){
             std::cout << "Crack is not opened at the intersection points, cannot compute J-integral!" << std::endl;
         }
         else{
             //Else we construct all of the pieces we need to finally compute the J integral!
-            //Specifically, a list of contour points starting with top intersection and going clockwise around to the bottom intersection
+            //Specifically, a list of contour points starting with bottom intersection and going counter-clockwise around to the top intersection
 
-            //Top intersection
-            finalContourPoints.push_back(topIntersection);
-            finalContourGridStates.push_back(contourGridStates[topIntersectionIdx]); //store the grid state for the START point of the contour segment that intersected the crack
-
-            //now add points clockwise until hit end of list (then we will start from beginning until bottom intersecting segment)
-            for(int i = topIntersectionIdx + 1; i < (int)contourPoints.size(); ++i){ //end of list
-                finalContourPoints.push_back(contourPoints[i]);
-                finalContourGridStates.push_back(contourGridStates[i]);
-            }
-            for(int i = 0; i < (int)bottomIntersectionIdx + 1; ++i){ //begin of list
-                finalContourPoints.push_back(contourPoints[i]);
-                finalContourGridStates.push_back(contourGridStates[i]);
-            }
-
-            //bottom intersection
+            //Bottom intersection
             finalContourPoints.push_back(bottomIntersection);
-            finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]); //store grid state from START of bottom intersecting segment
+            finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]); //store the grid state for the START point of the contour segment that intersected the crack
 
+            //now add points counter-clockwise until hit end of list (then we will start from beginning until bottom intersecting segment)
+            for(int i = bottomIntersectionIdx + 1; i < (int)contourPoints.size(); ++i){ //end of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+            for(int i = 0; i < (int)topIntersectionIdx + 1; ++i){ //begin of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+
+            //top intersection
+            finalContourPoints.push_back(topIntersection);
+            finalContourGridStates.push_back(contourGridStates[topIntersectionIdx]); //store grid state from START of top intersecting segment
         }
 
         //STEP 2: Compute J-integral!
+        
+        //DEBUG: Setup a bunch of lists to hold intermediate data for debugging
+        std::vector<T> Fsum_I_List;
+        std::vector<T> DeltaI_List;
+        std::vector<T> Fm_I_SegmentList; //Store Fm1 and Fm2 for each line segment so we can check them!
+        std::vector<T> Fm_I_NormalX;
+        std::vector<T> Fm_I_NormalY;
+        std::vector<T> Fm_I_W;
+        std::vector<T> Fm_I_termTwo;
+        std::vector<T> blendRatios;
+
+
         T J_I = 0; //set J integral mode I to 0 for now
         T J_II = 0; //set J integral mode II to 0 for now
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
@@ -914,65 +925,118 @@ public:
             Vector<T,dim> x1 = finalContourPoints[i];
             Vector<T,dim> x2 = finalContourPoints[i+1];
             if(i == 0){ //first segment
-                //If first segment, first we compute interpolations for top intersection point
-                Vector<T, dim> xi1 = contourPoints[topIntersectionIdx];
-                Vector<T, dim> xi2 = contourPoints[topIntersectionIdx + 1];
-                DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
-                DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
-                //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1_I = computeFm(gi1, x2 - x1, 0);
-                T Fmi2_I = computeFm(gi2, x2 - x1, 0); 
-                T Fmi1_II = computeFm(gi1, x2 - x1, 1);
-                T Fmi2_II = computeFm(gi2, x2 - x1, 1);
-                T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
-                T FmIntersect_I = (Fmi1_I * (1 - blendRatio)) + (Fmi2_I * blendRatio);
-                T FmIntersect_II = (Fmi1_II * (1 - blendRatio)) + (Fmi2_II * blendRatio);
-
-                //Compute Fm2 (from actual second point)
-                DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                T Fm2_I = computeFm(g2, x2 - x1, 0);
-                T Fm2_II = computeFm(g2, x2 - x1, 1);
-
-                //Compute Fsum
-                Fsum_I = FmIntersect_I + Fm2_I;
-                Fsum_II = FmIntersect_II + Fm2_II;
-            }
-            else if(i == (int)finalContourPoints.size() - 2){ //last segment
-                //If last segment, first we compute interpolations for bottom intersection point
+                //If first segment, first we compute interpolations for bottom intersection point
                 Vector<T, dim> xi1 = contourPoints[bottomIntersectionIdx];
                 Vector<T, dim> xi2 = contourPoints[bottomIntersectionIdx + 1];
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                T Fmi1_I = computeFm(gi1, x2 - x1, 0);
-                T Fmi2_I = computeFm(gi2, x2 - x1, 0);
-                T Fmi1_II = computeFm(gi1, x2 - x1, 1);
-                T Fmi2_II = computeFm(gi2, x2 - x1, 1);
-                T blendRatio = (x1[1] - xi1[1]) / (xi2[1] - xi1[1]);
-                T FmIntersect_I = (Fmi1_I * (1 - blendRatio)) + (Fmi2_I * blendRatio);
-                T FmIntersect_II = (Fmi1_II * (1 - blendRatio)) + (Fmi2_II * blendRatio);
+                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0);
+                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0); 
+                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1);
+                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1);
+                T blendRatio = abs(x1[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
+                T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
+                T FmIntersect_II = (Fmi1_II[0] * (1 - blendRatio)) + (Fmi2_II[0] * blendRatio);
 
                 //Compute Fm2 (from actual second point)
-                DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
-                T Fm1_I = computeFm(g1, x2 - x1, 0);
-                T Fm1_II = computeFm(g1, x2 - x1, 1);
+                DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
+                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0);
+                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1);
 
                 //Compute Fsum
-                Fsum_I = Fm1_I + FmIntersect_I;
-                Fsum_II = Fm1_II + FmIntersect_II;
+                Fsum_I = FmIntersect_I + Fm2_I[0];
+                Fsum_II = FmIntersect_II + Fm2_II[0];
+
+                //Store Fm, normal, W, and termTwo of end points
+                Fm_I_SegmentList.push_back(FmIntersect_I);
+                Fm_I_NormalX.push_back(Fmi1_I[1]);
+                Fm_I_NormalY.push_back(Fmi1_I[2]);
+                Fm_I_W.push_back(Fmi1_I[3]);
+                Fm_I_termTwo.push_back(Fmi1_I[4]); //these are all specifically for the FIRST point used to interpolate this intersection point
+
+                Fm_I_SegmentList.push_back(Fm2_I[0]);
+                Fm_I_NormalX.push_back(Fm2_I[1]);
+                Fm_I_NormalY.push_back(Fm2_I[2]);
+                Fm_I_W.push_back(Fm2_I[3]);
+                Fm_I_termTwo.push_back(Fm2_I[4]);
+
+                blendRatios.push_back(blendRatio);
+
+            }
+            else if(i == (int)finalContourPoints.size() - 2){ //last segment
+                //Compute Fm1 (from actual first point)
+                DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
+                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0);
+                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1);
+                
+                //compute interpolations for top intersection point (second endpoint)
+                Vector<T, dim> xi1 = contourPoints[topIntersectionIdx];
+                Vector<T, dim> xi2 = contourPoints[topIntersectionIdx + 1];
+                DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
+                DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
+                //Compute Fm for these two points, then we'll interpolate between them for our intersection point
+                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0);
+                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0);
+                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1);
+                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1);
+                T blendRatio = abs(x2[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
+                T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
+                T FmIntersect_II = (Fmi1_II[0] * (1 - blendRatio)) + (Fmi2_II[0] * blendRatio);
+
+                //Compute Fsum
+                Fsum_I = Fm1_I[0] + FmIntersect_I;
+                Fsum_II = Fm1_II[0] + FmIntersect_II;
+
+                Fm_I_SegmentList.push_back(Fm1_I[0]);
+                Fm_I_NormalX.push_back(Fm1_I[1]);
+                Fm_I_NormalY.push_back(Fm1_I[2]);
+                Fm_I_W.push_back(Fm1_I[3]);
+                Fm_I_termTwo.push_back(Fm1_I[4]);
+
+                Fm_I_SegmentList.push_back(FmIntersect_I);
+                Fm_I_NormalX.push_back(Fmi2_I[1]);
+                Fm_I_NormalY.push_back(Fmi2_I[2]);
+                Fm_I_W.push_back(Fmi2_I[3]);
+                Fm_I_termTwo.push_back(Fmi2_I[4]);
+
+                blendRatios.push_back(blendRatio);
             }
             else{ //rest of the non-intersect segments
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                Fsum_I = computeFm(g1, x2 - x1, 0) + computeFm(g2, x2 - x1, 0);
-                Fsum_II = computeFm(g1, x2 - x1, 1) + computeFm(g2, x2 - x1, 1);
+                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0);
+                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0);
+                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1);
+                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1);
+                Fsum_I = Fm1_I[0] + Fm2_I[0];
+                Fsum_II = Fm1_II[0] + Fm2_II[0];
+
+                Fm_I_SegmentList.push_back(Fm1_I[0]);
+                Fm_I_NormalX.push_back(Fm1_I[1]);
+                Fm_I_NormalY.push_back(Fm1_I[2]);
+                Fm_I_W.push_back(Fm1_I[3]);
+                Fm_I_termTwo.push_back(Fm1_I[4]);
+
+                Fm_I_SegmentList.push_back(Fm2_I[0]);
+                Fm_I_NormalX.push_back(Fm2_I[1]);
+                Fm_I_NormalY.push_back(Fm2_I[2]);
+                Fm_I_W.push_back(Fm2_I[3]);
+                Fm_I_termTwo.push_back(Fm2_I[4]);
             }
+
+            //store Fsum_I for debugging
+            Fsum_I_List.push_back(Fsum_I);
 
             //Now after computing Fsum using one of three cases, we can add this contribution to the Jintegral!
             T deltaI = std::sqrt((x1[0] - x2[0])*(x1[0] - x2[0]) + (x1[1] - x2[1])*(x1[1] - x2[1])); //compute distance from x1 to x2 (the end points of current segment)
             J_I += Fsum_I * (deltaI / 2.0);
             J_II += Fsum_II * (deltaI / 2.0);
+
+            DeltaI_List.push_back(deltaI);
         }
+        Fsum_I_List.push_back(0.0); //dummy for final endpoint
+        DeltaI_List.push_back(0.0);
 
         //STEP 3: Compute thetaC and G
         Vector<T, dim> x1 = m_X[topPlane_startIdx - 2];
@@ -1000,63 +1064,139 @@ public:
         T K_II_planeStrain = K_II_factor * planeStrainFactor;
 
         //Print it all out (later write to a simple file)
-        std::cout << "Bottom | Idx: " << bottomIntersectionIdx << "Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << ")" << std::endl;
-        std::cout << "Top | Idx: " << topIntersectionIdx << "Point: (" << topIntersection[0] << "," << topIntersection[1] << ")" << std::endl;
-        for(int i = 0; i < (int)finalContourPoints.size(); ++i){
-            std::cout << "idx:" << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << ")" << std::endl;
+        file << "=== J-Integral Computation using " << contourRadius << "x" << contourRadius << " Contour ===\n";
+        file << "Bottom Intersection | Idx: " << bottomIntersectionIdx << " Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << "), Blend Ratio: " << blendRatios[0] << " \n";
+        file << "Top Intersection | Idx: " << topIntersectionIdx << " Point: (" << topIntersection[0] << "," << topIntersection[1] << "), Blend Ratio: " << blendRatios[1] << "\n";
+        // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
+        //     file << "idx:" << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fsum_I: " << Fsum_I_List[i] << " \n";
+        // }
+        for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
+            file << "--<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ">--\n";
+            file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi: " << finalContourGridStates[i]->Fi1 << " \n";
+            file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi: " << finalContourGridStates[i+1]->Fi1 << " \n";
         }
-        std::cout << "J_I: " << J_I << std::endl; 
-        std::cout << "J_II: " << J_II << std::endl; 
-        std::cout << "thetaC: " << thetaC << std::endl; 
-        std::cout << "G: " << G << std::endl; 
-        std::cout << "K_I (plane stress): " << K_I_planeStress << std::endl; 
-        std::cout << "K_I (plane strain): " << K_I_planeStrain << std::endl; 
-        std::cout << "K_II (plane stress): " << K_II_planeStress << std::endl; 
-        std::cout << "K_II (plane strain): " << K_II_planeStrain << std::endl;
+        // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
+        //     file << "idx " << i << " pointer: " << finalContourGridStates[i] << "\n";
+        // }
+        // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
+        //     file << "idx " << i << " position: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << ")\n";
+        // }
+        // for(int i = 0; i < (int)contourPoints.size(); ++i){
+        //     file << "idx " << i << " pointer: " << contourGridStates[i] << "\n";
+        // }
+        // for(int i = 0; i < (int)contourPoints.size(); ++i){
+        //     file << "idx " << i << " position: (" << contourPoints[i][0] << "," << contourPoints[i][1] << ")\n";
+        // }
+        file << "J_I: " << J_I << "\n"; 
+        file << "J_II: " << J_II << "\n"; 
+        file << "thetaC: " << thetaC << "\n"; 
+        file << "G: " << G << "\n"; 
+        file << "K_I (plane stress): " << K_I_planeStress << "\n"; 
+        file << "K_I (plane strain): " << K_I_planeStrain << "\n"; 
+        file << "K_II (plane stress): " << K_II_planeStress << "\n"; 
+        file << "K_II (plane strain): " << K_II_planeStrain << "\n";
+        file << "\n";
     }
 
     //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)
-    T computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode){
+    std::vector<T> computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode){
+        std::vector<T> FmResults;
+        
         T Fm = 0;
         
         //Compute normal
         Vector<T, dim> normal;
         if(lineSegment[0] == 0){ //normal = left or right
             normal[1] = 0;
-            if(lineSegment[1] > 0){ //normal = left
-                normal[0] = -1;
+            if(lineSegment[1] > 0){ //normal = right
+                normal[0] = 1;
             }
-            else{ //normal = right
-                normal[1] = 1;
+            else{ //normal = left
+                normal[0] = -1;
             }
         }
         else{ //normal = up or down
             normal[0] = 0;
-            if(lineSegment[0] > 0){ //normal = up
-                normal[1] = 1;
-            }
-            else{ //normal = down
+            if(lineSegment[0] > 0){ //normal = down
                 normal[1] = -1;
             }
+            else{ //normal = up
+                normal[1] = 1;
+            }
         }
 
-        //Compute work
+        //Compute strain energy density, W (elastic potential energy density)
+        //NOTE: It is MUCH easier to hardcode the elasticity model here, so if we change the constitutive model we NEED to change this here as well!!
         T W = 0;
-        W += (-1 * g->fi1).dot(dt * g->v1); //compute field 1 work
-        if(g->separable == 1){
-            W += (-1 * g->fi2).dot(dt * g->v2); //compute field 2 work
+        T termTwo = 0;
+        int elasticityMode = 1; //0 = LINEAR, 1 = FCR
+        if(elasticityMode == 0){
+            //LINEAR ELASTICITY
+            Matrix<T, dim, dim> epsilon1 = 0.5 * (g->Fi1 + g->Fi1.transpose()) - Matrix<T, dim, dim>::Identity();
+            Matrix<T, dim, dim> epsilon2 = 0.5 * (g->Fi2 + g->Fi2.transpose()) - Matrix<T, dim, dim>::Identity();
+            T tr_epsilon1 = epsilon1.diagonal().sum();
+            T tr_epsilon2 = epsilon2.diagonal().sum();
+            W += mu * epsilon1.squaredNorm() + la * 0.5 * tr_epsilon1 * tr_epsilon1; // W += psi(epsilon), field 1
+            if(g->separable == 1){
+                W += mu * epsilon2.squaredNorm() + la * 0.5 * tr_epsilon2 * tr_epsilon2; // W += psi(epsilon), field 2
+            }
+
+            //Compute Piola Kirchhoff stress
+            Matrix<T, dim, dim> Pi1, Pi2;
+            Matrix<T, dim, dim> R = Matrix<T, dim, dim>::Identity();
+            Pi1.noalias() = 2 * mu * R * epsilon1 + la * tr_epsilon1 * R;
+            
+            //Compute term two
+            termTwo += (Pi1 * normal).dot(g->Fi1.col(mode));
+            if(g->separable == 1){
+                Pi2.noalias() = 2 * mu * R * epsilon2 + la * tr_epsilon2 * R;
+                termTwo += (Pi2 * normal).dot(g->Fi2.col(mode)); //additionally compute field 2 term
+            }
+        }
+        else if(elasticityMode == 1){
+            //FIXED COROTATED ELASTICITY
+            Matrix<T, dim, dim> U1, V1, U2, V2;
+            Vector<T, dim> sigma1, sigma2;
+            Math::svd(g->Fi1, U1, sigma1, V1);
+            W += mu * (sigma1 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma1.prod() - T(1), 2);
+            if(g->separable == 1){
+                Math::svd(g->Fi2, U2, sigma2, V2);
+                W += mu * (sigma2 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma2.prod() - T(1), 2);
+            }
+
+            //Compute Piola Kirchhoff stress
+            Matrix<T, dim, dim> Pi1, Pi2;
+            T J1 = g->Fi1.determinant();
+            Matrix<T, dim, dim> JFinvT1, JFinvT2;
+            Math::cofactor(g->Fi1, JFinvT1);
+            Matrix<T, dim, dim> R1, S1, R2, S2;
+            Math::polar_decomposition(g->Fi1, R1, S1);
+            Pi1 = T(2) * mu * (g->Fi1 - R1) + la * (J1 - 1) * JFinvT1;
+
+            //Compute term two
+            termTwo += (Pi1 * normal).dot(g->Fi1.col(mode));
+            if(g->separable == 1){
+                T J2 = g->Fi2.determinant();
+                Math::cofactor(g->Fi2, JFinvT2);
+                Math::polar_decomposition(g->Fi2, R2, S2);
+                Pi2 = T(2) * mu * (g->Fi2 - R2) + la * (J2 - 1) * JFinvT2;
+                termTwo += (Pi2 * normal).dot(g->Fi2.col(mode)); //additionally compute field 2 term
+            }
         }
         
-        //Compute first term -> mode = 0 or 1
+        //Add first term -> mode = 0 or 1
         Fm += W * normal[mode];
 
-        //Compute second term (field 1)
-        Fm -= normal.dot(g->Pi1 * g->Fi1.col(mode));
-        if(g->separable == 1){
-            Fm -= normal.dot(g->Pi2 * g->Fi2.col(mode)); //additionally compute field 2 term
-        }
-        
-        return Fm;
+        //Add second term (field 1)
+        Fm -= termTwo;
+
+        FmResults.push_back(Fm);
+        FmResults.push_back(normal[0]);
+        FmResults.push_back(normal[1]);
+        FmResults.push_back(W);
+        FmResults.push_back(termTwo);
+
+        return FmResults;
     }
 
     //Elegant line segment intersection check from https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
@@ -1102,7 +1242,9 @@ public:
 
     void operator()()
     {
-        BOW_TIMER_FLAG("Collect Grid Data for J Integral");
+        BOW_TIMER_FLAG("collectJIntegralGridData");
+        
+        //Now we transfer to the grid!
         grid.colored_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
@@ -1144,8 +1286,6 @@ public:
                 });
             }
         });
-
-        std::cout << "Before dividing..." << std::endl;
 
         /* Iterate grid to divide out the total weight sums for P and F since we transfer these intrinsically */
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
