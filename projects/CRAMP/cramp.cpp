@@ -58,10 +58,10 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_rampTime500_fibrinParams_sigma400e5_FCR");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e8_FCR");
 
         //material
-        T E = 2.6e6;
+        T E = 2.6e8;
         T nu = 0.25;
         T rho = 1395000;
 
@@ -95,6 +95,7 @@ int main(int argc, char *argv[])
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
         //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
 
+        //Sample Particles
         int ppc = 9;
         T height = 32e-3; //32mm
         T width = 20e-3; //20mm
@@ -106,6 +107,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 
+        //Add Crack
         T crackSegmentLength = sim.dx / 5.0;
         T damageRadius = sim.dx / 2.0;
         T crackLength = 5e-3;
@@ -113,14 +115,19 @@ int main(int argc, char *argv[])
         T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
         sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
 
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 15e-3), Vector<T, dim>(0, -1)));
-
+        //Add Boundary Conditions
         T yTop = y2 - 0.5e-3;
         T yBottom = y1 + 0.5e-3;
-        T sigmaA = 400e5;
-        T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
-        //rampTime = 0.0;
-        sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+        T u2 = 1e-3; // pull a total displacement of 1 mm, so each puller will pull half this distance
+        T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        // T sigmaA = 400e5;
+        // T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
+        // //rampTime = 0.0;
+        // sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller
 
         // T simpleDampFactor = 0.5;
         // T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp

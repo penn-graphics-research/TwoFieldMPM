@@ -39,10 +39,21 @@ public:
     }
     void update(T dt)
     {
+        //std::cout << "updating boundaries" << std::endl;
         for (auto& object : level_set_objects) object->update(dt);
         for (auto& it : node_bcs)
             for (auto& object : it.second)
                 object->update(dt);
+    }
+    void timingUpdates(T elapsedTime)
+    {
+        for (auto& ls_ptr : level_set_objects){
+            T moveTime = ls_ptr->moveTime();
+            if(elapsedTime > moveTime){
+                ls_ptr->setVelocity(TV::Zero());
+                //std::cout << "set boundary velocity to zero, move time:" << moveTime << " and elapsedTime:" << elapsedTime << std::endl;
+            }
+        }
     }
     void mpm_explicit_update(const TV& X, TV& V)
     {

@@ -25,8 +25,10 @@ public:
     virtual T signed_distance(const TV& X) = 0;
     virtual TV normal(const TV& X) { BOW_NOT_IMPLEMENTED return TV::Unit(0); }
     virtual TV velocity(const TV& X) { return TV::Zero(); }
+    virtual T moveTime() { return 0.0; }
     virtual TV closest_point(const TV& X) { BOW_NOT_IMPLEMENTED return TV::Unit(0); }
     virtual void update(const T& dt) { return; }
+    virtual void setVelocity(const TV& newV) { return; }
 };
 
 template <class T, int dim>
@@ -37,11 +39,15 @@ public:
     TV origin;
     TV outward_normal;
     TV v;
-    HalfSpaceLevelSet(Type type, const TV& origin, const TV& normal, TV v = TV::Zero());
+    T move_time;
+    HalfSpaceLevelSet(Type type, const TV& origin, const TV& normal, TV v = TV::Zero(), T moveTime = 0.0);
     T signed_distance(const TV& X) override;
     TV normal(const TV& X) override;
     TV closest_point(const TV& X) override;
     TV velocity(const TV& X) override;
+    T moveTime() override;
+    void setVelocity(const TV& newV) override;
+    virtual void update(const T& dt) override;
 };
 
 template <class T, int dim>

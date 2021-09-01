@@ -291,6 +291,10 @@ public:
     //Symplectic: Collision Updates; Implicit: Collisions + Implicit Update
     void gridUpdate(T dt){
         if(Base::symplectic){
+            //Timing Updates to Boundary Conditions
+            Base::BC.update(dt);
+            Base::BC.timingUpdates(elapsedTime);
+
             //Boundary Collisions
             Bow::DFGMPM::BoundaryConditionUpdateOp<T, dim> bc_update{ {}, grid, Base::BC, Base::dx, dt };
             bc_update();

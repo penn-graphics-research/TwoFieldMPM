@@ -3,8 +3,8 @@
 namespace Bow::Geometry {
 
 template <class T, int dim>
-HalfSpaceLevelSet<T, dim>::HalfSpaceLevelSet(Type type, const TV& origin, const TV& outward_normal, TV v)
-    : AnalyticalLevelSet<T, dim>(type), origin(origin), outward_normal(outward_normal.normalized()), v(v)
+HalfSpaceLevelSet<T, dim>::HalfSpaceLevelSet(Type type, const TV& origin, const TV& outward_normal, TV v, T moveTime)
+    : AnalyticalLevelSet<T, dim>(type), origin(origin), outward_normal(outward_normal.normalized()), v(v), move_time(moveTime)
 {
 }
 
@@ -31,6 +31,25 @@ template <class T, int dim>
 Vector<T, dim> HalfSpaceLevelSet<T, dim>::velocity(const TV& X)
 {
     return v;
+}
+
+template <class T, int dim>
+T HalfSpaceLevelSet<T, dim>::moveTime()
+{
+    return move_time;
+}
+
+template <class T, int dim>
+void HalfSpaceLevelSet<T, dim>::setVelocity(const TV& newV)
+{
+    v = newV;
+}
+
+template <class T, int dim>
+void HalfSpaceLevelSet<T, dim>::update(const T& dt)
+{
+    origin += v * dt;
+    //std::cout << "updating HalfSpaceLevelSets, velocity:" << v << std::endl;
 }
 
 template <class T, int dim>
