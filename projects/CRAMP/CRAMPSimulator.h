@@ -61,6 +61,7 @@ public:
     Field<T> m_mu, m_la;
     Field<TM> m_P; //piola kirchhoff -> for j integral
     Field<TM> m_F; //def grad --> for j integral
+    Field<TM> m_Ftotal; //total def grad --> for j integral
 
     //Sim Data
     std::string outputPath;
@@ -326,8 +327,20 @@ public:
         G2P(useAPIC); //P2G
 
         //Now evolve strain (updateF)
-        for (auto& model : Base::elasticity_models)
+        for (auto& model : Base::elasticity_models){
             model->evolve_strain(G2P.m_gradXp);
+            m_F = model->m_F;
+        }
+            
+        //Keep track of total deformation gradients
+        for(int i = 0; i < (int)m_F.size(); ++i){
+            if((int)m_Ftotal.size() < (int)m_F.size()){
+                m_Ftotal.push_back(m_F[i]); //simply add to the list if this is the first timestep
+            }
+            else{
+                m_Ftotal[i] = m_F[i] * m_Ftotal[i];
+            }
+        }
 
         //Now project strain (plasticity)
         for (auto& model : Base::plasticity_models)
@@ -379,6 +392,7 @@ public:
                 m_F = model->m_F;
             }
             Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_F, particleAF, grid, Base::dx, dt, useDFG };
+            //Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_Ftotal, particleAF, grid, Base::dx, dt, useDFG };
             collectJIntegralGridData();
 
             //As part of the stress snapshot let's also compute the J-integral!
