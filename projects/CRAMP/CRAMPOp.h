@@ -1248,9 +1248,21 @@ public:
         grid.colored_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
-                const Matrix<T, dim, dim> stress = m_stress[i];
-                const Matrix<T, dim, dim> P = m_P[i];
+                //const Matrix<T, dim, dim> stress = m_stress[i];
+                //const Matrix<T, dim, dim> P = m_P[i];
                 const Matrix<T, dim, dim> F = m_F[i];
+                
+                //We will transfer the deformation gradient through transferring its singular values and rotations (as quaternions) -> three separate intrinsic transfers here
+                Matrix<T, dim, dim> U, V;
+                Vector<T, dim> sigma;
+                Vector<T, 4> rotU, rotV; //quaternion coefficients for U and V^T
+                Eigen::JacobiSVD<Matrix<T,dim,dim>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+                //Eigen::Quaternion<T> rotU_q(U);
+                //Eigen::Quaternion<T> rotV_q(V);
+                
+
+
+
                 BSplineWeights<T, dim> spline(pos, dx);
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
@@ -1262,8 +1274,9 @@ public:
                     //Notice we treat single-field and two-field nodes differently
                     if (g.separable != 1 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
-                        g.fi1 += stress * dw; //transfer stress to grid, fi
-                        g.Pi1 += P * w; //transfer P
+                        
+                        //g.fi1 += stress * dw; //transfer stress to grid, fi
+                        //g.Pi1 += P * w; //transfer P
                         g.Fi1 += F * w; //transfer F
                         g.gridSeparability[0] += w; //sum up the total weight
                     }
@@ -1271,14 +1284,16 @@ public:
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
-                            g.fi1 += stress * dw; //transfer stress to grid, fi
-                            g.Pi1 += P * w; //transfer P
+                            
+                            //g.fi1 += stress * dw; //transfer stress to grid, fi
+                            //g.Pi1 += P * w; //transfer P
                             g.Fi1 += F * w; //transfer F
                             g.gridSeparability[0] += w; //sum up the total weight
                         }
                         else if (fieldIdx == 1) {
-                            g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
-                            g.Pi2 += P * w; //transfer P (second field)
+                            
+                            //g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
+                            //g.Pi2 += P * w; //transfer P (second field)
                             g.Fi2 += F * w; //transfer F (second fgield)
                             g.gridSeparability[1] += w; //sum up the total weight (second field)
                         }

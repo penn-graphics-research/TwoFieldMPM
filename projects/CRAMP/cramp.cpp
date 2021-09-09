@@ -24,10 +24,50 @@ int main(int argc, char *argv[])
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
         using T = double;
-        static const int dim = 3;
+        static const int dim = 2;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
         //std::cout << "Padding: " << sizeof(gs.padding) << std::endl;
+        
+        //Testing Quaternion representations
+        Matrix<T,dim,dim> F = Matrix<T,dim,dim>::Identity();
+        F(0,0) = 45;
+        F(0,1) = -7;
+        F(1,0) = 82;
+        F(1,1) = -700;
+
+        if(dim == 2){
+            Matrix<T,3,3> Fpadded = Matrix<T,3,3>::Identity();
+            Fpadded.topLeftCorner(2,2) = F;
+
+            Eigen::JacobiSVD<Matrix<T,3,3>> svd(Fpadded, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            Eigen::Quaternion<T> rotU(svd.matrixU());
+            Eigen::Quaternion<T> rotV(svd.matrixV());
+            rotU.normalize();
+            rotV.normalize(); //normalize our quaternions!
+            std::cout << "rotU coeffs:\n" << rotU.coeffs() << std::endl;
+            std::cout << "rotV coeffs:\n" << rotV.coeffs() << std::endl;
+            Matrix<T,3,3> Ureconstruct = rotU.toRotationMatrix();
+            Matrix<T,3,3> Vreconstruct = rotV.toRotationMatrix();
+            Matrix<T,3,3> Sigma = svd.singularValues().asDiagonal();
+            std::cout << "F before:\n" << F << std::endl;
+            std::cout << "F padded:\n" << Fpadded << std::endl;
+            
+            std::cout << "matrixU:\n" << svd.matrixU() << std::endl;
+            std::cout << "sigma:\n" << svd.singularValues() << std::endl;
+            std::cout << "matrixV:\n" << svd.matrixV() << std::endl;
+            std::cout << "F reconstructed after JacobiSVD:\n" << svd.matrixU() * svd.singularValues().asDiagonal() * svd.matrixV() << std::endl;
+            
+            std::cout << "Ureconstruct:\n" << Ureconstruct << std::endl;
+            std::cout << "Sigma:\n" << Sigma << std::endl;
+            std::cout << "Vreconstruct:\n" << Vreconstruct << std::endl;
+            std::cout << "F reconstructed after quaternions:\n" << Ureconstruct * Sigma * Vreconstruct << std::endl;
+        }
+
+        //std::cout << "Urot coeffs:" << rotU.coeffs() << std::endl;
+        //std::cout << "U before:" << U << std::endl;
+        //std::cout << "U after:" << Ureconstruct << std::endl;
+
         return 0;
         //Without Padding
         //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B

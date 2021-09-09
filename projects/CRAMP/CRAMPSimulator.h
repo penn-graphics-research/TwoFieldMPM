@@ -61,7 +61,7 @@ public:
     Field<T> m_mu, m_la;
     Field<TM> m_P; //piola kirchhoff -> for j integral
     Field<TM> m_F; //def grad --> for j integral
-    Field<TM> m_Ftotal; //total def grad --> for j integral
+    //Field<TM> m_Ftotal; //total def grad --> for j integral
 
     //Sim Data
     std::string outputPath;
@@ -333,14 +333,14 @@ public:
         }
             
         //Keep track of total deformation gradients
-        for(int i = 0; i < (int)m_F.size(); ++i){
-            if((int)m_Ftotal.size() < (int)m_F.size()){
-                m_Ftotal.push_back(m_F[i]); //simply add to the list if this is the first timestep
-            }
-            else{
-                m_Ftotal[i] = m_F[i] * m_Ftotal[i];
-            }
-        }
+        // for(int i = 0; i < (int)m_F.size(); ++i){
+        //     if((int)m_Ftotal.size() < (int)m_F.size()){
+        //         m_Ftotal.push_back(m_F[i]); //simply add to the list if this is the first timestep
+        //     }
+        //     else{
+        //         m_Ftotal[i] = m_F[i] * m_Ftotal[i];
+        //     }
+        // }
 
         //Now project strain (plasticity)
         for (auto& model : Base::plasticity_models)
