@@ -59,9 +59,7 @@ public:
     //Additional Particle Data
     Field<T> m_vol;
     Field<T> m_mu, m_la;
-    Field<TM> m_P; //piola kirchhoff -> for j integral
     Field<TM> m_F; //def grad --> for j integral
-    //Field<TM> m_Ftotal; //total def grad --> for j integral
 
     //Sim Data
     std::string outputPath;
@@ -329,18 +327,7 @@ public:
         //Now evolve strain (updateF)
         for (auto& model : Base::elasticity_models){
             model->evolve_strain(G2P.m_gradXp);
-            m_F = model->m_F;
         }
-            
-        //Keep track of total deformation gradients
-        // for(int i = 0; i < (int)m_F.size(); ++i){
-        //     if((int)m_Ftotal.size() < (int)m_F.size()){
-        //         m_Ftotal.push_back(m_F[i]); //simply add to the list if this is the first timestep
-        //     }
-        //     else{
-        //         m_Ftotal[i] = m_F[i] * m_Ftotal[i];
-        //     }
-        // }
 
         //Now project strain (plasticity)
         for (auto& model : Base::plasticity_models)
@@ -386,13 +373,11 @@ public:
 
             //Collect grid forces, grid nominal stress (P), and grid def grad (F) -- all to compute J-Integral!
             for (auto& model : Base::elasticity_models){
-                model->compute_piola(m_P);
                 m_mu = model->m_mu;
                 m_la = model->m_lambda;
                 m_F = model->m_F;
             }
-            Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_F, particleAF, grid, Base::dx, dt, useDFG };
-            //Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_P, m_Ftotal, particleAF, grid, Base::dx, dt, useDFG };
+            Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_F, particleAF, grid, Base::dx, dt, useDFG };
             collectJIntegralGridData();
 
             //As part of the stress snapshot let's also compute the J-integral!
@@ -617,7 +602,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -647,7 +631,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             m_marker.push_back(0);
             
@@ -701,7 +684,6 @@ public:
                 Base::m_C.push_back(TM::Zero());
                 Base::m_mass.push_back(density * vol);
                 Base::stress.push_back(TM::Zero());
-                m_P.push_back(TM::Zero());
                 cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
@@ -738,7 +720,6 @@ public:
                 Base::m_V.push_back(velocity);
                 Base::m_C.push_back(TM::Zero());
                 Base::stress.push_back(TM::Zero());
-                m_P.push_back(TM::Zero());
                 cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
@@ -786,7 +767,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -824,7 +804,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -843,7 +822,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
@@ -862,7 +840,6 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            m_P.push_back(TM::Zero());
             cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);

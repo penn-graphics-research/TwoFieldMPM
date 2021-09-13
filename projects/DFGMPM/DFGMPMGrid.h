@@ -33,9 +33,10 @@ public:
     Vector<T, dim> fct1, fct2; //contact force
     Vector<T, dim> fi1, fi2; //impulse force
 
-    //Hold grid P and F (we need this to compute the J-integral)
-    Matrix<T, dim, dim> Pi1, Pi2;
-    Matrix<T, dim, dim> Fi1, Fi2;
+    //To get grid def grad, F_i, transfer singular values and quaternion coefficients for U and V rotations from SVD!
+    Vector<T, dim> sigma1, sigma2;
+    Vector<T, 4> Uquat1, Uquat2;
+    Vector<T, 4> Vquat1, Vquat2;
 
     //DOF Tracking
     typename std::conditional<std::is_same<T, float>::value, int32_t, int64_t>::type idx;
@@ -56,12 +57,13 @@ public:
 
     //PADDING to ensure GridState is power of 2
     //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
-    //AFTER ADDING Pi1, Pi2, Fi1, Fi2 (without padding)
-    //Float2D: 304 B -> add 208 B -> 52 Ts
-    //Float3D: 432 B -> add 80 B -> 20 Ts
-    //Double2D: 608 B -> add 416 B -> 52 Ts
-    //Double3D: 864 B -> add 160 B -> 20 Ts
-    Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
+    
+    //AFTER ADDING sigma1, Uquat1, etc. and removing Fi1, Pi1, etc. ... 9/13/21
+    //Float2D: 320 B -> add 192 B -> 48 Ts
+    //Float3D: 384 B -> add 128 B -> 32 Ts
+    //Double2D: 640 B -> add 384 B -> 48 Ts
+    //Double3D: 768 B -> add 256 B -> 32 Ts
+    Vector<T, (-16 * dim) + 80> padding; //dim2 = 48 Ts, dim3 = 32 Ts --> y = -16x + 80
 
     GridState()
     {
@@ -79,10 +81,12 @@ public:
         fct2 = Vector<T, dim>::Zero();
         fi1 = Vector<T, dim>::Zero();
         fi2 = Vector<T, dim>::Zero();
-        Pi1 = Matrix<T,dim,dim>::Zero();
-        Pi2 = Matrix<T,dim,dim>::Zero();
-        Fi1 = Matrix<T,dim,dim>::Zero();
-        Fi2 = Matrix<T,dim,dim>::Zero();
+        sigma1 = Vector<T, dim>::Zero();
+        sigma2 = Vector<T, dim>::Zero();
+        Uquat1 = Vector<T, 4>::Zero();
+        Uquat2 = Vector<T, 4>::Zero();
+        Vquat1 = Vector<T, 4>::Zero();
+        Vquat2 = Vector<T, 4>::Zero();
         gridDG = Vector<T, dim>::Zero();
         gridMaxNorm = 0.0;
         gridSeparability = Vector<T, 4>::Zero();

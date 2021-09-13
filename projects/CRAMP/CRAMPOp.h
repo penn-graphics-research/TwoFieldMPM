@@ -915,7 +915,7 @@ public:
         std::vector<T> Fm_I_W;
         std::vector<T> Fm_I_termTwo;
         std::vector<T> blendRatios;
-
+        std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
 
         T J_I = 0; //set J integral mode I to 0 for now
         T J_II = 0; //set J integral mode II to 0 for now
@@ -931,18 +931,18 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0);
-                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0); 
-                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1);
-                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1);
+                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0, m_Fi, true); //store F
+                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0, m_Fi); 
+                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1, m_Fi);
+                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1, m_Fi);
                 T blendRatio = abs(x1[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
                 T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
                 T FmIntersect_II = (Fmi1_II[0] * (1 - blendRatio)) + (Fmi2_II[0] * blendRatio);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0);
-                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1);
+                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0, m_Fi, true); //storeF
+                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1, m_Fi);
 
                 //Compute Fsum
                 Fsum_I = FmIntersect_I + Fm2_I[0];
@@ -967,8 +967,8 @@ public:
             else if(i == (int)finalContourPoints.size() - 2){ //last segment
                 //Compute Fm1 (from actual first point)
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
-                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0);
-                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1);
+                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0, m_Fi, true); //store F
+                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1, m_Fi);
                 
                 //compute interpolations for top intersection point (second endpoint)
                 Vector<T, dim> xi1 = contourPoints[topIntersectionIdx];
@@ -976,10 +976,10 @@ public:
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0);
-                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0);
-                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1);
-                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1);
+                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0, m_Fi);
+                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0, m_Fi, true); //store F, this way the F we print for idx 0 = for max idx
+                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1, m_Fi);
+                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1, m_Fi);
                 T blendRatio = abs(x2[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
                 T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
                 T FmIntersect_II = (Fmi1_II[0] * (1 - blendRatio)) + (Fmi2_II[0] * blendRatio);
@@ -1005,10 +1005,10 @@ public:
             else{ //rest of the non-intersect segments
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0);
-                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0);
-                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1);
-                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1);
+                std::vector<T> Fm1_I = computeFm(g1, x2 - x1, 0, m_Fi, true); //store F
+                std::vector<T> Fm2_I = computeFm(g2, x2 - x1, 0, m_Fi, true); //store F
+                std::vector<T> Fm1_II = computeFm(g1, x2 - x1, 1, m_Fi);
+                std::vector<T> Fm2_II = computeFm(g2, x2 - x1, 1, m_Fi);
                 Fsum_I = Fm1_I[0] + Fm2_I[0];
                 Fsum_II = Fm1_II[0] + Fm2_II[0];
 
@@ -1072,8 +1072,8 @@ public:
         // }
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
             file << "--<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ">--\n";
-            file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi: " << finalContourGridStates[i]->Fi1 << " \n";
-            file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi: " << finalContourGridStates[i+1]->Fi1 << " \n";
+            file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << " \n";
+            file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi1: " << m_Fi[(i*2)+1] << " \n";
         }
         // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
         //     file << "idx " << i << " pointer: " << finalContourGridStates[i] << "\n";
@@ -1099,7 +1099,7 @@ public:
     }
 
     //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)
-    std::vector<T> computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode){
+    std::vector<T> computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode, std::vector<Matrix<T,dim,dim>>& m_Fi, bool storeF = false){
         std::vector<T> FmResults;
         
         T Fm = 0;
@@ -1125,6 +1125,36 @@ public:
             }
         }
 
+        //Now we must reconstruct our deformation gradient from the singular values and quaternion rotations F = U Sigma V^T
+        Matrix<T,dim,dim> Fi1, Fi2;
+        Matrix<T,dim,dim> U1, U2, V1, V2, Sigma1, Sigma2;
+        Eigen::Quaternion<T> rotUreconstruct1(g->Uquat1);
+        Eigen::Quaternion<T> rotVreconstruct1(g->Vquat1);
+        rotUreconstruct1.normalize();
+        rotVreconstruct1.normalize();
+        Matrix<T,3,3> Ureconstruct1 = rotUreconstruct1.toRotationMatrix();
+        Matrix<T,3,3> Vreconstruct1 = rotVreconstruct1.toRotationMatrix();
+        U1 = Ureconstruct1.topLeftCorner(2,2);
+        V1 = Vreconstruct1.topLeftCorner(2,2);
+        Sigma1 = g->sigma1.asDiagonal();
+        Fi1 = U1 * Sigma1 * V1.transpose();
+        if(storeF){
+            m_Fi.push_back(Fi1); //grab this Fi1
+        }
+        //Fi2 = Matrix<T,dim,dim>::Identity();
+        if(g->separable == 1){
+            Eigen::Quaternion<T> rotUreconstruct2(g->Uquat2);
+            Eigen::Quaternion<T> rotVreconstruct2(g->Vquat2);
+            rotUreconstruct2.normalize();
+            rotVreconstruct2.normalize();
+            Matrix<T,3,3> Ureconstruct2 = rotUreconstruct2.toRotationMatrix();
+            Matrix<T,3,3> Vreconstruct2 = rotVreconstruct2.toRotationMatrix();
+            U2 = Ureconstruct2.topLeftCorner(2,2);
+            V2 = Vreconstruct2.topLeftCorner(2,2);
+            Sigma2 = g->sigma2.asDiagonal();
+            Fi2 = U2 * Sigma2 * V2.transpose();
+        }
+
         //Compute strain energy density, W (elastic potential energy density)
         //NOTE: It is MUCH easier to hardcode the elasticity model here, so if we change the constitutive model we NEED to change this here as well!!
         T W = 0;
@@ -1132,8 +1162,8 @@ public:
         int elasticityMode = 1; //0 = LINEAR, 1 = FCR
         if(elasticityMode == 0){
             //LINEAR ELASTICITY
-            Matrix<T, dim, dim> epsilon1 = 0.5 * (g->Fi1 + g->Fi1.transpose()) - Matrix<T, dim, dim>::Identity();
-            Matrix<T, dim, dim> epsilon2 = 0.5 * (g->Fi2 + g->Fi2.transpose()) - Matrix<T, dim, dim>::Identity();
+            Matrix<T, dim, dim> epsilon1 = 0.5 * (Fi1 + Fi1.transpose()) - Matrix<T, dim, dim>::Identity();
+            Matrix<T, dim, dim> epsilon2 = 0.5 * (Fi2 + Fi2.transpose()) - Matrix<T, dim, dim>::Identity();
             T tr_epsilon1 = epsilon1.diagonal().sum();
             T tr_epsilon2 = epsilon2.diagonal().sum();
             W += mu * epsilon1.squaredNorm() + la * 0.5 * tr_epsilon1 * tr_epsilon1; // W += psi(epsilon), field 1
@@ -1147,40 +1177,40 @@ public:
             Pi1.noalias() = 2 * mu * R * epsilon1 + la * tr_epsilon1 * R;
             
             //Compute term two
-            termTwo += (Pi1 * normal).dot(g->Fi1.col(mode));
+            termTwo += (Pi1 * normal).dot(Fi1.col(mode));
             if(g->separable == 1){
                 Pi2.noalias() = 2 * mu * R * epsilon2 + la * tr_epsilon2 * R;
-                termTwo += (Pi2 * normal).dot(g->Fi2.col(mode)); //additionally compute field 2 term
+                termTwo += (Pi2 * normal).dot(Fi2.col(mode)); //additionally compute field 2 term
             }
         }
         else if(elasticityMode == 1){
             //FIXED COROTATED ELASTICITY
             Matrix<T, dim, dim> U1, V1, U2, V2;
             Vector<T, dim> sigma1, sigma2;
-            Math::svd(g->Fi1, U1, sigma1, V1);
+            Math::svd(Fi1, U1, sigma1, V1);
             W += mu * (sigma1 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma1.prod() - T(1), 2);
             if(g->separable == 1){
-                Math::svd(g->Fi2, U2, sigma2, V2);
+                Math::svd(Fi2, U2, sigma2, V2);
                 W += mu * (sigma2 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma2.prod() - T(1), 2);
             }
 
             //Compute Piola Kirchhoff stress
             Matrix<T, dim, dim> Pi1, Pi2;
-            T J1 = g->Fi1.determinant();
+            T J1 = Fi1.determinant();
             Matrix<T, dim, dim> JFinvT1, JFinvT2;
-            Math::cofactor(g->Fi1, JFinvT1);
+            Math::cofactor(Fi1, JFinvT1);
             Matrix<T, dim, dim> R1, S1, R2, S2;
-            Math::polar_decomposition(g->Fi1, R1, S1);
-            Pi1 = T(2) * mu * (g->Fi1 - R1) + la * (J1 - 1) * JFinvT1;
+            Math::polar_decomposition(Fi1, R1, S1);
+            Pi1 = T(2) * mu * (Fi1 - R1) + la * (J1 - 1) * JFinvT1;
 
             //Compute term two
-            termTwo += (Pi1 * normal).dot(g->Fi1.col(mode));
+            termTwo += (Pi1 * normal).dot(Fi1.col(mode));
             if(g->separable == 1){
-                T J2 = g->Fi2.determinant();
-                Math::cofactor(g->Fi2, JFinvT2);
-                Math::polar_decomposition(g->Fi2, R2, S2);
-                Pi2 = T(2) * mu * (g->Fi2 - R2) + la * (J2 - 1) * JFinvT2;
-                termTwo += (Pi2 * normal).dot(g->Fi2.col(mode)); //additionally compute field 2 term
+                T J2 = Fi2.determinant();
+                Math::cofactor(Fi2, JFinvT2);
+                Math::polar_decomposition(Fi2, R2, S2);
+                Pi2 = T(2) * mu * (Fi2 - R2) + la * (J2 - 1) * JFinvT2;
+                termTwo += (Pi2 * normal).dot(Fi2.col(mode)); //additionally compute field 2 term
             }
         }
         
@@ -1229,7 +1259,6 @@ public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
     Field<Matrix<T, dim, dim>>& m_stress; //holds Vp^0 * PF^T 
-    Field<Matrix<T, dim, dim>>& m_P; //holds particle P
     Field<Matrix<T,dim,dim>>& m_F; //holds particle def grad F
 
     Bow::Field<std::vector<int>>& particleAF;
@@ -1249,52 +1278,61 @@ public:
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
                 //const Matrix<T, dim, dim> stress = m_stress[i];
-                //const Matrix<T, dim, dim> P = m_P[i];
                 const Matrix<T, dim, dim> F = m_F[i];
                 
-                //We will transfer the deformation gradient through transferring its singular values and rotations (as quaternions) -> three separate intrinsic transfers here
+                //We will transfer the deformation gradient through transferring its singular values and rotations (as quaternions) -> three separate intrinsic transfers here: sigma, Uquat, Vquat
                 Matrix<T, dim, dim> U, V;
                 Vector<T, dim> sigma;
-                Vector<T, 4> rotU, rotV; //quaternion coefficients for U and V^T
-                Eigen::JacobiSVD<Matrix<T,dim,dim>> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-                //Eigen::Quaternion<T> rotU_q(U);
-                //Eigen::Quaternion<T> rotV_q(V);
+                Vector<T, 4> Uquat, Vquat; //quaternion coefficients for U and V
+                Math::svd(F, U, sigma, V);
                 
+                //Now convert U and V to quaternions
+                Matrix<T, 3,3> Upad = Matrix<T,3,3>::Identity();
+                Matrix<T, 3,3> Vpad = Matrix<T,3,3>::Identity();
+                Upad.topLeftCorner(2,2) = U;
+                Vpad.topLeftCorner(2,2) = V; //pad these to be 3x3 for quaternion
+                Eigen::Quaternion<T> rotU(Upad);
+                Eigen::Quaternion<T> rotV(Vpad);
+                rotU.normalize();
+                rotV.normalize(); //normalize our quaternions!
+                Uquat = rotU.coeffs();
+                Vquat = rotV.coeffs();
 
-
-
+                //Compute spline
                 BSplineWeights<T, dim> spline(pos, dx);
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     
                     ///NOTES
-                    //Storing grid force in fi1 and fi2 (if separable)
-                    //Storing accumulated weights (for transferring P and F) in gridSeparability in order of Pi1, Pi2, Fi1, Fi2 (weight sum for Pi1 = that of Fi1 so we only need to track first two values)
+                    //Storing grid force in fi1 and fi2 (if separable) -> outdated
+                    //We will intrinsically transfer here the singular values and quaternions for U and V rotations from F = UsigmaV^T
+                    //Storing accumulated weights in gridSeparability[0] (field 1 weight sum) and gridSeparability[1] (field 2 weight sum)
 
                     //Notice we treat single-field and two-field nodes differently
                     if (g.separable != 1 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         
                         //g.fi1 += stress * dw; //transfer stress to grid, fi
-                        //g.Pi1 += P * w; //transfer P
-                        g.Fi1 += F * w; //transfer F
+                        g.sigma1 += sigma * w;
+                        g.Uquat1 += Uquat * w;
+                        g.Vquat1 += Vquat * w;
                         g.gridSeparability[0] += w; //sum up the total weight
                     }
                     else if (g.separable == 1 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
-                            
                             //g.fi1 += stress * dw; //transfer stress to grid, fi
-                            //g.Pi1 += P * w; //transfer P
-                            g.Fi1 += F * w; //transfer F
+                            g.sigma1 += sigma * w;
+                            g.Uquat1 += Uquat * w;
+                            g.Vquat1 += Vquat * w;
                             g.gridSeparability[0] += w; //sum up the total weight
                         }
                         else if (fieldIdx == 1) {
-                            
                             //g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
-                            //g.Pi2 += P * w; //transfer P (second field)
-                            g.Fi2 += F * w; //transfer F (second fgield)
+                            g.sigma2 += sigma * w;
+                            g.Uquat2 += Uquat * w;
+                            g.Vquat2 += Vquat * w;
                             g.gridSeparability[1] += w; //sum up the total weight (second field)
                         }
                     }
@@ -1305,13 +1343,15 @@ public:
         /* Iterate grid to divide out the total weight sums for P and F since we transfer these intrinsically */
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.gridSeparability[0] != 0){
-                g.Pi1 /= g.gridSeparability[0];
-                g.Fi1 /= g.gridSeparability[0]; //both in field 1 use same weight sum
+                g.sigma1 /= g.gridSeparability[0];
+                g.Uquat1 /= g.gridSeparability[0];
+                g.Vquat1 /= g.gridSeparability[0]; //divide by field 1 weight sum
             }
             if (g.separable == 1) {
                 if(g.gridSeparability[1] != 0){
-                    g.Pi2 /= g.gridSeparability[1];
-                    g.Fi2 /= g.gridSeparability[1]; //both in field 2 use same weight sum
+                    g.sigma2 /= g.gridSeparability[1];
+                    g.Uquat2 /= g.gridSeparability[1];
+                    g.Vquat2 /= g.gridSeparability[1]; //divide by field 2 weight sum
                 }
             }
         });

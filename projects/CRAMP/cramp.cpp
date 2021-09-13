@@ -24,50 +24,55 @@ int main(int argc, char *argv[])
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
         using T = double;
-        static const int dim = 2;
+        static const int dim = 3;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
         //std::cout << "Padding: " << sizeof(gs.padding) << std::endl;
         
         //Testing Quaternion representations
-        Matrix<T,dim,dim> F = Matrix<T,dim,dim>::Identity();
-        F(0,0) = 45;
-        F(0,1) = -7;
-        F(1,0) = 82;
-        F(1,1) = -700;
-
-        if(dim == 2){
-            Matrix<T,3,3> Fpadded = Matrix<T,3,3>::Identity();
-            Fpadded.topLeftCorner(2,2) = F;
-
-            Eigen::JacobiSVD<Matrix<T,3,3>> svd(Fpadded, Eigen::ComputeFullU | Eigen::ComputeFullV);
-            Eigen::Quaternion<T> rotU(svd.matrixU());
-            Eigen::Quaternion<T> rotV(svd.matrixV());
-            rotU.normalize();
-            rotV.normalize(); //normalize our quaternions!
-            std::cout << "rotU coeffs:\n" << rotU.coeffs() << std::endl;
-            std::cout << "rotV coeffs:\n" << rotV.coeffs() << std::endl;
-            Matrix<T,3,3> Ureconstruct = rotU.toRotationMatrix();
-            Matrix<T,3,3> Vreconstruct = rotV.toRotationMatrix();
-            Matrix<T,3,3> Sigma = svd.singularValues().asDiagonal();
-            std::cout << "F before:\n" << F << std::endl;
-            std::cout << "F padded:\n" << Fpadded << std::endl;
+        if(false){
+            Matrix<T,dim,dim> F = Matrix<T,dim,dim>::Identity();
+            F(0,0) = -45;
+            F(0,1) = -7;
+            F(1,0) = 82;
+            F(1,1) = -700;
             
-            std::cout << "matrixU:\n" << svd.matrixU() << std::endl;
-            std::cout << "sigma:\n" << svd.singularValues() << std::endl;
-            std::cout << "matrixV:\n" << svd.matrixV() << std::endl;
-            std::cout << "F reconstructed after JacobiSVD:\n" << svd.matrixU() * svd.singularValues().asDiagonal() * svd.matrixV() << std::endl;
-            
-            std::cout << "Ureconstruct:\n" << Ureconstruct << std::endl;
-            std::cout << "Sigma:\n" << Sigma << std::endl;
-            std::cout << "Vreconstruct:\n" << Vreconstruct << std::endl;
-            std::cout << "F reconstructed after quaternions:\n" << Ureconstruct * Sigma * Vreconstruct << std::endl;
+            if(dim == 2){
+                Matrix<T, dim, dim> U, V;
+                Vector<T, dim> sigma;
+                Math::svd(F, U, sigma, V);
+                Matrix<T, dim, dim> Sigma = sigma.asDiagonal();
+                
+                std::cout << "U:\n" << U << std::endl;
+                std::cout << "Sigma:\n" << Sigma << std::endl;
+                std::cout << "V^T:\n" << V.transpose() << std::endl;
+                std::cout << "F:\n" << F << std::endl;
+                std::cout << "Freconstruct:\n" << U * Sigma * V.transpose() << std::endl;
+                
+                //Now convert U and V to quaternions
+                Matrix<T, 3,3> Upad = Matrix<T,3,3>::Identity();
+                Matrix<T, 3,3> Vpad = Matrix<T,3,3>::Identity();
+                Upad.topLeftCorner(2,2) = U;
+                Vpad.topLeftCorner(2,2) = V; //pad these to be 3x3 for quaternion
+                Eigen::Quaternion<T> rotU(Upad);
+                Eigen::Quaternion<T> rotV(Vpad);
+                rotU.normalize();
+                rotV.normalize(); //normalize our quaternions!
+
+                Vector<T, 4> Uquat, Vquat; //quaternion coefficients for U and V
+                Uquat = rotU.coeffs();
+                Vquat = rotV.coeffs();
+                Eigen::Quaternion<T> rotUreconstruct(Uquat);
+                Eigen::Quaternion<T> rotVreconstruct(Vquat);
+
+                Matrix<T,3,3> Ureconstruct = rotUreconstruct.toRotationMatrix();
+                Matrix<T,3,3> Vreconstruct = rotVreconstruct.toRotationMatrix();
+                U = Ureconstruct.topLeftCorner(2,2);
+                V = Vreconstruct.topLeftCorner(2,2);
+                std::cout << "Freconstruct after quaternions:\n" << U * Sigma * V.transpose() << std::endl;
+            }
         }
-
-        //std::cout << "Urot coeffs:" << rotU.coeffs() << std::endl;
-        //std::cout << "U before:" << U << std::endl;
-        //std::cout << "U after:" << Ureconstruct << std::endl;
-
+        
         return 0;
         //Without Padding
         //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
@@ -83,6 +88,13 @@ int main(int argc, char *argv[])
         //Double2D: 608 B -> add 416 B -> 52 Ts
         //Double3D: 864 B -> add 160 B -> 20 Ts
         //Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
+
+        //AFTER ADDING sigma1, Uquat1, etc. and removing Fi1, Pi1, etc. ... 9/13/21
+        //Float2D: 320 B -> add 192 B -> 48 Ts
+        //Float3D: 384 B -> add 128 B -> 32 Ts
+        //Double2D: 640 B -> add 384 B -> 48 Ts
+        //Double3D: 768 B -> add 256 B -> 32 Ts
+        //Vector<T, (-16 * dim) + 80> padding; //dim2 = 48 Ts, dim3 = 32 Ts --> y = -16x + 80
     }
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
@@ -98,7 +110,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_doublePuller_updatedLagrangian");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_doublePuller_SVDtransfer");
 
         //material
         T E = 2.6e6;
