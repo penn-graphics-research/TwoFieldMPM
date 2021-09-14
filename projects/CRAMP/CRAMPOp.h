@@ -928,12 +928,12 @@ public:
                 //If first segment, first we compute interpolations for bottom intersection point
                 Vector<T, dim> xi1 = contourPoints[bottomIntersectionIdx];
                 Vector<T, dim> xi2 = contourPoints[bottomIntersectionIdx + 1];
-                DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx];
+                DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx]; //NOTE: this will very likely be a separable node!!!! only use field 1 for interpolating bottom intersect
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
-                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0, m_Fi, true); //store F
+                std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0, m_Fi, true, 1); //store F and use field 1 for bottom intersect
                 std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0, m_Fi); 
-                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1, m_Fi);
+                std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1, m_Fi, false, 1); //dont store F for J_II but we want to use field 1 for bottom intersect
                 std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1, m_Fi);
                 T blendRatio = abs(x1[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
                 T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
@@ -974,12 +974,12 @@ public:
                 Vector<T, dim> xi1 = contourPoints[topIntersectionIdx];
                 Vector<T, dim> xi2 = contourPoints[topIntersectionIdx + 1];
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
-                DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between
+                DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between -> this one is very likely separable!! use field 2 only for interpolating
                 //Compute Fm for these two points, then we'll interpolate between them for our intersection point
                 std::vector<T> Fmi1_I = computeFm(gi1, x2 - x1, 0, m_Fi);
-                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0, m_Fi, true); //store F, this way the F we print for idx 0 = for max idx
+                std::vector<T> Fmi2_I = computeFm(gi2, x2 - x1, 0, m_Fi, true, 2); //store F, this way the F we print for idx 0 = for max idx
                 std::vector<T> Fmi1_II = computeFm(gi1, x2 - x1, 1, m_Fi);
-                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1, m_Fi);
+                std::vector<T> Fmi2_II = computeFm(gi2, x2 - x1, 1, m_Fi, false, 2); //dont store F, but only use field 2 for bottom intersection interpolation
                 T blendRatio = abs(x2[1] - xi1[1]) / abs(xi2[1] - xi1[1]);
                 T FmIntersect_I = (Fmi1_I[0] * (1 - blendRatio)) + (Fmi2_I[0] * blendRatio);
                 T FmIntersect_II = (Fmi1_II[0] * (1 - blendRatio)) + (Fmi2_II[0] * blendRatio);
@@ -1071,7 +1071,7 @@ public:
         //     file << "idx:" << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fsum_I: " << Fsum_I_List[i] << " \n";
         // }
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
-            file << "--<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ">--\n";
+            file << "--<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">--\n";
             file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << " \n";
             file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi1: " << m_Fi[(i*2)+1] << " \n";
         }
@@ -1099,7 +1099,11 @@ public:
     }
 
     //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)
-    std::vector<T> computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode, std::vector<Matrix<T,dim,dim>>& m_Fi, bool storeF = false){
+    std::vector<T> computeFm(DFGMPM::GridState<T,dim>* g, Vector<T, dim> lineSegment, int mode, std::vector<Matrix<T,dim,dim>>& m_Fi, bool storeF = false, int intersect = 0){
+        //intersect = 0 for regular call to Fm (we don't expect this to ever be a separable node)
+        //intersect = 1 for a bottom intersect interpolation with the separable node -> use only Field 1
+        //intersect = 2 for a top intersect interpolation with the separable node -> use only Field 2
+        
         std::vector<T> FmResults;
         
         T Fm = 0;
@@ -1125,6 +1129,8 @@ public:
             }
         }
 
+        //NOTE: for separable nodes we will ONLY use one or the other field, the field that points in the direction of the current segment
+        //NOTE: so, for example, we use field 1 (points down from crack) for interpolating the bottom intersect, and field 2 (points up from crack) for the top intersect
         //Now we must reconstruct our deformation gradient from the singular values and quaternion rotations F = U Sigma V^T
         Matrix<T,dim,dim> Fi1, Fi2;
         Matrix<T,dim,dim> U1, U2, V1, V2, Sigma1, Sigma2;
@@ -1138,10 +1144,6 @@ public:
         V1 = Vreconstruct1.topLeftCorner(2,2);
         Sigma1 = g->sigma1.asDiagonal();
         Fi1 = U1 * Sigma1 * V1.transpose();
-        if(storeF){
-            m_Fi.push_back(Fi1); //grab this Fi1
-        }
-        //Fi2 = Matrix<T,dim,dim>::Identity();
         if(g->separable == 1){
             Eigen::Quaternion<T> rotUreconstruct2(g->Uquat2);
             Eigen::Quaternion<T> rotVreconstruct2(g->Vquat2);
@@ -1153,6 +1155,14 @@ public:
             V2 = Vreconstruct2.topLeftCorner(2,2);
             Sigma2 = g->sigma2.asDiagonal();
             Fi2 = U2 * Sigma2 * V2.transpose();
+        }
+        if(storeF){
+            if(g->separable == 1 && intersect == 2){
+                m_Fi.push_back(Fi2); //grab this Fi2
+            }
+            else{
+                m_Fi.push_back(Fi1); //grab this Fi1
+            }
         }
 
         //Compute strain energy density, W (elastic potential energy density)
@@ -1166,9 +1176,9 @@ public:
             Matrix<T, dim, dim> epsilon2 = 0.5 * (Fi2 + Fi2.transpose()) - Matrix<T, dim, dim>::Identity();
             T tr_epsilon1 = epsilon1.diagonal().sum();
             T tr_epsilon2 = epsilon2.diagonal().sum();
-            W += mu * epsilon1.squaredNorm() + la * 0.5 * tr_epsilon1 * tr_epsilon1; // W += psi(epsilon), field 1
-            if(g->separable == 1){
-                W += mu * epsilon2.squaredNorm() + la * 0.5 * tr_epsilon2 * tr_epsilon2; // W += psi(epsilon), field 2
+            W = mu * epsilon1.squaredNorm() + la * 0.5 * tr_epsilon1 * tr_epsilon1; // W = psi(epsilon), field 1 -> this is correct for intersect = 0 and intersect = 1
+            if(g->separable == 1 && intersect == 2){
+                W = mu * epsilon2.squaredNorm() + la * 0.5 * tr_epsilon2 * tr_epsilon2; // W += psi(epsilon), field 2 -> for intersect = 2 (top intersect)
             }
 
             //Compute Piola Kirchhoff stress
@@ -1177,10 +1187,10 @@ public:
             Pi1.noalias() = 2 * mu * R * epsilon1 + la * tr_epsilon1 * R;
             
             //Compute term two
-            termTwo += (Pi1 * normal).dot(Fi1.col(mode));
-            if(g->separable == 1){
+            termTwo = (Pi1 * normal).dot(Fi1.col(mode)); //intersect == 0 or 1
+            if(g->separable == 1 && intersect == 2){
                 Pi2.noalias() = 2 * mu * R * epsilon2 + la * tr_epsilon2 * R;
-                termTwo += (Pi2 * normal).dot(Fi2.col(mode)); //additionally compute field 2 term
+                termTwo = (Pi2 * normal).dot(Fi2.col(mode)); //intersect == 2 (top intersect)
             }
         }
         else if(elasticityMode == 1){
@@ -1188,10 +1198,10 @@ public:
             Matrix<T, dim, dim> U1, V1, U2, V2;
             Vector<T, dim> sigma1, sigma2;
             Math::svd(Fi1, U1, sigma1, V1);
-            W += mu * (sigma1 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma1.prod() - T(1), 2);
-            if(g->separable == 1){
+            W = mu * (sigma1 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma1.prod() - T(1), 2); //intersect == 0 or 1
+            if(g->separable == 1 && intersect == 2){
                 Math::svd(Fi2, U2, sigma2, V2);
-                W += mu * (sigma2 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma2.prod() - T(1), 2);
+                W = mu * (sigma2 - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma2.prod() - T(1), 2); //intersect == 2
             }
 
             //Compute Piola Kirchhoff stress
@@ -1204,13 +1214,13 @@ public:
             Pi1 = T(2) * mu * (Fi1 - R1) + la * (J1 - 1) * JFinvT1;
 
             //Compute term two
-            termTwo += (Pi1 * normal).dot(Fi1.col(mode));
-            if(g->separable == 1){
+            termTwo = (Pi1 * normal).dot(Fi1.col(mode)); //intersect == 0 or 1
+            if(g->separable == 1 && intersect == 2){
                 T J2 = Fi2.determinant();
                 Math::cofactor(Fi2, JFinvT2);
                 Math::polar_decomposition(Fi2, R2, S2);
                 Pi2 = T(2) * mu * (Fi2 - R2) + la * (J2 - 1) * JFinvT2;
-                termTwo += (Pi2 * normal).dot(Fi2.col(mode)); //additionally compute field 2 term
+                termTwo = (Pi2 * normal).dot(Fi2.col(mode)); //intersect == 2 (top intersect)
             }
         }
         

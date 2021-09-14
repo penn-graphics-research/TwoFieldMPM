@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_doublePuller_SVDtransfer");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_doublePuller_SVDtransfer_withTwoFieldTreatment");
 
         //material
         T E = 2.6e6;
