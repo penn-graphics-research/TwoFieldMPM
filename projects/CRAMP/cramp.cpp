@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
         // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
         T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
-        snapshotTime = sim.frame_dt * 6;
+        //snapshotTime = sim.frame_dt * 6;
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
         sim.contourRadii.push_back(1);

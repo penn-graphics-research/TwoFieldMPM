@@ -822,6 +822,10 @@ public:
 
             //std::cout << "x_i: (" << xi[0] << "," << xi[1] << ")" << std::endl;
         });
+        // file << "Initial Contour List:\n";
+        // for(int i = 0; i < (int)contourPoints.size(); ++i){
+        //     file << "idx: " << i <<  ", xi: (" << contourPoints[i][0] << "," << contourPoints[i][1] << "), separable:" << contourGridStates[i]->separable << "\n";
+        // }
 
         //STEP 1: Construct ordered list of contour points starting with intersection with bottom of crack, counter-clockwise around contour, and then ending with intersection with top of crack
         bool foundBottomIntersection = false;
@@ -942,7 +946,15 @@ public:
         std::vector<T> Fm_I_termTwo;
         std::vector<T> blendRatios;
         std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
+        std::vector<Matrix<T,dim,dim>> m_Fi_Interpolated; //collect the reconstructed Fi's that were interpolated between for x_bottom and x_top
 
+        bool interpolateWithIdentity = false;
+        Vector<T, dim> sigmaI;
+        Vector<T, 4> UquatI, VquatI; 
+        sigmaI << 1, 1, 1;
+        UquatI << 1, 0, 0, 0;
+        VquatI << 1, 0, 0, 0;
+        
         T J_I = 0; //set J integral mode I to 0 for now
         T J_II = 0; //set J integral mode II to 0 for now
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
@@ -950,7 +962,7 @@ public:
             T Fsum_II = 0; //mode II
             Vector<T,dim> x1 = finalContourPoints[i];
             Vector<T,dim> x2 = finalContourPoints[i+1];
-            Matrix<T,dim,dim> Fi1, Fi2;
+            Matrix<T,dim,dim> Fi1, Fi2, Finterp1, Finterp2;
             if(i == 0){ //first segment
                 //If first segment, first we compute interpolations for bottom intersection point
                 Vector<T, dim> xi1 = contourPoints[bottomIntersectionIdx];
@@ -960,6 +972,17 @@ public:
                 //Interpolate the deformation gradient ingredients! --> USE FIELD 1 FOR BOTTOM INTERSECT!!!
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx]; //NOTE: this will very likely be a separable node!!!! only use field 1 for interpolating bottom intersect
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
+                if(interpolateWithIdentity){
+                    gi1->sigma1 = sigmaI;
+                    gi1->Uquat1 = UquatI;
+                    gi1->Vquat1 = VquatI;
+                }
+                //Save these Fs for viewing
+                Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
+                Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
+                m_Fi_Interpolated.push_back(Finterp1);
+                m_Fi_Interpolated.push_back(Finterp2); //save these for viewing
+                //Now interpolate b/w the Fs
                 Vector<T, dim> sigmaBlend;
                 Vector<T, 4> UquatBlend, VquatBlend;
                 sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
@@ -1012,18 +1035,33 @@ public:
                 //Interpolate the deformation gradient ingredients! --> USE FIELD 2 FOR TOP INTERSECT!!!
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between -> this one is very likely separable!! use field 2 only for interpolating
+                Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
+                m_Fi_Interpolated.push_back(Finterp1);
                 Vector<T, dim> sigmaBlend;
                 Vector<T, 4> UquatBlend, VquatBlend;
+                if(interpolateWithIdentity){
+                    gi2->sigma1 = sigmaI;
+                    gi2->Uquat1 = UquatI;
+                    gi2->Vquat1 = VquatI;
+                    gi2->sigma2 = sigmaI;
+                    gi2->Uquat2 = UquatI;
+                    gi2->Vquat2 = VquatI;
+                }
                 if(gi2->separable == 1){
+                    file << "Top Intersect Interpolated Using Field 2\n";
                     sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma2 * blendRatio);
                     UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat2 * blendRatio);
                     VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat2 * blendRatio); //NOTE WE USE FIELD 2 VALUES FOR TOP INTERSECT!!
+                    Finterp2 = computeF(gi2->sigma2, gi2->Uquat2, gi2->Vquat2);
                 }
                 else{
+                    file << "Top Intersect Interpolated Using Field 1\n";
                     sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
                     UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
                     VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); //if not separable, just use field 1
+                    Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
                 }
+                m_Fi_Interpolated.push_back(Finterp2);
                 
                 Fi2 = computeF(sigmaBlend, UquatBlend, VquatBlend);
                 m_Fi.push_back(Fi2);
@@ -1125,11 +1163,17 @@ public:
         // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
         //     file << "idx:" << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fsum_I: " << Fsum_I_List[i] << " \n";
         // }
+        file << "------Bottom Intersection Interpolation (first point in contour)------\n";
+        file << "Finterp1:" << m_Fi_Interpolated[0] << "\n";
+        file << "Finterp2:" << m_Fi_Interpolated[1] << "\n";
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
             file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
             file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << " \n";
             file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << " \n";
         }
+        file << "------Top Intersection Interpolation (last point in contour)------\n";
+        file << "Finterp1:" << m_Fi_Interpolated[2] << "\n";
+        file << "Finterp2:" << m_Fi_Interpolated[3] << "\n";
         // for(int i = 0; i < (int)finalContourPoints.size(); ++i){
         //     file << "idx " << i << " pointer: " << finalContourGridStates[i] << "\n";
         // }

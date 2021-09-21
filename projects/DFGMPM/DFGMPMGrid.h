@@ -588,10 +588,11 @@ public:
     template <typename OP>
     inline void iterateRectangularContour(const BSplineWeights<T, dim, interpolation_degree>& spline, int contourRadius, const OP& target)
     {
-        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data()));
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.closest_node.data()));
         uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
         auto grid_array = grid->Get_Array();
         const Vector<int, dim>& base_coord = spline.closest_node;
+        //std::cout << "base_coord:" << base_coord << std::endl;
         Vector<int, dim> coord;
         if constexpr (dim == 2) {
             
