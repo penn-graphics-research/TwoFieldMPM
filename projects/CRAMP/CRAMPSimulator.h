@@ -49,6 +49,7 @@ public:
     int topPlane_startIdx;
     int bottomPlane_startIdx;
     int bottomPlane_endIdx; //only need this one end idx, other end ideces defined by the next start idx
+    int crackType;
 
     //Mode I Loading Params - pull up on nodes above y1, pull down below y2, all with total stress sigmaA
     T y1;
@@ -444,7 +445,7 @@ public:
         }
 
         if(crackInitialized){
-            Bow::CRAMP::EvolveCrackPlanesOp<T, dim> evolve_cracks{ {}, Base::m_X, Base::m_V, topPlane_startIdx, bottomPlane_startIdx, grid, Base::dx, dt, flipPicRatio, useAPIC };
+            Bow::CRAMP::EvolveCrackPlanesOp<T, dim> evolve_cracks{ {}, Base::m_X, Base::m_V, topPlane_startIdx, bottomPlane_startIdx, grid, Base::dx, dt, flipPicRatio, useAPIC, crackType };
             evolve_cracks();
             std::cout << "Evolved cracks..." << std::endl;
         }
@@ -741,13 +742,22 @@ public:
         fs.close();
     }
 
+    //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
     void sampleGridAlignedBox(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
     {
+        BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
+        // T width = max_corner[0] - min_corner[0];
+        // T height = max_corner[1] - min_corner[1];
+        // T widthMod = fmod(width, Base::dx);
+        // T heightMod = fmod(height, Base::dx);
+        // BOW_ASSERT_INFO(widthMod == Base::dx || widthMod == 0, "width not divisible by dx in sampleGridAlignedBox");
+        // BOW_ASSERT_INFO(heightMod == Base::dx || heightMod == 0, "height not divisible by dx in sampleGridAlignedBox");
+
         // sample particles
-        T vol = std::pow(Base::dx, dim) / _ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
         T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
         Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
-        // region(0)++;
+        region(0)++;
         // region(1)++;
         // if(dim == 3){
         //     region(2)++;
@@ -785,14 +795,42 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.){
+        // sample particles
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            Base::m_X.push_back(position);
+            Base::m_V.push_back(velocity);
+            Base::m_C.push_back(TM::Zero());
+            Base::m_mass.push_back(density * vol);
+            Base::stress.push_back(TM::Zero());
+            cauchy.push_back(TM::Zero());
+            Dp.push_back(0.0);
+            damageLaplacians.push_back(0.0);
+            sp.push_back(0);
+            particleDG.push_back(TV::Zero());
+            dTildeH.push_back(0.0);
+            sigmaC.push_back(10.0);
+            m_marker.push_back(0);
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     //------------CRACK DEFINITION--------------
 
-    void addHorizontalCrack(const TV& minPoint, const TV& maxPoint, T increment, T radius)
+    void addHorizontalCrack(const TV& minPoint, const TV& maxPoint, T increment, T radius, int _crackType = 0)
     {
+        //Crack type: 0 = left side, 1 = middle, 2 = right side
+        crackType = _crackType;
         BOW_ASSERT(dim == 2);
         T region = (maxPoint(0) - minPoint(0)) / increment;
         crackPlane_startIdx = Base::m_X.size(); //start idx for crack path particles
-        for(int i = 0; i < region+1; i++){
+        for(int i = 0; i < region; i++){
             TV position = minPoint;
             position(0) += i * increment;
 
@@ -813,7 +851,7 @@ public:
             sigmaC.push_back(0.0);
         }
         topPlane_startIdx = Base::m_X.size(); //now add duplicate particles for the top plane
-        for(int i = 0; i < region+1; i++){
+        for(int i = 0; i < region; i++){
             TV position = Base::m_X[crackPlane_startIdx + i];
             Base::m_X.push_back(position);
             Base::m_V.push_back(TV::Zero());
@@ -831,7 +869,7 @@ public:
             sigmaC.push_back(0.0);
         }
         bottomPlane_startIdx = Base::m_X.size(); //now add duplicate particles for the bottom plane
-        for(int i = 0; i < region+1; i++){
+        for(int i = 0; i < region; i++){
             TV position = Base::m_X[topPlane_startIdx + i];
             Base::m_X.push_back(position);
             Base::m_V.push_back(TV::Zero());
@@ -856,18 +894,21 @@ public:
         grid.crackInitialized = true;
         grid.horizontalCrack = true;
 
-        int crackTipIdx = topPlane_startIdx - 1;
+        //int crackTipIdx = topPlane_startIdx - 1;
 
         //Now we need to mark particles near the crack as fully damaged
         for(int i = 0; i < crackPlane_startIdx; i++){ //iter normal material particles
             TV p = Base::m_X[i];
-            TV crackTip = Base::m_X[crackTipIdx];
+            //TV crackTip = Base::m_X[crackTipIdx];
             for(int j = crackPlane_startIdx; j < topPlane_startIdx; j++){ //check material particles against every crack plane particle
                 TV c = Base::m_X[j];
                 T dX = p(0) - c(0);
                 T dY = p(1) - c(1);
                 T dist = std::sqrt(dX*dX + dY*dY);
-                if(dist < radius && p(0) < crackTip(0)){
+                // if(dist < radius && p(0) < crackTip(0)){
+                //     Dp[i] = 1.0;
+                // }
+                if(dist < radius){
                     Dp[i] = 1.0;
                 }
             }

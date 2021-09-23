@@ -517,6 +517,8 @@ public:
 
     T flipPicRatio;
     bool useAPIC;
+
+    int crackType;
     
     void operator()()
     {
@@ -524,9 +526,12 @@ public:
         BOW_TIMER_FLAG("evolveCrackPlanes");
 
         //set some indeces so we can always set the top and bottom plane tips to be equal to the central crack tip
-        int crackTipIdx = topPlane_startIdx - 1;
-        int topTipIdx = bottomPlane_startIdx - 1;
-        int bottomTipIdx = m_X.size() - 1;
+        int crackTipRightIdx = topPlane_startIdx - 1;
+        int topTipRightIdx = bottomPlane_startIdx - 1;
+        int bottomTipRightIdx = m_X.size() - 1;
+        int crackTipLeftIdx = grid.crackParticlesStartIdx;
+        int topTipLeftIdx = topPlane_startIdx;
+        int bottomTipLeftIdx = bottomPlane_startIdx;
 
         //Iterate separable nodes and compute V_cm for each
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
@@ -643,9 +648,12 @@ public:
                 
                 m_X[i] += m_V[i] * dt; //advect using velocity either from PIC (APIC or full PIC) or from FLIP (PIC blend FLIP)
 
-                //if this is the top plane tip, set it equal to the updated crackTip
-                if(i == topTipIdx){
-                    m_X[topTipIdx] = m_X[crackTipIdx];
+                //if this is the top plane tip, set it equal to the updated crackTip (left side and middle ONLY)
+                if(i == topTipRightIdx && (crackType == 0 || crackType == 1)){
+                    m_X[topTipRightIdx] = m_X[crackTipRightIdx];
+                }
+                if(i == topTipLeftIdx && (crackType == 1 || crackType == 2)){ //only for middle and right side cracks!
+                    m_X[topTipLeftIdx] = m_X[crackTipLeftIdx];
                 }
             }
         });
@@ -692,9 +700,12 @@ public:
                 
                 m_X[i] += m_V[i] * dt; //advect using velocity either from PIC (APIC or full PIC) or from FLIP (PIC blend FLIP)
 
-                //if this is the bottom plane tip, set it equal to the updated crackTip
-                if(i == bottomTipIdx){
-                    m_X[bottomTipIdx] = m_X[crackTipIdx];
+                //if this is the bottom plane tip, set it equal to the updated crackTip (left cracks and middle cracks ONLY)
+                if(i == bottomTipRightIdx && (crackType == 0 || crackType == 1)){
+                    m_X[bottomTipRightIdx] = m_X[crackTipRightIdx];
+                }
+                if(i == bottomTipLeftIdx && (crackType == 1 || crackType == 2)){
+                    m_X[bottomTipLeftIdx] = m_X[crackTipLeftIdx];
                 }
             }
         });

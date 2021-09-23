@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.5e-3; //0.5 mm
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -158,6 +158,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
         sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        //sim.samplGeridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Crack
         T crackSegmentLength = sim.dx / 5.0;
@@ -195,7 +196,7 @@ int main(int argc, char *argv[])
         // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
         T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
-        //snapshotTime = sim.frame_dt * 6;
+        snapshotTime = sim.frame_dt * 6;
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
         sim.contourRadii.push_back(1);
@@ -335,6 +336,110 @@ int main(int argc, char *argv[])
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
         sim.samplePrecutRandomCube(material1, Vector<T, dim>(0.4, 0.4), Vector<T, dim>(0.6, 0.6), Vector<T, dim>(0, 0), rho);
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0.59), Vector<T, dim>(0, -1)));
+        sim.run(start_frame);
+    }
+
+    //Damage propagation test, uniaxial tension
+    if (testcase == 204) {
+        
+        //Fibrin Parameters from Tutwiler2020
+        // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
+        // folded state stiffness,      cf = 4.4e4 N/m^2
+        // unfolded state stiffness,    cu = 2.6e6 N/m^2
+        // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
+
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/uniaxialTension_withDamage");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm
+        sim.symplectic = true;
+        sim.end_frame = 4000;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        sim.useDFG = true;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
+
+        //Damage Params, add these with a method
+        // T eta = 1e-5;
+        // T zeta = 1e4;
+        // T p = 0.03; //5e-2 original, 6.5 too low still, 8.0 maybe too high?
+        // T dMin = 0.4;
+        // sim.addAnisoMPMDamage(eta, dMin, zeta, p);
+
+        //Sample Particles
+        int ppc = 9;
+        T center = 0.05;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = center - width/2.0;
+        T y1 = center - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        //sim.sampleGridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+
+        //Add center slit to facilitate fracture better
+        T crackSegmentLength = sim.dx / 5.0;
+        T damageRadius = sim.dx / 2.0;
+        T crackLength = 1e-3;
+        Vector<T,dim> crackMin(center - (crackLength/2.0), center);
+        Vector<T,dim> crackMax(center + (crackLength/2.0), center);
+        int crackType = 1; //1 for middle crack
+        sim.addHorizontalCrack(crackMin, crackMax, crackSegmentLength, damageRadius, crackType);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T yTop = y2 - 0.5e-3;
+        T yBottom = y1 + 0.5e-3;
+        T u2 = 1.0e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        // T sigmaA = 400e5;
+        // T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
+        // //rampTime = 0.0;
+        // sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
+
         sim.run(start_frame);
     }
 
