@@ -4,19 +4,15 @@ using namespace Bow;
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2 && argc != 3) {
+    if (argc < 2) {
         puts("ERROR: please add parameters");
         puts("USAGE: ./mpm testcase");
         puts("       ./mpm testcase start_frame");
         exit(0);
     }
 
-    // TODO: use some parameter library
     int testcase = std::atoi(argv[1]);
     int start_frame = 0;
-    if (argc == 3) {
-        start_frame = std::atoi(argv[2]);
-    }
 
     /*---TEST NUMBERS---*/
     // 2D tests are 200-series, 3D tests are 300 series (201, 202, 301, 302, etc.)
@@ -341,16 +337,47 @@ int main(int argc, char *argv[])
 
     //Damage propagation test, uniaxial tension
     if (testcase == 204) {
-        
+
         //Fibrin Parameters from Tutwiler2020
         // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
         // folded state stiffness,      cf = 4.4e4 N/m^2
         // unfolded state stiffness,    cu = 2.6e6 N/m^2
         // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
 
+        //Setup command line options
+        //argv[2] = eta
+        //argv[3] = zeta
+        //argv[4] = p
+        //argv[5] = dMin
+
+        // T eta = 100;
+        // T zeta = 10000;
+        // T p = 0.03;
+        // T dMin = 0.4;
+
+        if (argc < 6) {
+            puts("ERROR: please add parameters");
+            puts("TEST 204 USAGE: ./mpm testcase eta zeta p dMin");
+            exit(0);
+        }
+
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/uniaxialTension_withDamage");
+
+        T eta = std::atof(argv[2]);
+        T zeta = std::atof(argv[3]);
+        T p = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 6; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4 || i == 5){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/uniaxialTension_withDamage_Eta" + cleanedStrings[0] + "_Zeta" + cleanedStrings[1] + "_p" + cleanedStrings[2] + "_dMin" + cleanedStrings[3];
+        MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
         T E = 2.6e6;
@@ -387,13 +414,6 @@ int main(int argc, char *argv[])
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
         //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
 
-        //Damage Params, add these with a method
-        // T eta = 1e-5;
-        // T zeta = 1e4;
-        // T p = 0.03; //5e-2 original, 6.5 too low still, 8.0 maybe too high?
-        // T dMin = 0.4;
-        // sim.addAnisoMPMDamage(eta, dMin, zeta, p);
-
         //Sample Particles
         int ppc = 9;
         T center = 0.05;
@@ -415,7 +435,10 @@ int main(int argc, char *argv[])
         Vector<T,dim> crackMin(center - (crackLength/2.0), center);
         Vector<T,dim> crackMax(center + (crackLength/2.0), center);
         int crackType = 1; //1 for middle crack
-        sim.addHorizontalCrack(crackMin, crackMax, crackSegmentLength, damageRadius, crackType);
+        sim.addHorizontalCrackWithoutPoints(crackMin, crackMax, crackSegmentLength, damageRadius, crackType);
+
+        //Damage Params, add these with a method
+        sim.addAnisoMPMDamage(eta, dMin, zeta, p);
 
         //Add Boundary Conditions
         bool singlePuller = false;

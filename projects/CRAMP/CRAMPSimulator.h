@@ -847,8 +847,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            dTildeH.push_back(0.0);
-            sigmaC.push_back(0.0);
+            //dTildeH.push_back(0.0);
+            //sigmaC.push_back(0.0);
         }
         topPlane_startIdx = Base::m_X.size(); //now add duplicate particles for the top plane
         for(int i = 0; i < region; i++){
@@ -865,8 +865,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            dTildeH.push_back(0.0);
-            sigmaC.push_back(0.0);
+            //dTildeH.push_back(0.0);
+            //sigmaC.push_back(0.0);
         }
         bottomPlane_startIdx = Base::m_X.size(); //now add duplicate particles for the bottom plane
         for(int i = 0; i < region; i++){
@@ -883,8 +883,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            dTildeH.push_back(0.0);
-            sigmaC.push_back(0.0);
+            //dTildeH.push_back(0.0);
+            //sigmaC.push_back(0.0);
         }
         bottomPlane_endIdx = Base::m_X.size() - 1;
 
@@ -910,6 +910,38 @@ public:
                 // }
                 if(dist < radius){
                     Dp[i] = 1.0;
+                }
+            }
+        }
+    }
+
+    void addHorizontalCrackWithoutPoints(const TV& minPoint, const TV& maxPoint, T increment, T radius, int _crackType = 0)
+    {
+        //Crack type: 0 = left side, 1 = middle, 2 = right side
+        crackType = _crackType;
+        BOW_ASSERT(dim == 2);
+        T region = (maxPoint(0) - minPoint(0)) / increment;
+        std::vector<TV> crackPoints;
+        for(int i = 0; i < region; i++){
+            TV position = minPoint;
+            position(0) += i * increment;
+            crackPoints.push_back(position);
+        }
+
+        //Now we need to mark particles near the crack as fully damaged
+        for(int i = 0; i < (int)Base::m_X.size(); i++){ //iter normal material particles
+            TV p = Base::m_X[i];
+            for(int j = 0; j < (int)crackPoints.size(); j++){ //check material particles against every crack plane particle
+                TV c = crackPoints[j];
+                T dX = p(0) - c(0);
+                T dY = p(1) - c(1);
+                T dist = std::sqrt(dX*dX + dY*dY);
+                // if(dist < radius && p(0) < crackTip(0)){
+                //     Dp[i] = 1.0;
+                // }
+                if(dist < radius){
+                    //Dp[i] = 1.0;
+                    sp[i] = 1;
                 }
             }
         }
