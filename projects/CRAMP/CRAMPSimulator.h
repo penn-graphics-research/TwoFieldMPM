@@ -101,7 +101,9 @@ public:
 
     //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
-    Field<T> m_sigmaYY;
+    Field<T> m_sigma11; //sigma11 for all particles
+    Field<T> m_sigma22; //sigma22 for all particles
+    Field<T> m_sigmaYY; //used for stress ahead of crack tip
     Field<T> m_r;
     Field<T> m_posX;
     Field<int> m_idx;
@@ -360,11 +362,16 @@ public:
 
         std::cout << "P2G done..." << std::endl;
 
+        //Always collect sigma11 and sigma22 for each particle for analysis
+        for (auto& model : Base::elasticity_models) //compute cauchy stress to evaluate stress snapshot
+            model->compute_cauchy(cauchy);
+        for(int i = 0; i < (int)cauchy.size(); ++i){
+            m_sigma11[i] = cauchy[i](0,0);
+            m_sigma22[i] = cauchy[i](1,1);
+        }
+
         //Now take our stress snapshot (if we have one, and it's the right time)
         if(takeStressSnapshot && elapsedTime >= stressSnapshotTime){
-            
-            for (auto& model : Base::elasticity_models) //compute cauchy stress to evaluate stress snapshot
-                model->compute_cauchy(cauchy);
 
             takeStressSnapshot = false; //for now only take one snapshot
             Vector<T,dim> crackTip = Base::m_X[topPlane_startIdx - 1]; //crack tip should be last massless particle before topPlane particles
@@ -458,7 +465,7 @@ public:
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_sigma11, m_sigma22);
 
             //Write Grid
             if(writeGrid){
@@ -523,7 +530,6 @@ public:
         takeStressSnapshot = true;
     }
 
-
     //------------TIME STEP--------------
 
     //Allows a user to set dt based on symplectic CFL limit
@@ -549,7 +555,7 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_sigma11, m_sigma22);
 
             //Write Grid
             if(writeGrid){
@@ -610,6 +616,8 @@ public:
             particleDG.push_back(TV::Zero());
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -657,6 +665,8 @@ public:
             particleDG.push_back(TV::Zero());
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -692,6 +702,8 @@ public:
                 particleDG.push_back(TV::Zero());
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
+                m_sigma11.push_back(0.0);
+                m_sigma22.push_back(0.0);
             }
         });
         int end = Base::m_X.size();
@@ -728,6 +740,8 @@ public:
                 particleDG.push_back(TV::Zero());
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
+                m_sigma11.push_back(0.0);
+                m_sigma22.push_back(0.0);
             }
         }
 
@@ -790,6 +804,68 @@ public:
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
             m_marker.push_back(0);
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
+        });
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
+    //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
+    void sampleGridAlignedBoxWithHole(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
+    {
+        BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
+        // T width = max_corner[0] - min_corner[0];
+        // T height = max_corner[1] - min_corner[1];
+        // T widthMod = fmod(width, Base::dx);
+        // T heightMod = fmod(height, Base::dx);
+        // BOW_ASSERT_INFO(widthMod == Base::dx || widthMod == 0, "width not divisible by dx in sampleGridAlignedBox");
+        // BOW_ASSERT_INFO(heightMod == Base::dx || heightMod == 0, "height not divisible by dx in sampleGridAlignedBox");
+
+        // sample particles
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
+        Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
+        region(0)++;
+        // region(1)++;
+        // if(dim == 3){
+        //     region(2)++;
+        // }
+        printf("%d %d\n", region(0), region(1));
+        int start = Base::m_X.size();
+        T translation = interval / 2.0;
+        iterateRegion(region, [&](const Vector<int, dim>& offset) {
+            TV position = min_corner + offset.template cast<T>() * interval;
+            position(0) += translation;
+            position(1) += translation;
+            if(dim == 3){
+                position(2) += translation;
+            }
+            //Now check to make sure this is outside the desired hole
+            T dist = (position - center).norm();
+            if(dist > radius){ //outside hole
+                Base::m_X.push_back(position);
+                Base::m_V.push_back(velocity);
+                Base::m_C.push_back(TM::Zero());
+                Base::m_mass.push_back(density * vol);
+                Base::stress.push_back(TM::Zero());
+                cauchy.push_back(TM::Zero());
+                Dp.push_back(0.0);
+                damageLaplacians.push_back(0.0);
+                if(offset[0] == 0 || offset[1] == 0 || offset[0] == region[0] - 1 || offset[1] == region[1] - 1){
+                    sp.push_back(1);
+                }
+                else{
+                    sp.push_back(0);
+                }
+                particleDG.push_back(TV::Zero());
+                dTildeH.push_back(0.0);
+                sigmaC.push_back(10.0);
+                m_marker.push_back(0);
+                m_sigma11.push_back(0.0);
+                m_sigma22.push_back(0.0);
+            }
+            
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -816,6 +892,8 @@ public:
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
             m_marker.push_back(0);
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
         }
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -847,6 +925,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }
@@ -865,6 +945,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }
@@ -883,6 +965,8 @@ public:
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
+            m_sigma11.push_back(0.0);
+            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }

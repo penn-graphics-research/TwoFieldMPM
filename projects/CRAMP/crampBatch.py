@@ -6,7 +6,7 @@ sectorA = [1]                #[uniaxialTension]
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
-test1 = [1, 1, 1, 1, 1]                 #uniaxialTension: [control, eta, zeta, p, dMin]
+test1 = [1, 0, 0, 0, 0]                 #uniaxialTension: [control, eta, zeta, p, dMin]
 
 if sectorA[0]:
     constants = [10, 10000, 0.03, 0.4]
