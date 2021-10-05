@@ -89,7 +89,8 @@ public:
     bool particlesMarkedForLoading = false;
     
     //Particle Data
-    Field<TM> cauchy; //for anisoMPM
+    Field<TM> m_cauchy; //for anisoMPM
+    Field<TM> m_cauchySmoothed; //smoothed particle Cauchy stress
     std::vector<T> Dp; //particle damage
     std::vector<T> damageLaplacians; //particle damage
     std::vector<T> dTildeH; //particle damage
@@ -101,8 +102,6 @@ public:
 
     //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
-    Field<T> m_sigma11; //sigma11 for all particles
-    Field<T> m_sigma22; //sigma22 for all particles
     Field<T> m_sigmaYY; //used for stress ahead of crack tip
     Field<T> m_r;
     Field<T> m_posX;
@@ -117,7 +116,7 @@ public:
     T simpleDampingFactor = 0.5;
     T simpleDampingDuration = 0.0;
 
-    SERIALIZATION_REGISTER(cauchy)
+    SERIALIZATION_REGISTER(m_cauchy)
     SERIALIZATION_REGISTER(Dp)
     SERIALIZATION_REGISTER(damageLaplacians)
     SERIALIZATION_REGISTER(dTildeH)
@@ -152,6 +151,10 @@ public:
 
     //Grid Data to Save and Vis
     Field<TV> activeNodesX;
+    Field<TM> activeNodesCauchy1;
+    Field<TM> activeNodesCauchy2;
+    Field<TM> activeNodesFi1;
+    Field<TM> activeNodesFi2;
     Field<TV> activeNodesDG;
     Field<TV> activeNodesV1;
     Field<TV> activeNodesV2;
@@ -258,10 +261,10 @@ public:
         Bow::DFGMPM::ComputeDamageLaplaciansOp<T, dim> compute_damageLaplacians{ {}, Base::m_X, Dp, damageLaplacians, particleAF, Base::dx, grid };
         compute_damageLaplacians();
 
-        for (auto& model : Base::elasticity_models) //compute cauchy stress to pass to next method
-            model->compute_cauchy(cauchy);
+        // for (auto& model : Base::elasticity_models) //compute cauchy stress to pass to next method
+        //     model->compute_cauchy(m_cauchy); //NOTE: already do this now in main loop
 
-        Bow::DFGMPM::UpdateAnisoMPMDamageOp<T, dim> update_anisoMPM_damage{ {}, Dp, damageLaplacians, dTildeH, sigmaC, cauchy, dt, eta, zeta, l0, grid };
+        Bow::DFGMPM::UpdateAnisoMPMDamageOp<T, dim> update_anisoMPM_damage{ {}, Dp, damageLaplacians, dTildeH, sigmaC, m_cauchy, dt, eta, zeta, l0, grid };
         update_anisoMPM_damage();
     }
 
@@ -342,40 +345,43 @@ public:
     {
         if(!initialized){
             initialize();
+            std::cout << "Initialized..." << std::endl;
         }
 
-        std::cout << "Initialized..." << std::endl;    
-        
+        //Always collect cauchy and F for each particle for analysis
+        for (auto& model : Base::elasticity_models){
+            model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
+            m_F = model->m_F;
+        }
+            
         if(useDFG) {
             //DFG specific routines (partitioning)
             partitioningRoutines();
             
+            std::cout << "Partitioned..." << std::endl;
+
             //AnisoMPM Routines
             if(useAnisoMPMDamage) {
                 anisoMPMDamage(dt); //note that we simply update and track damage, there is no elasticity deg
+                std::cout << "AnisoMPM Damage Updated..." << std::endl;
             }
         }
 
-        std::cout << "Partitioned..." << std::endl;   
-
         p2g(dt); //compute forces, p2g transfer
 
-        std::cout << "P2G done..." << std::endl;
+        std::cout << "P2G Done..." << std::endl;
 
-        //Always collect sigma11 and sigma22 for each particle for analysis
-        for (auto& model : Base::elasticity_models) //compute cauchy stress to evaluate stress snapshot
-            model->compute_cauchy(cauchy);
-        for(int i = 0; i < (int)cauchy.size(); ++i){
-            m_sigma11[i] = cauchy[i](0,0);
-            m_sigma22[i] = cauchy[i](1,1);
-        }
+        //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
+        Bow::CRAMP::TensorTransferOp<T,dim>transferTensors{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG };
+        transferTensors();
+        std::cout << "Tensor Transfer Done..." << std::endl;
 
         //Now take our stress snapshot (if we have one, and it's the right time)
         if(takeStressSnapshot && elapsedTime >= stressSnapshotTime){
 
             takeStressSnapshot = false; //for now only take one snapshot
             Vector<T,dim> crackTip = Base::m_X[topPlane_startIdx - 1]; //crack tip should be last massless particle before topPlane particles
-            Bow::CRAMP::StressSnapshotOp<T,dim>stressSnapshot{ {}, Base::m_X, crackTip, cauchy, grid, Base::dx, m_sigmaYY, m_r, m_posX, m_idx, halfEnvelope };
+            Bow::CRAMP::StressSnapshotOp<T,dim>stressSnapshot{ {}, Base::m_X, crackTip, m_cauchy, grid, Base::dx, m_sigmaYY, m_r, m_posX, m_idx, halfEnvelope };
             stressSnapshot();
             writeStressSnapshot(elapsedTime);
 
@@ -383,7 +389,6 @@ public:
             for (auto& model : Base::elasticity_models){
                 m_mu = model->m_mu;
                 m_la = model->m_lambda;
-                m_F = model->m_F;
             }
             Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_F, particleAF, grid, Base::dx, dt, useDFG };
             collectJIntegralGridData();
@@ -392,13 +397,14 @@ public:
             //We will compute the J integral using however many contour radii the user asks for
             std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
                 computeJIntegral(contourRadii[i], jIntFile);
             }
             jIntFile.close();
-        }
 
+            std::cout << "Stress Snapshot and J Integral Computed..." << std::endl;
+        }
 
         //If Loading this specimen:
         if(loading){
@@ -414,8 +420,10 @@ public:
             if(elapsedTime < rampTime && rampTime > 0.0){
                 scaledSigmaA *= (elapsedTime / rampTime);
             }
-            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, Base::dx, dt, grid, m_vol };
+            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, Base::dx, dt, grid, m_vol, ppc };
             mode1Loading();
+
+            std::cout << "Mode 1 Loading Applied..." << std::endl;
         }
 
         //Apply Impulse (if user added one) -> apply directly for symplectic, save forces for later if implicit
@@ -423,6 +431,7 @@ public:
             if((elapsedTime >= impulseStartTime) && (elapsedTime < impulseStartTime + impulseDuration)){
                 Bow::DFGMPM::ApplyImpulseOp<T, dim> apply_impulse{ {}, impulseCenter, impulseStrength, grid, Base::dx, dt, Base::symplectic, useImpulse };
                 apply_impulse();
+                std::cout << "Impulse Applied..." << std::endl;
             }
         }
 
@@ -430,14 +439,18 @@ public:
         if (useDFG && (Base::symplectic || (!Base::symplectic && useImplicitContact))) {
             Bow::DFGMPM::ContactForcesOp<T, dim> frictional_contact{ {}, dt, fricCoeff, Base::symplectic, useImplicitContact, grid };
             frictional_contact();
+            std::cout << "Frictional Contact Applied..." << std::endl;
         }
 
         gridUpdate(dt); //collisions + implicit grid update
+
+        std::cout << "Grid Updated..." << std::endl;
 
         //Explicit Frictional Contact -> ONLY for implicit two field with EXPLICIT frictional contact
         if (useDFG && (!Base::symplectic && !useImplicitContact)) {
             Bow::DFGMPM::ContactForcesOp<T, dim> frictional_contact{ {}, dt, fricCoeff, Base::symplectic, useImplicitContact, grid };
             frictional_contact();
+            std::cout << "Applied Explicit Frictional Contact..." << std::endl;
         }
 
         g2p(dt); //transfer, updateF, and plastic projection
@@ -449,6 +462,8 @@ public:
             //Use simple damping
             Bow::CRAMP::SimpleDampingOp<T, dim> applySimpleDamping{ {}, Base::m_V, simpleDampingFactor, grid };
             applySimpleDamping();
+            std::cout << "Simple Damping Applied..." << std::endl;
+
         }
 
         if(crackInitialized){
@@ -465,13 +480,15 @@ public:
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_sigma11, m_sigma22);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchy, m_F);
+
+            std::cout << "Substep Written..." << std::endl;
 
             //Write Grid
             if(writeGrid){
-                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
+                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
                 collect_gridData();
-                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(currSubstep) + ".ply", activeNodesX, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
+                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(currSubstep) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
             }
         }
     }
@@ -555,13 +572,16 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_sigma11, m_sigma22);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchy, m_F);
+
+            std::cout << "Frame Written (p)..." << std::endl;
 
             //Write Grid
             if(writeGrid){
-                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
+                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
                 collect_gridData();
-                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(frame_num) + ".ply", activeNodesX, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
+                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(frame_num) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
+                std::cout << "Frame Written (i)..." << std::endl;
             }
         }
     }
@@ -609,15 +629,13 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -640,7 +658,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             m_marker.push_back(0);
             
             //give full damage for the cut particles
@@ -665,8 +683,6 @@ public:
             particleDG.push_back(TV::Zero());
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -695,15 +711,13 @@ public:
                 Base::m_C.push_back(TM::Zero());
                 Base::m_mass.push_back(density * vol);
                 Base::stress.push_back(TM::Zero());
-                cauchy.push_back(TM::Zero());
+                m_cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
                 sp.push_back(0);
                 particleDG.push_back(TV::Zero());
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
-                m_sigma11.push_back(0.0);
-                m_sigma22.push_back(0.0);
             }
         });
         int end = Base::m_X.size();
@@ -733,15 +747,13 @@ public:
                 Base::m_V.push_back(velocity);
                 Base::m_C.push_back(TM::Zero());
                 Base::stress.push_back(TM::Zero());
-                cauchy.push_back(TM::Zero());
+                m_cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
                 sp.push_back(0);
                 particleDG.push_back(TV::Zero());
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
-                m_sigma11.push_back(0.0);
-                m_sigma22.push_back(0.0);
             }
         }
 
@@ -768,6 +780,7 @@ public:
         // BOW_ASSERT_INFO(heightMod == Base::dx || heightMod == 0, "height not divisible by dx in sampleGridAlignedBox");
 
         // sample particles
+        ppc = (T)_ppc; //set sim ppc
         T vol = std::pow(Base::dx, dim) / T(_ppc);
         T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
         Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
@@ -791,7 +804,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             if(offset[0] == 0 || offset[1] == 0 || offset[0] == region[0] - 1 || offset[1] == region[1] - 1){
@@ -804,8 +817,6 @@ public:
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
             m_marker.push_back(0);
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -823,6 +834,7 @@ public:
         // BOW_ASSERT_INFO(heightMod == Base::dx || heightMod == 0, "height not divisible by dx in sampleGridAlignedBox");
 
         // sample particles
+        ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
         T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
         Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
@@ -849,7 +861,7 @@ public:
                 Base::m_C.push_back(TM::Zero());
                 Base::m_mass.push_back(density * vol);
                 Base::stress.push_back(TM::Zero());
-                cauchy.push_back(TM::Zero());
+                m_cauchy.push_back(TM::Zero());
                 Dp.push_back(0.0);
                 damageLaplacians.push_back(0.0);
                 if(offset[0] == 0 || offset[1] == 0 || offset[0] == region[0] - 1 || offset[1] == region[1] - 1){
@@ -862,8 +874,6 @@ public:
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
                 m_marker.push_back(0);
-                m_sigma11.push_back(0.0);
-                m_sigma22.push_back(0.0);
             }
             
         });
@@ -873,6 +883,7 @@ public:
 
     void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.){
         // sample particles
+        ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
         int start = Base::m_X.size();
         Field<TV> new_samples;
@@ -884,7 +895,7 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(density * vol);
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
@@ -892,8 +903,6 @@ public:
             dTildeH.push_back(0.0);
             sigmaC.push_back(10.0);
             m_marker.push_back(0);
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
         }
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -920,13 +929,11 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }
@@ -940,13 +947,11 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }
@@ -960,13 +965,11 @@ public:
             Base::m_C.push_back(TM::Zero());
             Base::m_mass.push_back(0.0); //zero mass
             Base::stress.push_back(TM::Zero());
-            cauchy.push_back(TM::Zero());
+            m_cauchy.push_back(TM::Zero());
             Dp.push_back(0.0);
             damageLaplacians.push_back(0.0);
             sp.push_back(0);
             particleDG.push_back(TV::Zero());
-            m_sigma11.push_back(0.0);
-            m_sigma22.push_back(0.0);
             //dTildeH.push_back(0.0);
             //sigmaC.push_back(0.0);
         }

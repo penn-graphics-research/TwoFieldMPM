@@ -152,6 +152,69 @@ public:
     }
 };
 
+/* Transfer Cauchy stress and deformation gradient to the grid */
+template <class T, int dim>
+class TensorTransferOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    std::vector<T>& m_mass;
+    Field<Matrix<T, dim, dim>>& m_cauchy;
+    Field<Matrix<T, dim, dim>>& m_F;
+
+    Bow::Field<std::vector<int>>& particleAF;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+
+    bool useDFG;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("transferCauchyAndDefGrad");
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                const T mass = m_mass[i];
+                const Matrix<T, dim, dim> cauchyXmass = m_cauchy[i] * mass; //cauchy * m_p
+                const Matrix<T, dim, dim> defGradXmass = m_F[i] * mass; //F * m_p
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    //Notice we treat single-field and two-field nodes differently
+                    if (g.separable != 1 || !useDFG) {
+                        //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        g.cauchy1 += cauchyXmass * w;
+                        g.Fi1 += defGradXmass * w;
+                    }
+                    else if (g.separable == 1 && useDFG) {
+                        //Treat node as having two fields
+                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                        if (fieldIdx == 0) {
+                            g.cauchy1 += cauchyXmass * w;
+                            g.Fi1 += defGradXmass * w;
+                        }
+                        else if (fieldIdx == 1) {
+                            g.cauchy2 += cauchyXmass * w;
+                            g.Fi2 += defGradXmass * w;
+                        }
+                    }
+                });
+            }
+        });
+
+        /* Iterate grid to divide out the grid masses from cauchy and defGrad */
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            g.cauchy1 /= g.m1;
+            g.Fi1 /= g.m1;
+            if (g.separable == 1) {
+                g.cauchy2 /= g.m2;
+                g.Fi2 /= g.m2;
+            }
+        });
+    }
+};
+
 /* CRAMP Partitioned P2G: for each particle to grid mapping, check whether the line between them crosses the explicit crack path 
     if it does not, transfer particle quantity to field 1 and separable = 0
     if it does, transfer particle quantity either to field 1 or 2 (depending on CRAMP partitioning algorithm), and separable = 1 
@@ -457,6 +520,8 @@ public:
 
     Field<T> m_vol;
 
+    T ppc;
+
     void operator()()
     {
         BOW_TIMER_FLAG("applyMode1Loading");
@@ -474,7 +539,10 @@ public:
                         stress *= -1; //apply negative here for particles below y2
                     }
 
-                    T fp = m_vol[i] * stress; //particle force (working simply with y direction magnitude, not full vector)
+                    //m_vol = dx^2 / PPC, however, need to compute Ap = dx / sqrt(PPC)
+                    T ppcSqrt = std::pow(ppc, (T)1 / (T)dim);
+                    T Ap = m_vol[i] * (ppcSqrt / dx);
+                    T fp = Ap * stress; //particle force (working simply with y direction magnitude, not full vector)
 
                     //std::cout << "particle idx:" << i << "fp:" << fp << std::endl;
 

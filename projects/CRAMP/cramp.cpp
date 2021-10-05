@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
         using T = double;
-        static const int dim = 3;
+        static const int dim = 2;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
         //std::cout << "Padding: " << sizeof(gs.padding) << std::endl;
@@ -91,6 +91,13 @@ int main(int argc, char *argv[])
         //Double2D: 640 B -> add 384 B -> 48 Ts
         //Double3D: 768 B -> add 256 B -> 32 Ts
         //Vector<T, (-16 * dim) + 80> padding; //dim2 = 48 Ts, dim3 = 32 Ts --> y = -16x + 80
+
+        //AFTER ADDING cauchy and Fi 10/5/21
+        //Float2D: 384 B -> add 128 B -> 32 Ts
+        //Float3D: 528 B -> add 496 B -> 124 Ts
+        //Double2D: 768 B -> add 256 B -> 32 Ts
+        //Double3D: 1056 B -> add 992 B -> 124 Ts
+        //Vector<T, (92 * dim) - 152> padding; //dim2 = 32 Ts, dim3 = 124 Ts --> y = 92x - 152
     }
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
@@ -567,7 +574,7 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.1_dx0.25");
+        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.2_dx0.50_newLoading");
 
         //material
         T E = 2.6e6;
@@ -575,7 +582,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.25e-3; //0.5 mm
+        sim.dx = 0.5e-3; //0.5 mm
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -615,8 +622,8 @@ int main(int argc, char *argv[])
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
-        T aOverB = 0.1;
-        T radius = aOverB * width;
+        T aOverB = 0.2;
+        T radius = aOverB * (width / 2.0);
         sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho);
         //sim.sampleGridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 

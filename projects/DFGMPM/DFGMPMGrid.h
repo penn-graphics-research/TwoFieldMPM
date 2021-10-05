@@ -38,6 +38,10 @@ public:
     Vector<T, 4> Uquat1, Uquat2;
     Vector<T, 4> Vquat1, Vquat2;
 
+    //To transfer cauchy stress and def grad to the grid
+    Matrix<T, dim, dim> cauchy1, cauchy2;
+    Matrix<T, dim, dim> Fi1, Fi2;
+
     //DOF Tracking
     typename std::conditional<std::is_same<T, float>::value, int32_t, int64_t>::type idx;
     typename std::conditional<std::is_same<T, float>::value, int32_t, int64_t>::type sep_idx;
@@ -58,12 +62,12 @@ public:
     //PADDING to ensure GridState is power of 2
     //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
     
-    //AFTER ADDING sigma1, Uquat1, etc. and removing Fi1, Pi1, etc. ... 9/13/21
-    //Float2D: 320 B -> add 192 B -> 48 Ts
-    //Float3D: 384 B -> add 128 B -> 32 Ts
-    //Double2D: 640 B -> add 384 B -> 48 Ts
-    //Double3D: 768 B -> add 256 B -> 32 Ts
-    Vector<T, (-16 * dim) + 80> padding; //dim2 = 48 Ts, dim3 = 32 Ts --> y = -16x + 80
+    //AFTER ADDING cauchy and Fi 10/5/21
+    //Float2D: 384 B -> add 128 B -> 32 Ts
+    //Float3D: 528 B -> add 496 B -> 124 Ts
+    //Double2D: 768 B -> add 256 B -> 32 Ts
+    //Double3D: 1056 B -> add 992 B -> 124 Ts
+    Vector<T, (92 * dim) - 152> padding; //dim2 = 32 Ts, dim3 = 124 Ts --> y = 92x - 152
 
     GridState()
     {
@@ -87,6 +91,10 @@ public:
         Uquat2 = Vector<T, 4>::Zero();
         Vquat1 = Vector<T, 4>::Zero();
         Vquat2 = Vector<T, 4>::Zero();
+        cauchy1 = Matrix<T, dim, dim>::Zero();
+        cauchy2 = Matrix<T, dim, dim>::Zero();
+        Fi1 = Matrix<T, dim, dim>::Zero();
+        Fi2 = Matrix<T, dim, dim>::Zero();
         gridDG = Vector<T, dim>::Zero();
         gridMaxNorm = 0.0;
         gridSeparability = Vector<T, 4>::Zero();

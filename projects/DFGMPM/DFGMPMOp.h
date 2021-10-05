@@ -991,6 +991,10 @@ public:
     T dx;
 
     Bow::Field<Bow::Vector<T, dim>>& activeNodesX;
+    Bow::Field<Bow::Matrix<T, dim, dim>>& activeNodesCauchy1;
+    Bow::Field<Bow::Matrix<T, dim, dim>>& activeNodesCauchy2;
+    Bow::Field<Bow::Matrix<T, dim, dim>>& activeNodesFi1;
+    Bow::Field<Bow::Matrix<T, dim, dim>>& activeNodesFi2;
     Bow::Field<Bow::Vector<T, dim>>& activeNodesDG;
     Bow::Field<Bow::Vector<T, dim>>& activeNodesV1;
     Bow::Field<Bow::Vector<T, dim>>& activeNodesV2;
@@ -1007,6 +1011,10 @@ public:
         BOW_TIMER_FLAG("collectGridData");
 
         activeNodesX.clear();
+        activeNodesCauchy1.clear();
+        activeNodesCauchy2.clear();
+        activeNodesFi1.clear();
+        activeNodesFi2.clear();
         activeNodesDG.clear();
         activeNodesV1.clear();
         activeNodesV2.clear();
@@ -1022,6 +1030,10 @@ public:
         grid.iterateGridSerial([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
             Vector<T, dim> xi = node.template cast<T>() * dx;
             activeNodesX.push_back(xi);
+            activeNodesCauchy1.push_back(g.cauchy1);
+            activeNodesCauchy2.push_back(g.cauchy2);
+            activeNodesFi1.push_back(g.Fi1);
+            activeNodesFi2.push_back(g.Fi2);
             activeNodesDG.push_back(g.gridDG);
             activeNodesV1.push_back(g.v1);
             activeNodesV2.push_back(g.v2);
