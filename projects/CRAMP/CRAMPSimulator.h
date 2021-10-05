@@ -61,6 +61,7 @@ public:
     Field<T> m_vol;
     Field<T> m_mu, m_la;
     Field<TM> m_F; //def grad --> for j integral
+    Field<TM> m_FSmoothed;
 
     //Sim Data
     std::string outputPath;
@@ -352,6 +353,8 @@ public:
         for (auto& model : Base::elasticity_models){
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
             m_F = model->m_F;
+            m_FSmoothed = model->m_F; //dummy values to set up the right size
+            m_cauchySmoothed = model->m_F; //dummy vals
         }
             
         if(useDFG) {
@@ -372,9 +375,12 @@ public:
         std::cout << "P2G Done..." << std::endl;
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
-        Bow::CRAMP::TensorTransferOp<T,dim>transferTensors{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG };
-        transferTensors();
-        std::cout << "Tensor Transfer Done..." << std::endl;
+        Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG };
+        tensorP2G();
+        std::cout << "Tensor P2G Done..." << std::endl;
+        Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG };
+        tensorG2P();
+        std::cout << "Tensor G2P Done..." << std::endl;
 
         //Now take our stress snapshot (if we have one, and it's the right time)
         if(takeStressSnapshot && elapsedTime >= stressSnapshotTime){
@@ -480,7 +486,7 @@ public:
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchy, m_F);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed);
 
             std::cout << "Substep Written..." << std::endl;
 
@@ -572,7 +578,7 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchy, m_F);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed);
 
             std::cout << "Frame Written (p)..." << std::endl;
 

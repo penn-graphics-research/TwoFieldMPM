@@ -154,7 +154,7 @@ public:
 
 /* Transfer Cauchy stress and deformation gradient to the grid */
 template <class T, int dim>
-class TensorTransferOp : public AbstractOp {
+class TensorP2GOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
@@ -171,7 +171,7 @@ public:
 
     void operator()()
     {
-        BOW_TIMER_FLAG("transferCauchyAndDefGrad");
+        BOW_TIMER_FLAG("tensorP2G");
         grid.colored_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
@@ -210,6 +210,61 @@ public:
             if (g.separable == 1) {
                 g.cauchy2 /= g.m2;
                 g.Fi2 /= g.m2;
+            }
+        });
+    }
+};
+
+/* Transfer Cauchy stress and deformation gradient back from the grid for a smoothed cauchy and F! */
+template <class T, int dim>
+class TensorG2POp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<Matrix<T, dim, dim>>& m_cauchySmoothed;
+    Field<Matrix<T, dim, dim>>& m_FSmoothed;
+
+    Bow::Field<std::vector<int>>& particleAF;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+
+    bool useDFG;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("tensorG2P");
+        grid.parallel_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+
+                Matrix<T, dim, dim> cauchySmooth = Matrix<T, dim, dim>::Zero();
+                Matrix<T, dim, dim> FSmooth = Matrix<T, dim, dim>::Zero();
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    //Notice we treat single-field and two-field nodes differently
+                    if (g.separable != 1 || !useDFG) {
+                        //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        cauchySmooth += g.cauchy1 * w;
+                        FSmooth += g.Fi1 * w;
+                    }
+                    else if (g.separable == 1 && useDFG) {
+                        //Treat node as having two fields
+                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                        if (fieldIdx == 0) {
+                            cauchySmooth += g.cauchy1 * w;
+                            FSmooth += g.Fi1 * w;
+                        }
+                        else if (fieldIdx == 1) {
+                            cauchySmooth += g.cauchy2 * w;
+                            FSmooth += g.Fi2 * w;
+                        }
+                    }
+                });
+
+                m_cauchySmoothed[i] = cauchySmooth;
+                m_FSmoothed[i] = FSmooth;
             }
         });
     }

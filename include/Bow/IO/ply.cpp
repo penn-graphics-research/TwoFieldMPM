@@ -332,12 +332,12 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
     Field<T> d(damage.size());
     Field<int> sp(_sp.size());
     Field<int> markers(_markers.size());
-    Field<T> sigma11(_m_cauchy.size());
-    Field<T> sigma22(_m_cauchy.size());
-    Field<T> sigma12(_m_cauchy.size());
-    Field<T> F11(_m_cauchy.size());
-    Field<T> F22(_m_cauchy.size());
-    Field<T> F12(_m_cauchy.size());
+    Field<T> sigma11(_vertices.size());
+    Field<T> sigma22(_vertices.size());
+    Field<T> sigma12(_vertices.size());
+    Field<T> F11(_vertices.size());
+    Field<T> F22(_vertices.size());
+    Field<T> F12(_vertices.size());
 
     //formatting vector fields
     if constexpr (dim == 2) {
@@ -369,9 +369,6 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         d[i] = damage[i];
         sp[i] = _sp[i];
         markers[i] = _markers[i];
-        sigma11[i] = _m_cauchy[i](0,0);
-        sigma22[i] = _m_cauchy[i](1,1);
-        sigma12[i] = _m_cauchy[i](0,1);
         if(_m_F.size() > 0){
             F11[i] = _m_F[i](0,0);
             F22[i] = _m_F[i](1,1);
@@ -381,6 +378,16 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
             F11[i] = 1.0;
             F22[i] = 1.0;
             F12[i] = 0.0;
+        }
+        if(_m_cauchy.size() > 0){
+            sigma11[i] = _m_cauchy[i](0,0);
+            sigma22[i] = _m_cauchy[i](1,1);
+            sigma12[i] = _m_cauchy[i](0,1);
+        }
+        else{
+            sigma11[i] = 0.0;
+            sigma22[i] = 0.0;
+            sigma12[i] = 0.0;
         }
         
     });

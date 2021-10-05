@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.2_dx0.50_newLoading");
+        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.2_dx0.50_smoothedTensors");
 
         //material
         T E = 2.6e6;
