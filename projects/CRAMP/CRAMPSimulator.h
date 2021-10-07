@@ -52,10 +52,11 @@ public:
     int crackType;
 
     //Mode I Loading Params - pull up on nodes above y1, pull down below y2, all with total stress sigmaA
-    T y1;
-    T y2;
+    T y1, y2;
     T sigmaA;
     T rampTime;
+    T width;
+    T x1, x2;
 
     //Additional Particle Data
     Field<T> m_vol;
@@ -87,6 +88,7 @@ public:
     bool useImpulse = false;
     bool crackInitialized = false;
     bool loading = false;
+    bool nodalLoading = false;
     bool particlesMarkedForLoading = false;
     
     //Particle Data
@@ -426,7 +428,7 @@ public:
             if(elapsedTime < rampTime && rampTime > 0.0){
                 scaledSigmaA *= (elapsedTime / rampTime);
             }
-            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, Base::dx, dt, grid, m_vol, ppc };
+            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, nodalLoading, width, y1, y2, x1, x2, Base::dx, dt, grid, m_vol, ppc };
             mode1Loading();
 
             std::cout << "Mode 1 Loading Applied..." << std::endl;
@@ -537,13 +539,20 @@ public:
     }
 
     //Setup a mode I constant loading for the configuration, we pull up on nodes above y1, and pull down on nodes below y2, each with total stress sigmaA.
-    void addMode1Loading(T _y1, T _y2, T _sigmaA, T _rampTime)
+    void addMode1Loading(T _y1, T _y2, T _sigmaA, T _rampTime, bool _nodalLoading, T _width = 0, T _x1 = 0, T _x2 = 0)
     {
+        if(_nodalLoading){
+            BOW_ASSERT_INFO(_width > 0, "ERROR: Nodal loading requires passing the specimen width");
+        }
         y1 = _y1;
         y2 = _y2;
         sigmaA = _sigmaA;
         rampTime = _rampTime;
         loading = true;
+        nodalLoading = _nodalLoading;
+        width = _width;
+        x1 = _x1;
+        x2 = _x2;
     }
 
     //Setup taking a snapshot of stress at a given time

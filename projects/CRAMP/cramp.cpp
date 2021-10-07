@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_doublePuller_SVDtransfer_withTwoFieldTreatment");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_smoothedCauchy");
 
         //material
         T E = 2.6e6;
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
         // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
 
         T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
-        snapshotTime = sim.frame_dt * 6;
+        //snapshotTime = sim.frame_dt * 6;
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
         sim.contourRadii.push_back(1);
@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
         T yBottom = y1 + 0.5e-3;
         T sigmaA = 400e6; //400 MPa
         T rampTime = 0; //500e-6; //ramp up to full sigmaA over 500 microseconds
-        sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+        sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime, false); //particle loading
 
         // T simpleDampFactor = 0.5;
         // T simpleDampDuration = sim.frame_dt * 1500; //for 1500 frames, damp
@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.2_dx0.50_smoothedTensors");
+        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.1_dx0.50_smoothedTensors_nodalLoading");
 
         //material
         T E = 2.6e6;
@@ -622,15 +622,14 @@ int main(int argc, char *argv[])
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
-        T aOverB = 0.2;
+        T aOverB = 0.1;
         T radius = aOverB * (width / 2.0);
         sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho);
         //sim.sampleGridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Boundary Conditions
         // bool singlePuller = true;
-        T yTop = y2 - 0.5e-3;
-        T yBottom = y1 + 0.5e-3;
+        
         // T u2 = 1.0e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
         // T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
         // T speed = (u2 / 2.0) / pullTime;
@@ -638,7 +637,11 @@ int main(int argc, char *argv[])
         T sigmaA = 2600; //1000 times smaller than E
         T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
         //rampTime = 0.0;
-        sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
+
+        // T yTop = y2 - 0.5e-3;
+        // T yBottom = y1 + 0.5e-3;
+        // sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime, false); //particle loading
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
         
         // if(singlePuller){
         //     //fix bottom constant, pull on top the full u2

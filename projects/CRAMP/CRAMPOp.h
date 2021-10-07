@@ -568,6 +568,16 @@ public:
     Field<int> m_marker;
     T scaledSigmaA;
 
+    bool nodalLoading;
+
+    T width;
+
+    T y1;
+    T y2;
+
+    T x1;
+    T x2;
+
     T dx;
     T dt;
 
@@ -581,43 +591,75 @@ public:
     {
         BOW_TIMER_FLAG("applyMode1Loading");
 
-        //Using particle volume, compute per particle forces using the scaledSigmaA passed in, then transfer this force to the grid and apply it
         T stress = scaledSigmaA;
-        grid.colored_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
-                const Vector<T, dim> pos = m_X[i];
-                const int marker = m_marker[i];
-                stress = scaledSigmaA;
+        if(!nodalLoading){
+            //Using particle volume, compute per particle forces using the scaledSigmaA passed in, then transfer this force to the grid and apply it
+            grid.colored_for([&](int i) {
+                if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                    const Vector<T, dim> pos = m_X[i];
+                    const int marker = m_marker[i];
+                    stress = scaledSigmaA;
 
-                if(marker == 4 || marker == 5){ //ONLY apply this force to particles above y1 and below y2!
-                    if(marker == 5){
-                        stress *= -1; //apply negative here for particles below y2
+                    if(marker == 4 || marker == 5){ //ONLY apply this force to particles above y1 and below y2!
+                        if(marker == 5){
+                            stress *= -1; //apply negative here for particles below y2
+                        }
+
+                        //m_vol = dx^2 / PPC, however, need to compute Ap = dx / sqrt(PPC)
+                        T ppcSqrt = std::pow(ppc, (T)1 / (T)dim);
+                        T Ap = m_vol[i] * (ppcSqrt / dx);
+                        T fp = Ap * stress; //particle force (working simply with y direction magnitude, not full vector)
+
+                        //std::cout << "particle idx:" << i << "fp:" << fp << std::endl;
+
+                        BSplineWeights<T, dim> spline(pos, dx);
+                        grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                            //Store f_i in gridViYi since we're not using it anyway
+                            g.gridViYi1 += fp * w;
+                        });
                     }
-
-                    //m_vol = dx^2 / PPC, however, need to compute Ap = dx / sqrt(PPC)
-                    T ppcSqrt = std::pow(ppc, (T)1 / (T)dim);
-                    T Ap = m_vol[i] * (ppcSqrt / dx);
-                    T fp = Ap * stress; //particle force (working simply with y direction magnitude, not full vector)
-
-                    //std::cout << "particle idx:" << i << "fp:" << fp << std::endl;
-
-                    BSplineWeights<T, dim> spline(pos, dx);
-                    grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
-                        //Store f_i in gridViYi since we're not using it anyway
-                        g.gridViYi1 += fp * w;
-                    });
                 }
-            }
-        });
+            });
+        }
+        else{
+            //F_total = sigmaA * width * thickness
+            //Distribute into N pieces with N = width / dx
+            //F_nodal = F_total / N = (sigmaA * width * thickness) / (width / dx) -> we use t = 1 here
+            //F_nodal = sigmaA * thickness * dx -> t = 1
+            stress *= dx; //F_nodal (ends get half of this)
+        }
         
         /* Iterate grid to apply these loadings to the velocities */
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-
-            T fi = g.gridViYi1; //stored fi in here
-            if(fi != 0.0){
-                g.v1[1] += (fi / g.m1) * dt;
+            Vector<T,dim> xi = node.template cast<T>() * dx;
+            T fi = 0.0;
+            if(!nodalLoading){
+                fi = g.gridViYi1; //stored fi in here
             }
-
+            else{
+                T eps = dx * 0.05;
+                T midX1 = x1 + eps;
+                T midX2 = x2 - eps; //for middle node loading
+                // T endX1 = x1 - eps;
+                // T endX2 = x2 + eps;
+                if(xi[0] > midX1 && xi[0] < midX2){ //only within the x range of the material!
+                    if(std::abs(xi[1] - y1) < eps){ //top pulls up
+                        fi = stress;
+                    }
+                    else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
+                        fi = -1 * stress;
+                    }
+                }
+                else if(std::abs(xi[0] - x1) < eps || std::abs(xi[0] - x2) < eps){ //end nodes
+                    if(std::abs(xi[1] - y1) < eps){ //top pulls up
+                        fi = 0.5 * stress;
+                    }
+                    else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
+                        fi = -0.5 * stress;
+                    }
+                }
+            }
+            g.v1[1] += (fi / g.m1) * dt; //update velocity based on our computed forces
         });
     }
 };
