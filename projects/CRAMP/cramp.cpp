@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_E2p6e6_FCR_smoothedCauchy");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.5mm_newTensorTransfer_redux");
 
         //material
         T E = 2.6e6;
@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.1_dx0.50_smoothedTensors_nodalLoading");
+        MPM::CRAMPSimulator<T, dim> sim("output/plateWithHole_E2.6e6_nu0.25_sigmaA_2600_aOverb0.2_dx0.25_smoothedTensors_nodalLoading");
 
         //material
         T E = 2.6e6;
@@ -582,7 +582,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.5e-3; //0.5 mm
+        sim.dx = 0.25e-3; //0.5 mm
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -622,7 +622,7 @@ int main(int argc, char *argv[])
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
-        T aOverB = 0.1;
+        T aOverB = 0.2;
         T radius = aOverB * (width / 2.0);
         sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho);
         //sim.sampleGridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
