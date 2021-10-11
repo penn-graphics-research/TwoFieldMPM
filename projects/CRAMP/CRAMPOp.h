@@ -1123,13 +1123,6 @@ public:
         std::vector<T> blendRatios;
         std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
         std::vector<Matrix<T,dim,dim>> m_Fi_Interpolated; //collect the reconstructed Fi's that were interpolated between for x_bottom and x_top
-
-        bool interpolateWithIdentity = false;
-        Vector<T, dim> sigmaI;
-        Vector<T, 4> UquatI, VquatI; 
-        sigmaI << 1, 1, 1;
-        UquatI << 1, 0, 0, 0;
-        VquatI << 1, 0, 0, 0;
         
         T J_I = 0; //set J integral mode I to 0 for now
         T J_II = 0; //set J integral mode II to 0 for now
@@ -1148,30 +1141,30 @@ public:
                 //Interpolate the deformation gradient ingredients! --> USE FIELD 1 FOR BOTTOM INTERSECT!!!
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[bottomIntersectionIdx]; //NOTE: this will very likely be a separable node!!!! only use field 1 for interpolating bottom intersect
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[bottomIntersectionIdx + 1]; //grab the two grid states to interpolate between
-                if(interpolateWithIdentity){
-                    gi1->sigma1 = sigmaI;
-                    gi1->Uquat1 = UquatI;
-                    gi1->Vquat1 = VquatI;
-                }
+
                 //Save these Fs for viewing
-                Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
-                Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
+                // Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
+                // Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
+                Finterp1 = gi1->Fi1;
+                Finterp2 = gi2->Fi1;
                 m_Fi_Interpolated.push_back(Finterp1);
                 m_Fi_Interpolated.push_back(Finterp2); //save these for viewing
                 //Now interpolate b/w the Fs
-                Vector<T, dim> sigmaBlend;
-                Vector<T, 4> UquatBlend, VquatBlend;
-                sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
-                UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
-                VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); //NOTE WE USE FIELD 1 VALUES FOR BOTTOM INTERSECT!!
-                Fi1 = computeF(sigmaBlend, UquatBlend, VquatBlend);
+                // Vector<T, dim> sigmaBlend;
+                // Vector<T, 4> UquatBlend, VquatBlend;
+                // sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
+                // UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
+                // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); //NOTE WE USE FIELD 1 VALUES FOR BOTTOM INTERSECT!!
+                //Fi1 = computeF(sigmaBlend, UquatBlend, VquatBlend);
+                Fi1 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / (gi1->m1 + gi2->m1); // mass weighted 1-D interpolation
                 m_Fi.push_back(Fi1);
                 std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0);
                 std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1);
 
                 //Compute Fm2 (from actual second point)
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
-                Fi2 = computeF(g2->sigma1, g2->Uquat1, g2->Vquat1);
+                // Fi2 = computeF(g2->sigma1, g2->Uquat1, g2->Vquat1);
+                Fi2 = g2->Fi1;
                 m_Fi.push_back(Fi2);
                 std::vector<T> Fm2_I = computeFm(Fi2, x2 - x1, 0);
                 std::vector<T> Fm2_II = computeFm(Fi2, x2 - x1, 1);
@@ -1198,7 +1191,8 @@ public:
             else if(i == (int)finalContourPoints.size() - 2){ //last segment
                 //Compute Fm1 (from actual first point)
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
-                Fi1 = computeF(g1->sigma1, g1->Uquat1, g1->Vquat1);
+                //Fi1 = computeF(g1->sigma1, g1->Uquat1, g1->Vquat1);
+                Fi1 = g1->Fi1;
                 m_Fi.push_back(Fi1);
                 std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0);
                 std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1);
@@ -1211,35 +1205,32 @@ public:
                 //Interpolate the deformation gradient ingredients! --> USE FIELD 2 FOR TOP INTERSECT!!!
                 DFGMPM::GridState<T,dim>* gi1 = contourGridStates[topIntersectionIdx];
                 DFGMPM::GridState<T,dim>* gi2 = contourGridStates[topIntersectionIdx + 1]; //grab the two grid states to interpolate between -> this one is very likely separable!! use field 2 only for interpolating
-                Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
+                // Finterp1 = computeF(gi1->sigma1, gi1->Uquat1, gi1->Vquat1);
+                Finterp1 = gi1->Fi1;
                 m_Fi_Interpolated.push_back(Finterp1);
-                Vector<T, dim> sigmaBlend;
-                Vector<T, 4> UquatBlend, VquatBlend;
-                if(interpolateWithIdentity){
-                    gi2->sigma1 = sigmaI;
-                    gi2->Uquat1 = UquatI;
-                    gi2->Vquat1 = VquatI;
-                    gi2->sigma2 = sigmaI;
-                    gi2->Uquat2 = UquatI;
-                    gi2->Vquat2 = VquatI;
-                }
+                // Vector<T, dim> sigmaBlend;
+                // Vector<T, 4> UquatBlend, VquatBlend;
+
                 if(gi2->separable == 1){
                     file << "Top Intersect Interpolated Using Field 2\n";
-                    sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma2 * blendRatio);
-                    UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat2 * blendRatio);
-                    VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat2 * blendRatio); //NOTE WE USE FIELD 2 VALUES FOR TOP INTERSECT!!
-                    Finterp2 = computeF(gi2->sigma2, gi2->Uquat2, gi2->Vquat2);
+                    // sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma2 * blendRatio);
+                    // UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat2 * blendRatio);
+                    // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat2 * blendRatio); 
+                    // Finterp2 = computeF(gi2->sigma2, gi2->Uquat2, gi2->Vquat2);
+                    Finterp2 = gi2->Fi2; //NOTE WE USE FIELD 2 VALUES FOR TOP INTERSECT!!
+                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi2 * gi2->m2 * blendRatio)) / (gi1->m1 + gi2->m2); // mass weighted 1-D interpolation, using field 2
                 }
                 else{
                     file << "Top Intersect Interpolated Using Field 1\n";
-                    sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
-                    UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
-                    VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); //if not separable, just use field 1
-                    Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
+                    // sigmaBlend = (gi1->sigma1 * (1 - blendRatio)) +  (gi2->sigma1 * blendRatio);
+                    // UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
+                    // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); 
+                    // Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
+                    Finterp2 = gi2->Fi1; //if not separable, just use field 1
+                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / (gi1->m1 + gi2->m1); // mass weighted 1-D interpolation, using field 1
                 }
                 m_Fi_Interpolated.push_back(Finterp2);
-                
-                Fi2 = computeF(sigmaBlend, UquatBlend, VquatBlend);
+                // Fi2 = computeF(sigmaBlend, UquatBlend, VquatBlend);
                 m_Fi.push_back(Fi2);
 
                 //Compute Fm for this interpolated Fi2            
@@ -1269,8 +1260,10 @@ public:
                 DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
 
                 //Compute F for each endpoint --> NEITHER should be separable in this case
-                Fi1 = computeF(g1->sigma1, g1->Uquat1, g1->Vquat1);
-                Fi2 = computeF(g2->sigma1, g2->Uquat1, g2->Vquat1); //note we only access field 1 for both
+                // Fi1 = computeF(g1->sigma1, g1->Uquat1, g1->Vquat1);
+                // Fi2 = computeF(g2->sigma1, g2->Uquat1, g2->Vquat1); //note we only access field 1 for both
+                Fi1 = g1->Fi1;
+                Fi2 = g2->Fi1;
                 m_Fi.push_back(Fi1);
                 m_Fi.push_back(Fi2);
 
