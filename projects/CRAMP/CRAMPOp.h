@@ -1122,6 +1122,7 @@ public:
         std::vector<T> Fm_I_termTwo;
         std::vector<T> blendRatios;
         std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
+        std::vector<Matrix<T,dim,dim>> m_Pi; //collest computed Piola Kirchhoff Stresses
         std::vector<Matrix<T,dim,dim>> m_Fi_Interpolated; //collect the reconstructed Fi's that were interpolated between for x_bottom and x_top
         
         T J_I = 0; //set J integral mode I to 0 for now
@@ -1131,7 +1132,7 @@ public:
             T Fsum_II = 0; //mode II
             Vector<T,dim> x1 = finalContourPoints[i];
             Vector<T,dim> x2 = finalContourPoints[i+1];
-            Matrix<T,dim,dim> Fi1, Fi2, Finterp1, Finterp2;
+            Matrix<T,dim,dim> Fi1, Fi2, Finterp1, Finterp2, Pi1, Pi2;
             if(i == 0){ //first segment
                 //If first segment, first we compute interpolations for bottom intersection point
                 Vector<T, dim> xi1 = contourPoints[bottomIntersectionIdx];
@@ -1156,7 +1157,7 @@ public:
                 // UquatBlend = (gi1->Uquat1 * (1 - blendRatio)) +  (gi2->Uquat1 * blendRatio);
                 // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); //NOTE WE USE FIELD 1 VALUES FOR BOTTOM INTERSECT!!
                 //Fi1 = computeF(sigmaBlend, UquatBlend, VquatBlend);
-                Fi1 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / (gi1->m1 + gi2->m1); // mass weighted 1-D interpolation
+                Fi1 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / ((gi1->m1*(1-blendRatio)) + (gi2->m1 * blendRatio)); // mass weighted 1-D interpolation
                 m_Fi.push_back(Fi1);
                 std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0);
                 std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1);
@@ -1187,6 +1188,18 @@ public:
                 Fm_I_termTwo.push_back(Fm2_I[4]);
 
                 blendRatios.push_back(blendRatio);
+
+                //Store Piola Kirchhoff Stresses
+                Pi1(0,0) = Fm1_I[5];
+                Pi1(0,1) = Fm1_I[6];
+                Pi1(1,0) = Fm1_I[7];
+                Pi1(1,1) = Fm1_I[8];
+                Pi2(0,0) = Fm2_I[5];
+                Pi2(0,1) = Fm2_I[6];
+                Pi2(1,0) = Fm2_I[7];
+                Pi2(1,1) = Fm2_I[8];
+                m_Pi.push_back(Pi1);
+                m_Pi.push_back(Pi2);
             }
             else if(i == (int)finalContourPoints.size() - 2){ //last segment
                 //Compute Fm1 (from actual first point)
@@ -1218,7 +1231,7 @@ public:
                     // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat2 * blendRatio); 
                     // Finterp2 = computeF(gi2->sigma2, gi2->Uquat2, gi2->Vquat2);
                     Finterp2 = gi2->Fi2; //NOTE WE USE FIELD 2 VALUES FOR TOP INTERSECT!!
-                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi2 * gi2->m2 * blendRatio)) / (gi1->m1 + gi2->m2); // mass weighted 1-D interpolation, using field 2
+                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi2 * gi2->m2 * blendRatio)) / ((gi1->m1*(1-blendRatio)) + (gi2->m2 * blendRatio)); // mass weighted 1-D interpolation, using field 2
                 }
                 else{
                     file << "Top Intersect Interpolated Using Field 1\n";
@@ -1227,7 +1240,7 @@ public:
                     // VquatBlend = (gi1->Vquat1 * (1 - blendRatio)) +  (gi2->Vquat1 * blendRatio); 
                     // Finterp2 = computeF(gi2->sigma1, gi2->Uquat1, gi2->Vquat1);
                     Finterp2 = gi2->Fi1; //if not separable, just use field 1
-                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / (gi1->m1 + gi2->m1); // mass weighted 1-D interpolation, using field 1
+                    Fi2 = ((gi1->Fi1 * gi1->m1 * (1 - blendRatio)) + (gi2->Fi1 * gi2->m1 * blendRatio)) / ((gi1->m1*(1-blendRatio)) + (gi2->m1 * blendRatio)); // mass weighted 1-D interpolation, using field 1
                 }
                 m_Fi_Interpolated.push_back(Finterp2);
                 // Fi2 = computeF(sigmaBlend, UquatBlend, VquatBlend);
@@ -1254,6 +1267,18 @@ public:
                 Fm_I_termTwo.push_back(Fm2_I[4]);
 
                 blendRatios.push_back(blendRatio);
+
+                //Store Piola Kirchhoff Stresses
+                Pi1(0,0) = Fm1_I[5];
+                Pi1(0,1) = Fm1_I[6];
+                Pi1(1,0) = Fm1_I[7];
+                Pi1(1,1) = Fm1_I[8];
+                Pi2(0,0) = Fm2_I[5];
+                Pi2(0,1) = Fm2_I[6];
+                Pi2(1,0) = Fm2_I[7];
+                Pi2(1,1) = Fm2_I[8];
+                m_Pi.push_back(Pi1);
+                m_Pi.push_back(Pi2);
             }
             else{ //rest of the non-intersect segments
                 DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
@@ -1285,6 +1310,18 @@ public:
                 Fm_I_NormalY.push_back(Fm2_I[2]);
                 Fm_I_W.push_back(Fm2_I[3]);
                 Fm_I_termTwo.push_back(Fm2_I[4]);
+
+                //Store Piola Kirchhoff Stresses
+                Pi1(0,0) = Fm1_I[5];
+                Pi1(0,1) = Fm1_I[6];
+                Pi1(1,0) = Fm1_I[7];
+                Pi1(1,1) = Fm1_I[8];
+                Pi2(0,0) = Fm2_I[5];
+                Pi2(0,1) = Fm2_I[6];
+                Pi2(1,0) = Fm2_I[7];
+                Pi2(1,1) = Fm2_I[8];
+                m_Pi.push_back(Pi1);
+                m_Pi.push_back(Pi2);
             }
 
             //store Fsum_I for debugging
@@ -1337,8 +1374,9 @@ public:
         file << "Finterp2:" << m_Fi_Interpolated[1] << "\n";
         for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
             file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
-            file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << " \n";
-            file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << " \n";
+            file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";
+            file << "-----\n"; 
+            file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << "\nPi2: " << m_Pi[(i*2)+1] << " \n";
         }
         file << "------Top Intersection Interpolation (last point in contour)------\n";
         file << "Finterp1:" << m_Fi_Interpolated[2] << "\n";
@@ -1420,6 +1458,7 @@ public:
         //NOTE: It is MUCH easier to hardcode the elasticity model here, so if we change the constitutive model we NEED to change this here as well!!
         T W = 0;
         T termTwo = 0;
+        Matrix<T, dim, dim> Pi;
         int elasticityMode = 1; //0 = LINEAR, 1 = FCR
         if(elasticityMode == 0){
             //LINEAR ELASTICITY
@@ -1428,7 +1467,6 @@ public:
             W = mu * epsilon.squaredNorm() + la * 0.5 * tr_epsilon * tr_epsilon; // W = psi(epsilon)
 
             //Compute Piola Kirchhoff stress
-            Matrix<T, dim, dim> Pi;
             Matrix<T, dim, dim> R = Matrix<T, dim, dim>::Identity();
             Pi.noalias() = 2 * mu * R * epsilon + la * tr_epsilon * R;
             
@@ -1443,7 +1481,6 @@ public:
             W = mu * (sigma - Vector<T, dim>::Ones()).squaredNorm() + T(0.5) * la * std::pow(sigma.prod() - T(1), 2);
 
             //Compute Piola Kirchhoff stress
-            Matrix<T, dim, dim> Pi;
             T J = Fi.determinant();
             Matrix<T, dim, dim> JFinvT;
             Math::cofactor(Fi, JFinvT);
@@ -1466,6 +1503,10 @@ public:
         FmResults.push_back(normal[1]);
         FmResults.push_back(W);
         FmResults.push_back(termTwo);
+        FmResults.push_back(Pi(0,0));
+        FmResults.push_back(Pi(0,1));
+        FmResults.push_back(Pi(1,0));
+        FmResults.push_back(Pi(1,1)); //components of Pi
 
         return FmResults;
     }

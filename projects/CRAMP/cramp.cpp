@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.5mm_newTensorTransfer_redux");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.25mm_newTensorTransfer_sigmaA_2600");
 
         //material
         T E = 2.6e6;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.25e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -172,28 +172,28 @@ int main(int argc, char *argv[])
         sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
 
         //Add Boundary Conditions
-        bool singlePuller = false;
-        T yTop = y2 - 0.5e-3;
-        T yBottom = y1 + 0.5e-3;
-        T u2 = 0.2e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
-        T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
-        T speed = (u2 / 2.0) / pullTime;
-        std::cout << "speed:" << speed << std::endl;
-        // T sigmaA = 400e5;
-        // T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
-        // //rampTime = 0.0;
-        // sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
-        if(singlePuller){
-            //fix bottom constant, pull on top the full u2
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
-        }
-        else{
-            //pull from top and bottom, each pulling u2/2
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
-        }
+        // bool singlePuller = false;
+        // T yTop = y2 - 0.5e-3;
+        // T yBottom = y1 + 0.5e-3;
+        // T u2 = 0.2e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        // T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
+        // T speed = (u2 / 2.0) / pullTime;
+        // std::cout << "speed:" << speed << std::endl;
+        // if(singlePuller){
+        //     //fix bottom constant, pull on top the full u2
+        //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+        //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        // }
+        // else{
+        //     //pull from top and bottom, each pulling u2/2
+        //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+        //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        // }
         
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+
         // T simpleDampFactor = 0.5;
         // T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
         // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
