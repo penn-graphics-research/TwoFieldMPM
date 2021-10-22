@@ -339,6 +339,8 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
     Field<T> F22(_vertices.size());
     Field<T> F12(_vertices.size());
 
+    //Logging::info("Fields Initialized");
+
     //formatting vector fields
     if constexpr (dim == 2) {
         tbb::parallel_for((size_t)0, _vertices.size(), [&](size_t i) {
@@ -363,34 +365,44 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         });
     }
 
+    // Logging::info("Vector Fields Formatted");
+    // Logging::info("Vertices.size: ", _vertices.size());
+    // Logging::info("_m_F.size():", _m_F.size());
+    // Logging::info("_m_cauchy.size():", _m_cauchy.size());
+
     //formatting the rest of the scalar fields
     tbb::parallel_for((size_t)0, _vertices.size(), [&](size_t i) {
+        //Logging::info("trying i=", i);
+        
         mass[i] = masses[i];
         d[i] = damage[i];
         sp[i] = _sp[i];
         markers[i] = _markers[i];
-        if(_m_F.size() > 0){
-            F11[i] = _m_F[i](0,0);
-            F22[i] = _m_F[i](1,1);
-            F12[i] = _m_F[i](0,1);
+        if(markers[i] == 0){ //only write the rest if these are actual particles (rather than crack particles)
+            if(_m_F.size() > 0){
+                F11[i] = _m_F[i](0,0);
+                F22[i] = _m_F[i](1,1);
+                F12[i] = _m_F[i](0,1);
+            }
+            else{
+                F11[i] = 1.0;
+                F22[i] = 1.0;
+                F12[i] = 0.0;
+            }
+            if(_m_cauchy.size() > 0){
+                sigma11[i] = _m_cauchy[i](0,0);
+                sigma22[i] = _m_cauchy[i](1,1);
+                sigma12[i] = _m_cauchy[i](0,1);
+            }
+            else{
+                sigma11[i] = 0.0;
+                sigma22[i] = 0.0;
+                sigma12[i] = 0.0;
+            }
         }
-        else{
-            F11[i] = 1.0;
-            F22[i] = 1.0;
-            F12[i] = 0.0;
-        }
-        if(_m_cauchy.size() > 0){
-            sigma11[i] = _m_cauchy[i](0,0);
-            sigma22[i] = _m_cauchy[i](1,1);
-            sigma12[i] = _m_cauchy[i](0,1);
-        }
-        else{
-            sigma11[i] = 0.0;
-            sigma22[i] = 0.0;
-            sigma12[i] = 0.0;
-        }
-        
     });
+
+    //Logging::info("Scalar Fields Formatted");
 
     std::ofstream outstream_binary;
     if (binary)
@@ -436,6 +448,8 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         file.add_properties_to_element("vertex", { "F22" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(F22.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "F12" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(F12.data()), tinyply::Type::INVALID, 0);
     }
+
+    //Logging::info("Properties Added");
 
     if (binary)
         file.write(outstream_binary, true);

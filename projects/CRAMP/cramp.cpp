@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.25mm_newTensorTransfer_sigmaA_2600");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.2mm_newTensorTransfer_sigmaA_2600");
 
         //material
         T E = 2.6e6;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.25e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.2e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -211,6 +211,17 @@ int main(int argc, char *argv[])
         sim.contourRadii.push_back(7);
         sim.contourRadii.push_back(8);
         sim.contourRadii.push_back(9); //contour Radii to test
+
+        sim.contourRadii.push_back(10); //for dx = 0.25mm
+        sim.contourRadii.push_back(11);
+        sim.contourRadii.push_back(12);
+        sim.contourRadii.push_back(13);
+        sim.contourRadii.push_back(14);
+        sim.contourRadii.push_back(15);
+        sim.contourRadii.push_back(16);
+        sim.contourRadii.push_back(17);
+        sim.contourRadii.push_back(18);
+        sim.contourRadii.push_back(19);
 
         sim.run(start_frame);
     }
@@ -473,7 +484,7 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
-    //Plane Strain Tension Test
+    // Uniaxial Tension Test (Previously Plane Strain Tension Test)
     if (testcase == 205) {
 
         //Fibrin Parameters from Tutwiler2020
@@ -485,7 +496,7 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        MPM::CRAMPSimulator<T, dim> sim("output/planeStrainTension_E2.6e6_nu0.25_u2_1mm");
+        MPM::CRAMPSimulator<T, dim> sim("output/uniaxialTension_E2.6e6_nu0.25_u2_1mm_u1_toBalance");
 
         //material
         T E = 2.6e6;
@@ -537,17 +548,13 @@ int main(int argc, char *argv[])
         //sim.sampleGridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Boundary Conditions
-        bool singlePuller = true;
-        T yTop = y2 - 0.5e-3;
-        T yBottom = y1 + 0.5e-3;
+        bool singlePuller = false;
+        T gripMargin = 0.5e-3;
+        T yTop = y2 - gripMargin;
+        T yBottom = y1 + gripMargin;
         T u2 = 1.0e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
         T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
         T speed = (u2 / 2.0) / pullTime;
-        std::cout << "speed:" << speed << std::endl;
-        // T sigmaA = 400e5;
-        // T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
-        // //rampTime = 0.0;
-        // sim.addMode1Loading(yTop, yBottom, sigmaA, rampTime);
         if(singlePuller){
             //fix bottom constant, pull on top the full u2
             sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
@@ -558,6 +565,13 @@ int main(int argc, char *argv[])
             sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
             sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
         }
+
+        T xLeft = x1 + gripMargin;
+        T xRight = x2 - gripMargin;
+        T u1 = -nu * u2 * (width / height);
+        T speedX = (u1 / 2.0) / pullTime;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(xLeft, 0), Vector<T, dim>(1, 0), Vector<T, dim>(speedX, 0), pullTime)); //left puller (pull u1/2)
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(xRight, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(-speedX, 0), pullTime)); //right puller (pull u1/2)
 
         sim.run(start_frame);
     }

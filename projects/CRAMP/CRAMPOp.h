@@ -1447,13 +1447,6 @@ public:
             }
         }
 
-        //intersect = 0 for regular call to Fm (we don't expect this to ever be a separable node)
-        //intersect = 1 for a bottom intersect interpolation with the separable node -> use only Field 1
-        //intersect = 2 for a top intersect interpolation with the separable node -> use only Field 2
-        //NOTE: for separable nodes we will ONLY use one or the other field, the field that points in the direction of the current segment
-        //NOTE: so, for example, we use field 1 (points down from crack) for interpolating the bottom intersect, and field 2 (points up from crack) for the top intersect
-        //Now we must reconstruct our deformation gradient from the singular values and quaternion rotations F = U Sigma V^T
-
         //Compute strain energy density, W (elastic potential energy density)
         //NOTE: It is MUCH easier to hardcode the elasticity model here, so if we change the constitutive model we NEED to change this here as well!!
         T W = 0;
