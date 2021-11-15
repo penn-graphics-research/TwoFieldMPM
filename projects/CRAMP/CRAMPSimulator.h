@@ -105,14 +105,18 @@ public:
 
     //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
+    bool computeJIntegral = false;
     Field<T> m_sigmaYY; //used for stress ahead of crack tip
     Field<T> m_r;
     Field<T> m_posX;
     Field<int> m_idx;
     T stressSnapshotTime = 0;
     T halfEnvelope = 0;
-    std::vector<int> contourRadii;
-    int contourRadius = 2;
+    std::vector<Vector<int,4>> contourRadii; //holds contours defined by 4 integers: L, M, N, O (L left of center, D down from center, R right of center, U up from center)
+    std::vector<Vector<T,dim>> contourCenters; //center points of the contours
+    std::vector<T> contourTimes; //hold the times to take the contours
+    int contourIdx = 0;
+
 
     //Data for Simple Damping
     bool useSimpleDamping = true;
@@ -394,25 +398,35 @@ public:
             stressSnapshot();
             writeStressSnapshot(elapsedTime);
 
-            //Collect grid forces, grid nominal stress (P), and grid def grad (F) -- all to compute J-Integral!
+            std::cout << "Stress Snapshot Computed..." << std::endl;
+
+        }
+
+        //Now compute all J-integral contours for the next time stamp (if it's time) (e.g. t = 0.5s, 0.7s, ...)
+        if(computeJIntegral && elapsedTime >= contourTimes[contourIdx]){
+
+            //Mark Jintegral computation as finished if necessary
+            contourIdx++;
+            if(contourIdx >= (int)contourTimes.size()){
+                computeJIntegral = false;
+            }
+
+            //Collect mu and lambda
             for (auto& model : Base::elasticity_models){
                 m_mu = model->m_mu;
                 m_la = model->m_lambda;
             }
-            Bow::CRAMP::CollectJIntegralGridDataOp<T,dim>collectJIntegralGridData{ {}, Base::m_X, Base::stress, m_F, particleAF, grid, Base::dx, dt, useDFG };
-            collectJIntegralGridData();
 
-            //As part of the stress snapshot let's also compute the J-integral!
-            //We will compute the J integral using however many contour radii the user asks for
+            //For this time, we will compute the J integral using however many contour radii the user asks for
             std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, crackTip, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
-                computeJIntegral(contourRadii[i], jIntFile);
+                computeJIntegral(contourCenters[i], contourRadii[i], jIntFile);
             }
             jIntFile.close();
 
-            std::cout << "Stress Snapshot and J Integral Computed..." << std::endl;
+            std::cout << "J Integral Computed At t = " << elapsedTime << std::endl;
         }
 
         //If Loading this specimen:
@@ -561,6 +575,20 @@ public:
         stressSnapshotTime = _time;
         halfEnvelope = _envelope;
         takeStressSnapshot = true;
+    }
+
+    //Add a contour for us to take the J-integral over
+    //NOTE: for ALL times we will calculate ALL contours (for more elegant design)
+    void addJIntegralContour(Vector<T,dim> _center, Vector<int,4> _contour){
+        contourRadii.push_back(_contour);
+        contourCenters.push_back(_center);
+    }
+    //Add times for these contours to be integrated over, ONLY CALL THIS ONCE WITH FULL LIST OF TIMES!
+    void addJIntegralTiming(std::vector<T>& _times){
+        BOW_ASSERT_INFO(!computeJIntegral, "ERROR: Only call addJIntegralTimes once");
+        computeJIntegral = true;
+        contourTimes = _times;
+        contourIdx = 0;
     }
 
     //------------TIME STEP--------------

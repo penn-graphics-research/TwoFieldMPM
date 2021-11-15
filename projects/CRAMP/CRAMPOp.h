@@ -966,7 +966,6 @@ public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
     
-    Vector<T,dim> crackTip;
     int topPlane_startIdx;
     int bottomPlane_startIdx;
 
@@ -979,7 +978,7 @@ public:
     T mu;
     T la;
 
-    void operator()(int contourRadius, std::ofstream& file)
+    void operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
     {
         BOW_TIMER_FLAG("computeJIntegral");
 
@@ -989,8 +988,8 @@ public:
         //Iterate a rectangular contour around the closest node to the crack tip --> COUNTER CLOCKWISE STARTING FROM TOP LEFT NODE
         std::vector<Vector<T,dim>> contourPoints;
         std::vector<DFGMPM::GridState<T,dim>*> contourGridStates;
-        BSplineWeights<T, dim> spline(crackTip, dx);
-        grid.iterateRectangularContour(spline, contourRadius, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+        BSplineWeights<T, dim> spline(center, dx);
+        grid.iterateRectangularContour(spline, contour[0], contour[1], contour[2], contour[3], [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             Vector<T,dim> xi = node.template cast<T>() * dx;
             //Grab data
             contourPoints.push_back(xi);
@@ -1363,7 +1362,7 @@ public:
         T K_II_planeStrain = K_II_factor * planeStrainFactor;
 
         //Print it all out (later write to a simple file)
-        file << "====================================================== J-Integral Computation using " << contourRadius << "x" << contourRadius << " Contour ======================\n";
+        file << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour ======================\n";
         file << "Bottom Intersection | Idx: " << bottomIntersectionIdx << " Point: (" << bottomIntersection[0] << "," << bottomIntersection[1] << "), Blend Ratio: " << blendRatios[0] << " \n";
         file << "Top Intersection | Idx: " << topIntersectionIdx << " Point: (" << topIntersection[0] << "," << topIntersection[1] << "), Blend Ratio: " << blendRatios[1] << "\n";
         // for(int i = 0; i < (int)finalContourPoints.size(); ++i){

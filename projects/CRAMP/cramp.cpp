@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000_verbose");
 
         //material
         T E = 2.6e6;
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
         sim.fricCoeff = 0.4;
         
         //Debug mode
-        sim.verbose = false;
+        sim.verbose = true;
         sim.writeGrid = true;
         
         //Compute time step for symplectic
@@ -199,30 +199,20 @@ int main(int argc, char *argv[])
         // T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
         // sim.addSimpleDamping(simpleDampFactor, simpleDampStartTime, simpleDampDuration);
 
-        T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
+        //T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
         //snapshotTime = sim.frame_dt * 3000; //take snapshot at frame 3000
-        T halfEnvelope = sim.dx;
-        sim.addStressSnapshot(snapshotTime, halfEnvelope);
-        sim.contourRadii.push_back(1);
-        sim.contourRadii.push_back(2);
-        sim.contourRadii.push_back(3);
-        sim.contourRadii.push_back(4);
-        sim.contourRadii.push_back(5);
-        sim.contourRadii.push_back(6);
-        sim.contourRadii.push_back(7);
-        sim.contourRadii.push_back(8);
-        sim.contourRadii.push_back(9); //contour Radii to test
-
-        sim.contourRadii.push_back(10); //for dx = 0.25mm
-        sim.contourRadii.push_back(11);
-        sim.contourRadii.push_back(12);
-        sim.contourRadii.push_back(13);
-        sim.contourRadii.push_back(14);
-        sim.contourRadii.push_back(15);
-        sim.contourRadii.push_back(16);
-        sim.contourRadii.push_back(17);
-        sim.contourRadii.push_back(18);
-        sim.contourRadii.push_back(19);
+        //T halfEnvelope = sim.dx;
+        //sim.addStressSnapshot(snapshotTime, halfEnvelope);
+        
+        //Add Contours
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(1,2,3,4));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(2,4,6,8));
+        
+        //Add timing for contours (NOTE: without this we wont calculate anything!)
+        std::vector<T> contourTimes;
+        contourTimes.push_back(sim.frame_dt * 5);
+        contourTimes.push_back(sim.frame_dt * 10);
+        sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
     }
