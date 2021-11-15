@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000_verbose");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000_newContours");
 
         //material
         T E = 2.6e6;
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
         sim.fricCoeff = 0.4;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
         
         //Compute time step for symplectic
@@ -205,13 +205,16 @@ int main(int argc, char *argv[])
         //sim.addStressSnapshot(snapshotTime, halfEnvelope);
         
         //Add Contours
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(1,2,3,4));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(2,4,6,8));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        contourTimes.push_back(sim.frame_dt * 5);
-        contourTimes.push_back(sim.frame_dt * 10);
+        contourTimes.push_back(sim.frame_dt * 2000);
+        contourTimes.push_back(sim.frame_dt * 2500);
+        contourTimes.push_back(sim.frame_dt * 3000);
+        contourTimes.push_back(sim.frame_dt * 3500);
+        contourTimes.push_back(sim.frame_dt * 3999);
         sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
