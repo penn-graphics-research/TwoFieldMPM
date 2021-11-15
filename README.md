@@ -1,12 +1,14 @@
 # TwoFieldMPM - Run by Bow
 ![C/C++ CI](https://github.com/penn-graphics-research/Bow/workflows/C/C++%20CI/badge.svg)
 
-# Compile
+# Compile CRAMP (and replicate high-res memory leak)
 ``` bash
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j8
+make cramp -j8
+cd bin
+./cramp 201
 ```
 or 
 ``` bash
