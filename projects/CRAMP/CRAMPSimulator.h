@@ -117,7 +117,8 @@ public:
     //Data for Simple Damping
     bool useSimpleDamping = true;
     T simpleDampingFactor = 0.5;
-    T simpleDampingDuration = 0.0;
+    T simpleDampingStartTime = 0.0;
+    T simpleDampingEndTime = 0.0;
 
     SERIALIZATION_REGISTER(m_cauchy)
     SERIALIZATION_REGISTER(Dp)
@@ -466,7 +467,7 @@ public:
         std::cout << "G2P done..." << std::endl;
 
         //Now damp particle velocities if we want damping
-        if(useSimpleDamping && elapsedTime < simpleDampingDuration){
+        if(useSimpleDamping && (elapsedTime < simpleDampingEndTime) && (elapsedTime > simpleDampingStartTime)){
             //Use simple damping
             Bow::CRAMP::SimpleDampingOp<T, dim> applySimpleDamping{ {}, Base::m_V, simpleDampingFactor, grid };
             applySimpleDamping();
@@ -620,10 +621,11 @@ public:
     }
 
     //Add simple damping routine (multiply particle velocities after G2P by dampFactor)
-    void addSimpleDamping(T _factor, T _duration){
+    void addSimpleDamping(T _factor, T _startTime, T _duration){
         useSimpleDamping = true;
         simpleDampingFactor = _factor;
-        simpleDampingDuration = _duration;
+        simpleDampingStartTime = _startTime;
+        simpleDampingEndTime = _startTime + _duration;
     }
 
     //------------PARTICLE SAMPLING--------------

@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_displacementBoundary_dx0.2mm_newTensorTransfer_sigmaA_2600");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000");
 
         //material
         T E = 2.6e6;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.2e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.25e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 4000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
@@ -191,15 +191,16 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 500; //ramp up to full sigmaA over 500 frames
+        T rampTime = sim.frame_dt * 2000; //ramp up to full sigmaA over 500 frames
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
+        // T simpleDampStartTime = sim.frame_dt * 500; //start damping once we reach the full load (rampTime over)
         // T simpleDampDuration = sim.frame_dt * 500; //for 1500 frames, damp
-        // sim.addSimpleDamping(simpleDampFactor, simpleDampDuration);
+        // sim.addSimpleDamping(simpleDampFactor, simpleDampStartTime, simpleDampDuration);
 
         T snapshotTime = sim.frame_dt * (sim.end_frame - 1); //1950; //take snapshot after damping, around 1600
-        //snapshotTime = sim.frame_dt * 6;
+        //snapshotTime = sim.frame_dt * 3000; //take snapshot at frame 3000
         T halfEnvelope = sim.dx;
         sim.addStressSnapshot(snapshotTime, halfEnvelope);
         sim.contourRadii.push_back(1);
