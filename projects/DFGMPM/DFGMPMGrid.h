@@ -260,10 +260,60 @@ public:
             BOW_TIMER_FLAG("reset grid");
             for (int i = 0; i < (int)fat_blocks.second; ++i) {
                 auto offset = fat_blocks.first[i];
-                std::memset((T*)&grid_array(offset), 0, 1 << log2_page);
                 auto* g = reinterpret_cast<GridState<T, dim>*>(&grid_array(offset));
-                for (int k = 0; k < (int)SparseMask::elements_per_block; ++k)
+                for (int k = 0; k < (int)SparseMask::elements_per_block; ++k) {
+                    g[k].x1 = Vector<T, dim>::Zero();
+                    g[k].x2 = Vector<T, dim>::Zero();
+                    g[k].m1 = 0;
+                    g[k].m2 = 0;
+
+                    g[k].d1 = Vector<T, 2>::Zero();
+                    g[k].d2 = Vector<T, 2>::Zero();
+                    g[k].v1 = Vector<T, dim>::Zero();
+                    g[k].v2 = Vector<T, dim>::Zero();
+                    g[k].vn1 = Vector<T, dim>::Zero();
+                    g[k].vn2 = Vector<T, dim>::Zero();
+                    g[k].a1 = Vector<T, dim>::Zero();
+                    g[k].a2 = Vector<T, dim>::Zero();
+                    g[k].n1 = Vector<T, dim>::Zero();
+                    g[k].n2 = Vector<T, dim>::Zero();
+                    g[k].fct1 = Vector<T, dim>::Zero();
+                    g[k].fct2 = Vector<T, dim>::Zero();
+                    g[k].fi1 = Vector<T, dim>::Zero();
+                    g[k].fi2 = Vector<T, dim>::Zero();
+                    g[k].sigma1 = Vector<T, dim>::Zero();
+                    g[k].sigma2 = Vector<T, dim>::Zero();
+                    g[k].Uquat1 = Vector<T, 4>::Zero();
+                    g[k].Uquat2 = Vector<T, 4>::Zero();
+                    g[k].Vquat1 = Vector<T, 4>::Zero();
+                    g[k].Vquat2 = Vector<T, 4>::Zero();
+
+                    //To transfer cauchy stress and def grad to the grid
+                    g[k].cauchy1 = Matrix<T, dim, dim>::Zero();
+                    g[k].cauchy2 = Matrix<T, dim, dim>::Zero();
+                    g[k].Fi1 = Matrix<T, dim, dim>::Zero();
+                    g[k].Fi2 = Matrix<T, dim, dim>::Zero();
+
+                    //DOF Tracking
                     g[k].idx = -1;
+                    g[k].sep_idx = -1;
+
+                    //DFG Specific Structures
+                    g[k].gridDG = Vector<T, dim>::Zero();
+                    g[k].gridMaxNorm = 0; // maximum DG norm found for this grid node, this will later help to determine the grid DG
+                    g[k].gridSeparability = Vector<T, 4>::Zero(); //each grid node has a seperability condition for each field and we need to add up the numerator and denominator
+                    g[k].gridMaxDamage = Vector<T, 2>::Zero(); //store max damage from each field mapping to this node
+                    g[k].separable = 0; //0 = single field, 1 = two field
+
+                    //Barrier Functions (Implicit Only)
+                    g[k].gridViYi1 = 0;
+                    g[k].gridViYi2 = 0;
+                    g[k].gridCi = 0;
+
+                    //Neighbor Search
+                    g[k].mappedParticles.clear();
+                    g[k].padding = Vector<T, (92 * dim) - 152>::Zero();
+                }
             }
         }
         {
