@@ -32,7 +32,13 @@ public:
     void operator()()
     {
         BOW_TIMER_FLAG("backGridSort");
+
+        //First, clear mappedParticles for all grid nodes
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            g.mappedParticles.clear();
+        });
         
+        //Now we can do backGrid sorting!
         grid.serial_for([&](int i) {   
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them        
                 const Vector<T, dim> pos = m_X[i];
