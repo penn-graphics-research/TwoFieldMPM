@@ -18,6 +18,7 @@ public:
     std::string output_directory = "simulation_outputs/";
     bool line_search = true;
 
+
     virtual void initialize(){};
     virtual T calculate_dt() { return this->suggested_dt; };
     virtual void restart_prepare(){};
@@ -68,7 +69,7 @@ public:
             }
             if ((f + 1) % frame_batch == 0) {
                 dump_output(f + 1);
-                SERIALIZATION_SAVE(this->output_directory + "/restart_" + std::to_string(f + 1));
+                //SERIALIZATION_SAVE(this->output_directory + "/restart_" + std::to_string(f + 1));
             }
         }
     }

@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp2000_newContours");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp4000_12000frames");
 
         //material
         T E = 2.6e6;
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.25e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 4000;
+        sim.end_frame = 12000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 2000; //ramp up to full sigmaA over 500 frames
+        T rampTime = sim.frame_dt * 4000; //ramp up to full sigmaA over 500 frames
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
@@ -205,16 +205,39 @@ int main(int argc, char *argv[])
         //sim.addStressSnapshot(snapshotTime, halfEnvelope);
         
         //Add Contours
+        
+        //contain crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
+
+        //do not contain crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        contourTimes.push_back(sim.frame_dt * 2000);
-        contourTimes.push_back(sim.frame_dt * 2500);
-        contourTimes.push_back(sim.frame_dt * 3000);
-        contourTimes.push_back(sim.frame_dt * 3500);
-        contourTimes.push_back(sim.frame_dt * 3999);
+        // contourTimes.push_back(sim.frame_dt * 2000);
+        // contourTimes.push_back(sim.frame_dt * 2500);
+        // contourTimes.push_back(sim.frame_dt * 3000);
+        // contourTimes.push_back(sim.frame_dt * 3500);
+        contourTimes.push_back(sim.frame_dt * 4000);
+        contourTimes.push_back(sim.frame_dt * 4500);
+        contourTimes.push_back(sim.frame_dt * 5000);
+        contourTimes.push_back(sim.frame_dt * 5500);
+        contourTimes.push_back(sim.frame_dt * 6000);
+        contourTimes.push_back(sim.frame_dt * 6500);
+        contourTimes.push_back(sim.frame_dt * 7000);
+        contourTimes.push_back(sim.frame_dt * 7500);
+        contourTimes.push_back(sim.frame_dt * 8000);
+        contourTimes.push_back(sim.frame_dt * 8500);
+        contourTimes.push_back(sim.frame_dt * 9000);
+        contourTimes.push_back(sim.frame_dt * 9500);
+        contourTimes.push_back(sim.frame_dt * 10000);
+        contourTimes.push_back(sim.frame_dt * 10500);
+        contourTimes.push_back(sim.frame_dt * 11000);
+        contourTimes.push_back(sim.frame_dt * 11500);
+        contourTimes.push_back(sim.frame_dt * 11999);
         sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
@@ -661,6 +684,110 @@ int main(int argc, char *argv[])
         //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
         //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
         // }
+
+        sim.run(start_frame);
+    }
+
+    //SENT specimen but with wider crack so MPM can handle it without DFG
+    if (testcase == 207) {
+        
+        //Fibrin Parameters from Tutwiler2020
+        // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
+        // folded state stiffness,      cf = 4.4e4 N/m^2
+        // unfolded state stiffness,    cu = 2.6e6 N/m^2
+        // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
+
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_withWiderCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 1200; //need to simulate around 9 to 12 seconds to remove oscillations
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.useDFG = false;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = 0.2e-3;
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, Vector<T, dim>(0, 0), ppc, rho);
+
+        //Add Tracton Boundary Condition        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 400; //ramp up to full sigmaA over 500 frames
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Contours
+        
+        /*
+        //contain crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
+
+        //do not contain crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
+        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
+        
+        //Add timing for contours (NOTE: without this we wont calculate anything!)
+        std::vector<T> contourTimes;
+        // contourTimes.push_back(sim.frame_dt * 2000);
+        // contourTimes.push_back(sim.frame_dt * 2500);
+        // contourTimes.push_back(sim.frame_dt * 3000);
+        // contourTimes.push_back(sim.frame_dt * 3500);
+        contourTimes.push_back(sim.frame_dt * 4000);
+        contourTimes.push_back(sim.frame_dt * 4500);
+        contourTimes.push_back(sim.frame_dt * 5000);
+        contourTimes.push_back(sim.frame_dt * 5500);
+        contourTimes.push_back(sim.frame_dt * 6000);
+        contourTimes.push_back(sim.frame_dt * 6500);
+        contourTimes.push_back(sim.frame_dt * 7000);
+        contourTimes.push_back(sim.frame_dt * 7500);
+        contourTimes.push_back(sim.frame_dt * 8000);
+        contourTimes.push_back(sim.frame_dt * 8500);
+        contourTimes.push_back(sim.frame_dt * 9000);
+        contourTimes.push_back(sim.frame_dt * 9500);
+        contourTimes.push_back(sim.frame_dt * 10000);
+        contourTimes.push_back(sim.frame_dt * 10500);
+        contourTimes.push_back(sim.frame_dt * 11000);
+        contourTimes.push_back(sim.frame_dt * 11500);
+        contourTimes.push_back(sim.frame_dt * 11999);
+        sim.addJIntegralTiming(contourTimes);*/
 
         sim.run(start_frame);
     }

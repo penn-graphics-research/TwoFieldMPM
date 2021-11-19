@@ -187,21 +187,23 @@ public:
         
         Bow::Logging::info("Simulation starts with ", std::is_same<T, double>::value ? "double" : "float", " ", dim);
 
-        l0 = 0.5 * Base::dx;
-        if constexpr (dim == 2) {
-            rp = sqrt(2.0 * Base::dx * Base::dx);
-        }
-        else if constexpr (dim == 3) {
-            rp = sqrt(3.0 * Base::dx * Base::dx);
-        }
+        if(useDFG){
+            l0 = 0.5 * Base::dx;
+            if constexpr (dim == 2) {
+                rp = sqrt(2.0 * Base::dx * Base::dx);
+            }
+            else if constexpr (dim == 3) {
+                rp = sqrt(3.0 * Base::dx * Base::dx);
+            }
 
-        //Initialize particle neighbor lists
-        for (size_t i = 0; i < Base::m_X.size(); ++i) {
-            std::vector<int> placeholder, placeholder2, placeholder3;
-            particleNeighbors.push_back(placeholder);
-            particleAF.push_back(placeholder2);
-            p_cached_idx.push_back(placeholder3);
-        }        
+            //Initialize particle neighbor lists
+            for (size_t i = 0; i < Base::m_X.size(); ++i) {
+                std::vector<int> placeholder, placeholder2, placeholder3;
+                particleNeighbors.push_back(placeholder);
+                particleAF.push_back(placeholder2);
+                p_cached_idx.push_back(placeholder3);
+            }     
+        }   
 
         //Initialize sigmaC if we are using damage
         if(useDamage){
@@ -280,7 +282,9 @@ public:
     void p2g(T dt){
         if(!useDFG){
             //if single field MPM, sort particles before P2G (for two field we already did this)
+            Bow::Logging::info("Starting sorting particles for single-field MPM...");
             grid.sortParticles(Base::m_X, Base::dx);
+            Bow::Logging::info("Finished sorting particles for single-field MPM...");
         }
         if(Base::symplectic){
             //Now compute forces for P2G and grid update (ONLY FOR SYMPLECTIC)
@@ -351,10 +355,12 @@ public:
     /* Write our own advance function to override*/
     void advance(T dt) override
     {
-        if(!initialized){
-            initialize();
-            std::cout << "Initialized..." << std::endl;
-        }
+        // if(!initialized){
+        //     initialize();
+        //     std::cout << "Initialized..." << std::endl; //initialize() is already called by PhysicallyBasedSimulator.h befroe the main advance loop, this is redundant
+        // }
+
+        std::cout << "Begin advance with dt= " << dt << std::endl;
 
         //Always collect cauchy and F for each particle for analysis
         for (auto& model : Base::elasticity_models){
@@ -363,7 +369,9 @@ public:
             m_FSmoothed = model->m_F; //dummy values to set up the right size
             m_cauchySmoothed = model->m_F; //dummy vals
         }
-            
+
+        std::cout << "Finished collecting F and Cauchy..." << std::endl;
+
         if(useDFG) {
             //DFG specific routines (partitioning)
             partitioningRoutines();
@@ -901,6 +909,79 @@ public:
             //Now check to make sure this is outside the desired hole
             T dist = (position - center).norm();
             if(dist > radius){ //outside hole
+                Base::m_X.push_back(position);
+                Base::m_V.push_back(velocity);
+                Base::m_C.push_back(TM::Zero());
+                Base::m_mass.push_back(density * vol);
+                Base::stress.push_back(TM::Zero());
+                m_cauchy.push_back(TM::Zero());
+                Dp.push_back(0.0);
+                damageLaplacians.push_back(0.0);
+                if(offset[0] == 0 || offset[1] == 0 || offset[0] == region[0] - 1 || offset[1] == region[1] - 1){
+                    sp.push_back(1);
+                }
+                else{
+                    sp.push_back(0);
+                }
+                particleDG.push_back(TV::Zero());
+                dTildeH.push_back(0.0);
+                sigmaC.push_back(10.0);
+                m_marker.push_back(0);
+            }
+            
+        });
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
+    //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
+    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
+    {
+        BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
+        // T width = max_corner[0] - min_corner[0];
+        T height = max_corner[1] - min_corner[1];
+        // T widthMod = fmod(width, Base::dx);
+        // T heightMod = fmod(height, Base::dx);
+        // BOW_ASSERT_INFO(widthMod == Base::dx || widthMod == 0, "width not divisible by dx in sampleGridAlignedBox");
+        // BOW_ASSERT_INFO(heightMod == Base::dx || heightMod == 0, "height not divisible by dx in sampleGridAlignedBox");
+
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
+        Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
+        region(0)++;
+        // region(1)++;
+        // if(dim == 3){
+        //     region(2)++;
+        // }
+        printf("%d %d\n", region(0), region(1));
+        int start = Base::m_X.size();
+        T translation = interval / 2.0;
+        iterateRegion(region, [&](const Vector<int, dim>& offset) {
+            TV position = min_corner + offset.template cast<T>() * interval;
+            position(0) += translation;
+            position(1) += translation;
+            if(dim == 3){
+                position(2) += translation;
+            }
+            //Now check to make sure this is outside the desired notch
+            bool pointIncluded = true;
+            TV center = min_corner;
+            center(0) += length;
+            center(1) += height/2.0;
+            T dist = (position - center).norm();
+            T yMin = min_corner(1) + (height/2.0) - radius;
+            T yMax = min_corner(1) + (height/2.0) + radius;
+            //T xMin = min_corner(0);
+            T xMax = min_corner(0) + length;
+            if(position(1) > yMin && position(1) < yMax && position(0) < xMax){ //excluded rectangle of size length * (2*radius)
+                pointIncluded = false;
+            }
+            if(dist < radius){ //exclude points in a semi circle around the end point of the crack rectangle
+                pointIncluded = false;
+            }
+            if(pointIncluded){ //outside hole
                 Base::m_X.push_back(position);
                 Base::m_V.push_back(velocity);
                 Base::m_C.push_back(TM::Zero());
