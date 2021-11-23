@@ -45,10 +45,10 @@ public:
     // Field<TV> m_bottomPlane;
 
     Field<int> m_marker; //0 = material particle, 1 = crack particle, 2 = top plane, 3 = bottom plane
-    int crackPlane_startIdx;
-    int topPlane_startIdx;
-    int bottomPlane_startIdx;
-    int bottomPlane_endIdx; //only need this one end idx, other end ideces defined by the next start idx
+    int crackPlane_startIdx = 0;
+    int topPlane_startIdx = 0;
+    int bottomPlane_startIdx = 0;
+    int bottomPlane_endIdx = 0; //only need this one end idx, other end ideces defined by the next start idx
     int crackType;
 
     //Mode I Loading Params - pull up on nodes above y1, pull down below y2, all with total stress sigmaA
@@ -428,7 +428,7 @@ public:
             //For this time, we will compute the J integral using however many contour radii the user asks for
             std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0] };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
                 computeJIntegral(contourCenters[i], contourRadii[i], jIntFile);
             }
@@ -935,7 +935,7 @@ public:
     }
 
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
-    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
+    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
     {
         BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
         // T width = max_corner[0] - min_corner[0];
@@ -979,7 +979,9 @@ public:
                 pointIncluded = false;
             }
             if(dist < radius){ //exclude points in a semi circle around the end point of the crack rectangle
-                pointIncluded = false;
+                if(useCircularNotch){
+                    pointIncluded = false;
+                }
             }
             if(pointIncluded){ //outside hole
                 Base::m_X.push_back(position);

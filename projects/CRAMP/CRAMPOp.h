@@ -978,6 +978,8 @@ public:
     T mu;
     T la;
 
+    bool useDFG;
+
     void operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
     {
         BOW_TIMER_FLAG("computeJIntegral");
@@ -1037,7 +1039,7 @@ public:
 
         //NOTE: Now this code greatly diverges between two cases, an INTERSECTING J!= 0 case, and a NON-INTERSECTING J = 0 case
         //INTERSECTION CASE
-        if(foundIntersection){
+        if(useDFG && foundIntersection){
             //STEP 1b: Now look for the lower intersection -> start with topIntersectionIdx since this is the first segment that can have an intersection with the top points
             for(int i = topIntersectionIdx; i < (int)contourPoints.size() - 1; i++){
                 //check each contour line segment for intersections with top crack
@@ -1389,7 +1391,7 @@ public:
             file << "\n";
         }
         //NON-INTERSECTING CASE (J = 0) ==============================================================================
-        else{
+        else if(useDFG && !foundIntersection){
             //STEP 1c: Construct our contour list- in this NON-INTERSECTING case, we simply must ensure that we start and end with the same point
             std::vector<Vector<T,dim>> finalContourPoints;
             std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
@@ -1478,6 +1480,120 @@ public:
             //Print it all out (later write to a simple file)
             file << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
             file << "NON-INTERSECTING CONTOUR CASE (J == 0)" << "\n";
+            for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
+                file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
+                file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";
+                file << "-----\n"; 
+                file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << "\nPi2: " << m_Pi[(i*2)+1] << " \n";
+            }
+            file << "J_I: " << J_I << "\n"; 
+            file << "J_II: " << J_II << "\n";
+            file << "\n";
+        }
+        //SINGLE FIELD MPM - INTERSECTING CASE (J = 0) ==============================================================================
+        else if(!useDFG){
+            //STEP 1c: Construct our contour list- in this SINGLE FIELD INTERSECTING case, we must make sure we start and end at the right points
+            std::vector<Vector<T,dim>> finalContourPoints;
+            std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
+            //Crack intersection
+            int U = contour[3];
+            topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
+            bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
+            
+            //bottom intersect
+            finalContourPoints.push_back(contourPoints[bottomIntersectionIdx]);
+            finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]);
+
+            //now add points counter-clockwise until hit end of list (then we will start from beginning until bottom intersecting segment)
+            for(int i = bottomIntersectionIdx + 1; i < (int)contourPoints.size(); ++i){ //end of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+            for(int i = 0; i < (int)topIntersectionIdx + 1; ++i){ //begin of list
+                finalContourPoints.push_back(contourPoints[i]);
+                finalContourGridStates.push_back(contourGridStates[i]);
+            }
+            //top intersection
+            finalContourPoints.push_back(contourPoints[topIntersectionIdx]);
+            finalContourGridStates.push_back(contourGridStates[topIntersectionIdx]);
+
+            //STEP 2: Compute J-integral!
+            
+            //DEBUG: Setup a bunch of lists to hold intermediate data for debugging
+            std::vector<T> Fsum_I_List;
+            std::vector<T> DeltaI_List;
+            std::vector<T> Fm_I_SegmentList; //Store Fm1 and Fm2 for each line segment so we can check them!
+            std::vector<T> Fm_I_NormalX;
+            std::vector<T> Fm_I_NormalY;
+            std::vector<T> Fm_I_W;
+            std::vector<T> Fm_I_termTwo;
+            std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
+            std::vector<Matrix<T,dim,dim>> m_Pi; //collect computed Piola Kirchhoff Stresses
+            
+            T J_I = 0; //set J integral mode I to 0 for now
+            T J_II = 0; //set J integral mode II to 0 for now
+            for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
+                T Fsum_I = 0; //this is what we focus on setting for each segment (three cases below)
+                T Fsum_II = 0; //mode II
+                Vector<T,dim> x1 = finalContourPoints[i];
+                Vector<T,dim> x2 = finalContourPoints[i+1];
+                Matrix<T,dim,dim> Fi1, Fi2, Finterp1, Finterp2, Pi1, Pi2;
+                DFGMPM::GridState<T,dim>* g1 = finalContourGridStates[i];
+                DFGMPM::GridState<T,dim>* g2 = finalContourGridStates[i+1];
+
+                //Compute F for each endpoint --> NEITHER should be separable in this case
+                Fi1 = g1->Fi1;
+                Fi2 = g2->Fi1;
+                m_Fi.push_back(Fi1);
+                m_Fi.push_back(Fi2);
+
+                std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0);
+                std::vector<T> Fm2_I = computeFm(Fi2, x2 - x1, 0);
+                std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1);
+                std::vector<T> Fm2_II = computeFm(Fi2, x2 - x1, 1);
+                Fsum_I = Fm1_I[0] + Fm2_I[0];
+                Fsum_II = Fm1_II[0] + Fm2_II[0];
+
+                Fm_I_SegmentList.push_back(Fm1_I[0]);
+                Fm_I_NormalX.push_back(Fm1_I[1]);
+                Fm_I_NormalY.push_back(Fm1_I[2]);
+                Fm_I_W.push_back(Fm1_I[3]);
+                Fm_I_termTwo.push_back(Fm1_I[4]);
+
+                Fm_I_SegmentList.push_back(Fm2_I[0]);
+                Fm_I_NormalX.push_back(Fm2_I[1]);
+                Fm_I_NormalY.push_back(Fm2_I[2]);
+                Fm_I_W.push_back(Fm2_I[3]);
+                Fm_I_termTwo.push_back(Fm2_I[4]);
+
+                //Store Piola Kirchhoff Stresses
+                Pi1(0,0) = Fm1_I[5];
+                Pi1(0,1) = Fm1_I[6];
+                Pi1(1,0) = Fm1_I[7];
+                Pi1(1,1) = Fm1_I[8];
+                Pi2(0,0) = Fm2_I[5];
+                Pi2(0,1) = Fm2_I[6];
+                Pi2(1,0) = Fm2_I[7];
+                Pi2(1,1) = Fm2_I[8];
+                m_Pi.push_back(Pi1);
+                m_Pi.push_back(Pi2);
+
+                //store Fsum_I for debugging
+                Fsum_I_List.push_back(Fsum_I);
+
+                //Now after computing Fsum using one of three cases, we can add this contribution to the Jintegral!
+                T deltaI = std::sqrt((x1[0] - x2[0])*(x1[0] - x2[0]) + (x1[1] - x2[1])*(x1[1] - x2[1])); //compute distance from x1 to x2 (the end points of current segment)
+                J_I += Fsum_I * (deltaI / 2.0);
+                J_II += Fsum_II * (deltaI / 2.0);
+
+                DeltaI_List.push_back(deltaI);
+            }
+            Fsum_I_List.push_back(0.0); //dummy for final endpoint
+            DeltaI_List.push_back(0.0);
+
+            //Print it all out (later write to a simple file)
+            file << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
+            file << "SINGLE FIELD MPM - INTERSECTING CONTOUR CASE (J == 0)" << "\n";
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
                 file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
                 file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";

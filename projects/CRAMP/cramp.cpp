@@ -709,7 +709,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 1200; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.end_frame = 1500; //need to simulate around 9 to 12 seconds to remove oscillations
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
@@ -745,7 +745,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = 0.2e-3;
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, false, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Tracton Boundary Condition        
         T sigmaA = 2600; //1000 times smaller than E
@@ -754,40 +754,60 @@ int main(int argc, char *argv[])
         
         //Add Contours
         
-        /*
         //contain crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75)); //LEFT, DOWN, RIGHT, UP
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75));
+        
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125));
+
+        //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
+        //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
 
         //do not contain crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
+        //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
+        //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
+        //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        // contourTimes.push_back(sim.frame_dt * 2000);
+        //contourTimes.push_back(sim.frame_dt * 0.2);
+        // contourTimes.push_back(sim.frame_dt * 200);
         // contourTimes.push_back(sim.frame_dt * 2500);
-        // contourTimes.push_back(sim.frame_dt * 3000);
-        // contourTimes.push_back(sim.frame_dt * 3500);
-        contourTimes.push_back(sim.frame_dt * 4000);
-        contourTimes.push_back(sim.frame_dt * 4500);
-        contourTimes.push_back(sim.frame_dt * 5000);
-        contourTimes.push_back(sim.frame_dt * 5500);
-        contourTimes.push_back(sim.frame_dt * 6000);
-        contourTimes.push_back(sim.frame_dt * 6500);
-        contourTimes.push_back(sim.frame_dt * 7000);
-        contourTimes.push_back(sim.frame_dt * 7500);
-        contourTimes.push_back(sim.frame_dt * 8000);
-        contourTimes.push_back(sim.frame_dt * 8500);
-        contourTimes.push_back(sim.frame_dt * 9000);
-        contourTimes.push_back(sim.frame_dt * 9500);
-        contourTimes.push_back(sim.frame_dt * 10000);
-        contourTimes.push_back(sim.frame_dt * 10500);
-        contourTimes.push_back(sim.frame_dt * 11000);
-        contourTimes.push_back(sim.frame_dt * 11500);
-        contourTimes.push_back(sim.frame_dt * 11999);
-        sim.addJIntegralTiming(contourTimes);*/
+        // contourTimes.push_back(sim.frame_dt * 300);
+        // contourTimes.push_back(sim.frame_dt * 350);
+        contourTimes.push_back(sim.frame_dt * 400);
+        contourTimes.push_back(sim.frame_dt * 450);
+        contourTimes.push_back(sim.frame_dt * 500);
+        contourTimes.push_back(sim.frame_dt * 550);
+        contourTimes.push_back(sim.frame_dt * 600);
+        contourTimes.push_back(sim.frame_dt * 650);
+        contourTimes.push_back(sim.frame_dt * 700);
+        contourTimes.push_back(sim.frame_dt * 750);
+        contourTimes.push_back(sim.frame_dt * 800);
+        contourTimes.push_back(sim.frame_dt * 850);
+        contourTimes.push_back(sim.frame_dt * 900);
+        contourTimes.push_back(sim.frame_dt * 950);
+        contourTimes.push_back(sim.frame_dt * 1000);
+        contourTimes.push_back(sim.frame_dt * 1050);
+        contourTimes.push_back(sim.frame_dt * 1100);
+        contourTimes.push_back(sim.frame_dt * 1150);
+        contourTimes.push_back(sim.frame_dt * 1200);
+        contourTimes.push_back(sim.frame_dt * 1250);
+        contourTimes.push_back(sim.frame_dt * 1300);
+        contourTimes.push_back(sim.frame_dt * 1350);
+        contourTimes.push_back(sim.frame_dt * 1400);
+        contourTimes.push_back(sim.frame_dt * 1450);
+        contourTimes.push_back(sim.frame_dt * 1499);
+        sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
     }
