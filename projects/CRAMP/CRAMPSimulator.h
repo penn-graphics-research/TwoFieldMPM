@@ -116,6 +116,8 @@ public:
     std::vector<Vector<T,dim>> contourCenters; //center points of the contours
     std::vector<T> contourTimes; //hold the times to take the contours
     int contourIdx = 0;
+    std::vector<std::vector<T>> contourData; //holds a vector of vectors, each vector is the set of computed contour values for a given time
+
 
 
     //Data for Simple Damping
@@ -425,16 +427,36 @@ public:
                 m_la = model->m_lambda;
             }
 
+            std::vector<T> contourValues; //empty vector to hold a value for each contour at this time
+
             //For this time, we will compute the J integral using however many contour radii the user asks for
             std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegral{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
+            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegralOp{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
-                computeJIntegral(contourCenters[i], contourRadii[i], jIntFile);
+                T J_I = 0;
+                J_I = computeJIntegralOp(contourCenters[i], contourRadii[i], jIntFile);
+                contourValues.push_back(J_I);
             }
             jIntFile.close();
+            contourData.push_back(contourValues);
 
             std::cout << "J Integral Computed At t = " << elapsedTime << std::endl;
+
+            //Now write a data file with all contour values across all times if we are done computing them
+            if(!computeJIntegral){
+                std::string jIntFilePath = outputPath + "/JIntegralData_COMPLETE.txt";
+                std::ofstream file(jIntFilePath);
+                file << "=====Complete Computed J-Integral Data=====\n";
+                for(int i = 0; i < (int)contourTimes.size(); ++i){
+                    file << "Time = " << contourTimes[i] << " s: ";
+                    for(int j = 0; j < (int)contourValues.size(); ++j){
+                        file << contourData[i][j] << ", ";
+                    }
+                    file << "\n";
+                }
+                file.close();
+            }
         }
 
         //If Loading this specimen:

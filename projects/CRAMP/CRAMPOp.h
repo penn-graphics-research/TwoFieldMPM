@@ -980,9 +980,12 @@ public:
 
     bool useDFG;
 
-    void operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
+    T operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
     {
         BOW_TIMER_FLAG("computeJIntegral");
+
+        T J_I = 0; //set J integral mode I to 0 for now
+        T J_II = 0; //set J integral mode II to 0 for now
 
         //NOTE: This routine is designed for HORIZONTAL LEFT SIDE CRACKS (b.c. of contour intersection assumptions --> counter clockwise path hits top of crack first)
 
@@ -1133,8 +1136,6 @@ public:
             std::vector<Matrix<T,dim,dim>> m_Pi; //collest computed Piola Kirchhoff Stresses
             std::vector<Matrix<T,dim,dim>> m_Fi_Interpolated; //collect the reconstructed Fi's that were interpolated between for x_bottom and x_top
             
-            T J_I = 0; //set J integral mode I to 0 for now
-            T J_II = 0; //set J integral mode II to 0 for now
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
                 T Fsum_I = 0; //this is what we focus on setting for each segment (three cases below)
                 T Fsum_II = 0; //mode II
@@ -1416,8 +1417,6 @@ public:
             std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
             std::vector<Matrix<T,dim,dim>> m_Pi; //collect computed Piola Kirchhoff Stresses
             
-            T J_I = 0; //set J integral mode I to 0 for now
-            T J_II = 0; //set J integral mode II to 0 for now
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
                 T Fsum_I = 0; //this is what we focus on setting for each segment (three cases below)
                 T Fsum_II = 0; //mode II
@@ -1499,7 +1498,9 @@ public:
             int U = contour[3];
             topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
             bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
-            
+            // topIntersectionIdx = U - 1; //this INCLUDES the non-material grid points that still have mass
+            // bottomIntersectionIdx = U + 1;
+
             //bottom intersect
             finalContourPoints.push_back(contourPoints[bottomIntersectionIdx]);
             finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]);
@@ -1513,9 +1514,6 @@ public:
                 finalContourPoints.push_back(contourPoints[i]);
                 finalContourGridStates.push_back(contourGridStates[i]);
             }
-            //top intersection
-            finalContourPoints.push_back(contourPoints[topIntersectionIdx]);
-            finalContourGridStates.push_back(contourGridStates[topIntersectionIdx]);
 
             //STEP 2: Compute J-integral!
             
@@ -1530,8 +1528,6 @@ public:
             std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
             std::vector<Matrix<T,dim,dim>> m_Pi; //collect computed Piola Kirchhoff Stresses
             
-            T J_I = 0; //set J integral mode I to 0 for now
-            T J_II = 0; //set J integral mode II to 0 for now
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){ //iterate contour segments
                 T Fsum_I = 0; //this is what we focus on setting for each segment (three cases below)
                 T Fsum_II = 0; //mode II
@@ -1604,6 +1600,8 @@ public:
             file << "J_II: " << J_II << "\n";
             file << "\n";
         }
+
+        return J_I;
     }
 
     //Compute F_i based on singular values and quaternion rotations from F = U * Sigma * V^T

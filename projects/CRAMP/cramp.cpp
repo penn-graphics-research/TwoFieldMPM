@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_1e-3_noDamp_dx0.25mm_newTensorTransfer_sigmaA_2600_actualFCR_ramp4000_12000frames");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp4s");
 
         //material
         T E = 2.6e6;
@@ -121,11 +121,11 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.25e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 12000;
+        sim.end_frame = 1500;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
-        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 4000; //ramp up to full sigmaA over 500 frames
+        T rampTime = sim.frame_dt * 400; // ramp up 4 seconds
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
@@ -217,27 +217,27 @@ int main(int argc, char *argv[])
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        // contourTimes.push_back(sim.frame_dt * 2000);
-        // contourTimes.push_back(sim.frame_dt * 2500);
-        // contourTimes.push_back(sim.frame_dt * 3000);
-        // contourTimes.push_back(sim.frame_dt * 3500);
-        contourTimes.push_back(sim.frame_dt * 4000);
-        contourTimes.push_back(sim.frame_dt * 4500);
-        contourTimes.push_back(sim.frame_dt * 5000);
-        contourTimes.push_back(sim.frame_dt * 5500);
-        contourTimes.push_back(sim.frame_dt * 6000);
-        contourTimes.push_back(sim.frame_dt * 6500);
-        contourTimes.push_back(sim.frame_dt * 7000);
-        contourTimes.push_back(sim.frame_dt * 7500);
-        contourTimes.push_back(sim.frame_dt * 8000);
-        contourTimes.push_back(sim.frame_dt * 8500);
-        contourTimes.push_back(sim.frame_dt * 9000);
-        contourTimes.push_back(sim.frame_dt * 9500);
-        contourTimes.push_back(sim.frame_dt * 10000);
-        contourTimes.push_back(sim.frame_dt * 10500);
-        contourTimes.push_back(sim.frame_dt * 11000);
-        contourTimes.push_back(sim.frame_dt * 11500);
-        contourTimes.push_back(sim.frame_dt * 11999);
+        // contourTimes.push_back(sim.frame_dt * 200);
+        // contourTimes.push_back(sim.frame_dt * 250);
+        // contourTimes.push_back(sim.frame_dt * 300);
+        // contourTimes.push_back(sim.frame_dt * 350);
+        contourTimes.push_back(sim.frame_dt * 400);
+        contourTimes.push_back(sim.frame_dt * 450);
+        contourTimes.push_back(sim.frame_dt * 500);
+        contourTimes.push_back(sim.frame_dt * 550);
+        contourTimes.push_back(sim.frame_dt * 600);
+        contourTimes.push_back(sim.frame_dt * 650);
+        contourTimes.push_back(sim.frame_dt * 700);
+        contourTimes.push_back(sim.frame_dt * 750);
+        contourTimes.push_back(sim.frame_dt * 800);
+        contourTimes.push_back(sim.frame_dt * 850);
+        contourTimes.push_back(sim.frame_dt * 900);
+        contourTimes.push_back(sim.frame_dt * 950);
+        contourTimes.push_back(sim.frame_dt * 1000);
+        contourTimes.push_back(sim.frame_dt * 1050);
+        contourTimes.push_back(sim.frame_dt * 1100);
+        contourTimes.push_back(sim.frame_dt * 1150);
+        contourTimes.push_back(sim.frame_dt * 1199);
         sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
@@ -779,11 +779,13 @@ int main(int argc, char *argv[])
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        //contourTimes.push_back(sim.frame_dt * 0.2);
+        // contourTimes.push_back(sim.frame_dt * 0.2);
+        // contourTimes.push_back(sim.frame_dt * 0.7);
         // contourTimes.push_back(sim.frame_dt * 200);
         // contourTimes.push_back(sim.frame_dt * 2500);
         // contourTimes.push_back(sim.frame_dt * 300);
         // contourTimes.push_back(sim.frame_dt * 350);
+
         contourTimes.push_back(sim.frame_dt * 400);
         contourTimes.push_back(sim.frame_dt * 450);
         contourTimes.push_back(sim.frame_dt * 500);
