@@ -80,6 +80,7 @@ public:
     bool writeGrid = false;
     bool useAPIC = false;
     bool useDFG = false;
+    bool useExplicitContact = true;
     bool useDamage = false;
     bool useImplicitContact = false;
     bool useRankineDamage = false;
@@ -170,6 +171,8 @@ public:
     Field<TV> activeNodesV2;
     Field<TV> activeNodesFct1;
     Field<TV> activeNodesFct2;
+    Field<TV> activeNodesN1;
+    Field<TV> activeNodesN2;
     std::vector<T> activeNodesM1;
     std::vector<T> activeNodesM2;
     std::vector<T> activeNodesSeparability1;
@@ -489,7 +492,7 @@ public:
         }
 
         //Frictional Contact -> apply directly for symplectic, for implicit we compute normals here (but only if we want implicit contact)
-        if (useDFG && (Base::symplectic || (!Base::symplectic && useImplicitContact))) {
+        if (useDFG && ((Base::symplectic && useExplicitContact) || (!Base::symplectic && useImplicitContact))) {
             Bow::DFGMPM::ContactForcesOp<T, dim> frictional_contact{ {}, dt, fricCoeff, Base::symplectic, useImplicitContact, grid };
             frictional_contact();
             std::cout << "Frictional Contact Applied..." << std::endl;
@@ -539,9 +542,9 @@ public:
 
             //Write Grid
             if(writeGrid){
-                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
+                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable, activeNodesN1, activeNodesN2 };
                 collect_gridData();
-                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(currSubstep) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
+                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(currSubstep) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable, activeNodesN1, activeNodesN2);
             }
         }
     }
@@ -652,9 +655,9 @@ public:
 
             //Write Grid
             if(writeGrid){
-                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable };
+                Bow::DFGMPM::CollectGridDataOp<T, dim> collect_gridData{ {}, grid, Base::dx, activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable, activeNodesN1, activeNodesN2 };
                 collect_gridData();
-                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(frame_num) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable);
+                IO::writeTwoField_nodes_ply(outputPath + "/i" + std::to_string(frame_num) + ".ply", activeNodesX, activeNodesCauchy1, activeNodesCauchy2, activeNodesFi1, activeNodesFi2, activeNodesDG, activeNodesV1, activeNodesV2, activeNodesFct1, activeNodesFct2, activeNodesM1, activeNodesM2, activeNodesSeparability1, activeNodesSeparability2, activeNodesSeparable, activeNodesN1, activeNodesN2);
                 std::cout << "Frame Written (i)..." << std::endl;
             }
         }
@@ -829,6 +832,7 @@ public:
                 particleDG.push_back(TV::Zero());
                 dTildeH.push_back(0.0);
                 sigmaC.push_back(10.0);
+                m_marker.push_back(0);
             }
         }
 

@@ -458,7 +458,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
 }
 
 template <class T, int dim>
-BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<T, dim>>& _vertices, const Field<Matrix<T, dim, dim>>& cauchy1, const Field<Matrix<T, dim, dim>>& cauchy2, const Field<Matrix<T, dim, dim>>& Fi1, const Field<Matrix<T, dim, dim>>& Fi2, const Field<Vector<T, dim>>& damageGradients, const Field<Vector<T, dim>>& v1, const Field<Vector<T, dim>>& v2, const Field<Vector<T, dim>>& fct1, const Field<Vector<T, dim>>& fct2, const std::vector<T>& _m1, const std::vector<T>& _m2, const std::vector<T>& _sep1, const std::vector<T>& _sep2, const std::vector<int>& _separable, const bool binary)
+BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<T, dim>>& _vertices, const Field<Matrix<T, dim, dim>>& cauchy1, const Field<Matrix<T, dim, dim>>& cauchy2, const Field<Matrix<T, dim, dim>>& Fi1, const Field<Matrix<T, dim, dim>>& Fi2, const Field<Vector<T, dim>>& damageGradients, const Field<Vector<T, dim>>& v1, const Field<Vector<T, dim>>& v2, const Field<Vector<T, dim>>& fct1, const Field<Vector<T, dim>>& fct2, const std::vector<T>& _m1, const std::vector<T>& _m2, const std::vector<T>& _sep1, const std::vector<T>& _sep2, const std::vector<int>& _separable, const Field<Vector<T, dim>>& n1, const Field<Vector<T, dim>>& n2, const bool binary)
 {
     Logging::info("Writing: ", filename);
     Field<Vector<T, 3>> vertices(_vertices.size());
@@ -482,6 +482,12 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
     Field<T> sep1(_sep1.size());
     Field<T> sep2(_sep2.size());
     Field<int> separable(_separable.size());
+    Field<T> n1x(n1.size());
+    Field<T> n1y(n1.size());
+    Field<T> n1z(n1.size());
+    Field<T> n2x(n2.size());
+    Field<T> n2y(n2.size());
+    Field<T> n2z(n2.size());
 
     Field<T> sigma11_f1(cauchy1.size());
     Field<T> sigma22_f1(cauchy1.size());
@@ -495,6 +501,7 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
     Field<T> F11_f2(Fi2.size());
     Field<T> F22_f2(Fi2.size());
     Field<T> F12_f2(Fi2.size());
+
 
     //formatting vector fields
     if constexpr (dim == 2) {
@@ -515,6 +522,12 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
             fct2x[i] = fct2[i][0];
             fct2y[i] = fct2[i][1];
             fct2z[i] = 0.0;
+            n1x[i] = n1[i][0];
+            n1y[i] = n1[i][1];
+            n1z[i] = 0.0;
+            n2x[i] = n2[i][0];
+            n2y[i] = n2[i][1];
+            n2z[i] = 0.0;
         });
     }
     else {
@@ -535,6 +548,12 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
             fct2x[i] = fct2[i][0];
             fct2y[i] = fct2[i][1];
             fct2z[i] = fct2[i][2];
+            n1x[i] = n1[i][0];
+            n1y[i] = n1[i][1];
+            n1z[i] = n1[i][2];
+            n2x[i] = n2[i][0];
+            n2y[i] = n2[i][1];
+            n2z[i] = n2[i][2];
         });
     }
 
@@ -591,6 +610,12 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
         file.add_properties_to_element("vertex", { "sep1" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(sep1.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "sep2" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(sep2.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "separable" }, tinyply::Type::INT32, vertices.size(), reinterpret_cast<const uint8_t*>(separable.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1x" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n1x.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1y" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n1y.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1z" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n1z.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2x" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n2x.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2y" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n2y.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2z" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(n2z.data()), tinyply::Type::INVALID, 0);
 
         file.add_properties_to_element("vertex", { "f1_sigma11" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(sigma11_f1.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "f1_sigma22" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(sigma22_f1.data()), tinyply::Type::INVALID, 0);
@@ -630,6 +655,12 @@ BOW_INLINE void writeTwoField_nodes_ply(const std::string filename, const Field<
         file.add_properties_to_element("vertex", { "sep1" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(sep1.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "sep2" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(sep2.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "separable" }, tinyply::Type::INT32, vertices.size(), reinterpret_cast<const uint8_t*>(separable.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1x" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n1x.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1y" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n1y.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n1z" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n1z.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2x" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n2x.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2y" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n2y.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "n2z" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(n2z.data()), tinyply::Type::INVALID, 0);
 
         file.add_properties_to_element("vertex", { "f1_sigma11" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(sigma11_f1.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "f1_sigma22" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(sigma22_f1.data()), tinyply::Type::INVALID, 0);
@@ -668,8 +699,8 @@ template void write_ply(const std::string filename, const Field<Vector<float, 2>
 template void write_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Vector<int, 3>>&, const Field<float>&, const bool);
 template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Vector<float, 2>>& velocities, const Field<Vector<float, 2>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,2,2>>& m_cauchy, const Field<Matrix<float,2,2>>& m_F, const bool);
 template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Vector<float, 3>>& velocities, const Field<Vector<float, 3>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,3,3>>& m_cauchy, const Field<Matrix<float,3,3>>& m_F, const bool);
-template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Matrix<float, 2, 2>>& cauchy1, const Field<Matrix<float, 2, 2>>& cauchy2, const Field<Matrix<float, 2, 2>>& Fi1, const Field<Matrix<float, 2, 2>>& Fi2, const Field<Vector<float, 2>>& damageGradients, const Field<Vector<float, 2>>& v1, const Field<Vector<float, 2>>& v2, const Field<Vector<float, 2>>& fct1, const Field<Vector<float, 2>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const bool);
-template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Matrix<float, 3, 3>>& cauchy1, const Field<Matrix<float, 3, 3>>& cauchy2, const Field<Matrix<float, 3, 3>>& Fi1, const Field<Matrix<float, 3, 3>>& Fi2, const Field<Vector<float, 3>>& damageGradients, const Field<Vector<float, 3>>& v1, const Field<Vector<float, 3>>& v2, const Field<Vector<float, 3>>& fct1, const Field<Vector<float, 3>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const bool);
+template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Matrix<float, 2, 2>>& cauchy1, const Field<Matrix<float, 2, 2>>& cauchy2, const Field<Matrix<float, 2, 2>>& Fi1, const Field<Matrix<float, 2, 2>>& Fi2, const Field<Vector<float, 2>>& damageGradients, const Field<Vector<float, 2>>& v1, const Field<Vector<float, 2>>& v2, const Field<Vector<float, 2>>& fct1, const Field<Vector<float, 2>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const Field<Vector<float, 2>>& n1, const Field<Vector<float, 2>>& n2, const bool);
+template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Matrix<float, 3, 3>>& cauchy1, const Field<Matrix<float, 3, 3>>& cauchy2, const Field<Matrix<float, 3, 3>>& Fi1, const Field<Matrix<float, 3, 3>>& Fi2, const Field<Vector<float, 3>>& damageGradients, const Field<Vector<float, 3>>& v1, const Field<Vector<float, 3>>& v2, const Field<Vector<float, 3>>& fct1, const Field<Vector<float, 3>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const Field<Vector<float, 3>>& n1, const Field<Vector<float, 3>>& n2, const bool);
 #endif
 #ifdef BOW_COMPILE_DOUBLE
 template void read_ply(const std::string filename, Field<Vector<double, 2>>& vertices);
@@ -684,8 +715,8 @@ template void write_ply(const std::string filename, const Field<Vector<double, 2
 template void write_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Vector<int, 3>>&, const Field<double>&, const bool);
 template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Vector<double, 2>>& velocities, const Field<Vector<double, 2>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,2,2>>& m_cauchy, const Field<Matrix<double,2,2>>& m_F, const bool);
 template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Vector<double, 3>>& velocities, const Field<Vector<double, 3>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,3,3>>& m_cauchy, const Field<Matrix<double,3,3>>& m_F, const bool);
-template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Matrix<double, 2, 2>>& cauchy1, const Field<Matrix<double, 2, 2>>& cauchy2, const Field<Matrix<double, 2, 2>>& Fi1, const Field<Matrix<double, 2, 2>>& Fi2, const Field<Vector<double, 2>>& damageGradients, const Field<Vector<double, 2>>& v1, const Field<Vector<double, 2>>& v2, const Field<Vector<double, 2>>& fct1, const Field<Vector<double, 2>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const bool);
-template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Matrix<double, 3, 3>>& cauchy1, const Field<Matrix<double, 3, 3>>& cauchy2, const Field<Matrix<double, 3, 3>>& Fi1, const Field<Matrix<double, 3, 3>>& Fi2, const Field<Vector<double, 3>>& damageGradients, const Field<Vector<double, 3>>& v1, const Field<Vector<double, 3>>& v2, const Field<Vector<double, 3>>& fct1, const Field<Vector<double, 3>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const bool);
+template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Matrix<double, 2, 2>>& cauchy1, const Field<Matrix<double, 2, 2>>& cauchy2, const Field<Matrix<double, 2, 2>>& Fi1, const Field<Matrix<double, 2, 2>>& Fi2, const Field<Vector<double, 2>>& damageGradients, const Field<Vector<double, 2>>& v1, const Field<Vector<double, 2>>& v2, const Field<Vector<double, 2>>& fct1, const Field<Vector<double, 2>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const Field<Vector<double, 2>>& n1, const Field<Vector<double, 2>>& n2, const bool);
+template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Matrix<double, 3, 3>>& cauchy1, const Field<Matrix<double, 3, 3>>& cauchy2, const Field<Matrix<double, 3, 3>>& Fi1, const Field<Matrix<double, 3, 3>>& Fi2, const Field<Vector<double, 3>>& damageGradients, const Field<Vector<double, 3>>& v1, const Field<Vector<double, 3>>& v2, const Field<Vector<double, 3>>& fct1, const Field<Vector<double, 3>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const Field<Vector<double, 3>>& n1, const Field<Vector<double, 3>>& n2, const bool);
 #endif
 #endif
 }

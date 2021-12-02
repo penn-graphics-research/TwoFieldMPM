@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp4s");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp0.5s_noContours");
 
         //material
         T E = 2.6e6;
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 1500;
+        sim.end_frame = 1000;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
@@ -135,7 +135,8 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 4.0; //4.0 is close to working, but we actually don't want surfacing for this demo
         sim.useDFG = true;
-        sim.fricCoeff = 0.4;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
         
         //Debug mode
         sim.verbose = false;
@@ -151,7 +152,7 @@ int main(int argc, char *argv[])
         //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
 
         //Sample Particles
-        int ppc = 9;
+        int ppc = 4;
         T height = 32e-3; //32mm
         T width = 20e-3; //20mm
         T x1 = 0.05 - width/2.0;
@@ -167,9 +168,10 @@ int main(int argc, char *argv[])
         T crackSegmentLength = sim.dx / 5.0;
         T damageRadius = sim.dx / 2.0;
         T crackLength = 5e-3;
-        T crackY = y1 + height/2.0;
+        T crackY = y1 + height/2.0 - (0.5*sim.dx);
         T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
         sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
+        //sim.addHorizontalCrackWithoutPoints(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
 
         //Add Boundary Conditions
         // bool singlePuller = false;
@@ -191,7 +193,7 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 400; // ramp up 4 seconds
+        T rampTime = sim.frame_dt * 50; // ramp up 4 seconds
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
@@ -206,7 +208,7 @@ int main(int argc, char *argv[])
         
         //Add Contours
         
-        //contain crack tip
+        /*//contain crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
 
@@ -238,7 +240,7 @@ int main(int argc, char *argv[])
         contourTimes.push_back(sim.frame_dt * 1100);
         contourTimes.push_back(sim.frame_dt * 1150);
         contourTimes.push_back(sim.frame_dt * 1199);
-        sim.addJIntegralTiming(contourTimes);
+        sim.addJIntegralTiming(contourTimes);*/
 
         sim.run(start_frame);
     }
@@ -811,6 +813,58 @@ int main(int argc, char *argv[])
         contourTimes.push_back(sim.frame_dt * 1499);
         sim.addJIntegralTiming(contourTimes);
 
+        sim.run(start_frame);
+    }
+
+    //Adding ballpit test to check the explicit frictional contact routines
+    if(testcase == 208){
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/ballpit2D_explicitFrictionalContact");
+
+        //Params
+        T radius = 0.03;
+        sim.dx = 0.0049002217; //from taichi
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = (T)1. / 24;
+        sim.gravity = -10;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.95;
+        
+        //DFG Specific Params
+        sim.st = 4.2; //4.5 too high, a few in the middle
+        sim.useDFG = true;
+        //sim.useImplicitContact = false;
+        sim.fricCoeff = 0.4;
+        
+        //Sim Modes
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //density
+        T E = 5000;
+        T nu = 0.2;
+        T rho = 10;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.7 * maxDt;
+
+        //Sample from OBJ (obj was from Triangle in python)
+        auto material = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        std::string filepath = "../../projects/DFGMPM/Data/ballPit2D.obj";
+        T volume = radius*radius * M_PI * 23.0; //23 discs
+        sim.sampleFromObj(material, filepath, Vector<T, dim>(0, 0), volume, rho);
+
+        //Unit square boundaries
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0.05), Vector<T, dim>(0, 1)));
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0.95), Vector<T, dim>(0, -1)));
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0.05, 0), Vector<T, dim>(1, 0)));
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0.95, 0), Vector<T, dim>(-1, 0)));
         sim.run(start_frame);
     }
 

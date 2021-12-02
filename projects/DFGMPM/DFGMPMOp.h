@@ -1011,6 +1011,9 @@ public:
     std::vector<T>& activeNodesSeparability1;
     std::vector<T>& activeNodesSeparability2;
     std::vector<int>& activeNodesSeparable;
+    Bow::Field<Bow::Vector<T, dim>>& activeNodesN1;
+    Bow::Field<Bow::Vector<T, dim>>& activeNodesN2;
+
 
     void operator()()
     {
@@ -1031,6 +1034,8 @@ public:
         activeNodesSeparability1.clear();
         activeNodesSeparability2.clear();
         activeNodesSeparable.clear();
+        activeNodesN1.clear();
+        activeNodesN2.clear();
 
         //grid.countNumNodes();
         grid.iterateGridSerial([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
@@ -1050,6 +1055,8 @@ public:
             activeNodesSeparability1.push_back(g.gridSeparability[0]);
             activeNodesSeparability2.push_back(g.gridSeparability[1]);
             activeNodesSeparable.push_back(g.separable);
+            activeNodesN1.push_back(g.n1);
+            activeNodesN2.push_back(g.n2);
         });
     }
 };
