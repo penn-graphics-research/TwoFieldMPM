@@ -303,10 +303,10 @@ public:
                     g.separable = 1;
                 }
                 else {
-                    //in this case, treat this node as a single field, so we accumulate the mass in m1
-                    g.separable = 0;
-                    g.m1 += g.m2;
-                    g.m2 = 0.0;
+                    //in this case, still treat as two fields, but will get different contact
+                    g.separable = 2;
+                    //g.m1 += g.m2;
+                    //g.m2 = 0.0;
                 }
             }
         });
@@ -339,7 +339,7 @@ public:
                 const T Dp = m_Dp[i];
                 BSplineWeights<T, dim> spline(pos, dx);
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
-                    if (g.separable != 1) {
+                    if (g.separable == 0) {
                         //single field treatment
                         g.d1[0] += w * Dp;
                         g.d1[1] += w;
@@ -369,7 +369,7 @@ public:
             else {
                 g.d1[0] = 0.0;
             }
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 //Compute d_i for field 2 and store as idx 0
                 if (g.d2[1] > 0) {
                     g.d2[0] /= g.d2[1]; //divide numerator by denominator
@@ -386,7 +386,7 @@ public:
                 Vector<T, dim>& pos = m_X[i];
                 BSplineWeightsWithSecondOrder<T, dim> spline(pos, dx);
                 grid.iterateKernelWithLaplacian(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, T laplacian, GridState<T, dim>& g) {
-                    if (g.separable != 1) {
+                    if (g.separable == 0) {
                         //single field treatment
                         m_damageLaplacians[i] += g.d1[0] * laplacian;
                     }
@@ -540,7 +540,7 @@ public:
 
                     //Notice we treat single-field and two-field nodes differently
                     //NOTE: remember we are also including explicit force here if symplectic!
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         if (useAPIC) {
                             g.v1 += delta_APIC;
@@ -555,7 +555,7 @@ public:
                             g.m1 += mass * w;
                         }
                     }
-                    else if (g.separable == 1 && useDFG) {
+                    else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -611,7 +611,7 @@ public:
             g.v1 += gravity_term;
             g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
             g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 T mass2 = g.m2;
                 Vector<T, dim> alpha2;
                 alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
@@ -651,14 +651,14 @@ public:
             if(symplectic){
                 //apply directly
                 g.v1 += dv;
-                if(g.separable == 1){
+                if(g.separable != 0){
                     g.v2 += dv;
                 }
             } 
             else {
                 //save for later
                 g.fi1 += dv;
-                if(g.separable == 1){
+                if(g.separable != 0){
                     g.fi2 += dv;
                 }
             }
@@ -687,7 +687,7 @@ public:
         //Iterate grid nodes to compute contact forces
         grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
             //For separable nodes, compute the frictional contact forces for each field
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 //Grab momentum
                 Vector<T, dim> q1 = g.v1 * g.m1;
                 Vector<T, dim> q2 = g.v2 * g.m2;
@@ -784,28 +784,35 @@ public:
                         fTanComp2 = (fTan2A * s_cm2A) + (fTan2B * s_cm2B);
                     }
 
-                    //Compute magnitude of tangent components for each field
-                    T fTanMag1 = fTanComp1.norm();
-                    T fTanMag2 = fTanComp2.norm();
-
-                    //Sign of tangent component
-                    T fTanSign1 = (fTanMag1 > 0) ? 1.0 : 0.0; //NOTE: L2 norm is always >= 0
-                    T fTanSign2 = (fTanMag2 > 0) ? 1.0 : 0.0;
-
-                    //Tangent directions, all 0 if sign of mag was 0
-                    Vector<T, dim> tanDirection1 = (fTanSign1 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp1.normalized();
-                    Vector<T, dim> tanDirection2 = (fTanSign2 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp2.normalized();
-
-                    //Finally compute contact forces!
-                    //NOTE: we ONLY compute this if we detect interpenetration b/w the fields
                     Vector<T, dim> f_c1 = Bow::Vector<T, dim>::Zero();
                     Vector<T, dim> f_c2 = Bow::Vector<T, dim>::Zero();
-                    if ((v_cm - v_1).dot(n_cm1) + (v_cm - v_2).dot(n_cm2) < 0) {
-                        //interpenetration detected
-                        T tanMin1 = (fricCoeff * std::abs(fNormal1) < std::abs(fTanMag1)) ? (fricCoeff * std::abs(fNormal1)) : std::abs(fTanMag1);
-                        T tanMin2 = (fricCoeff * std::abs(fNormal2) < std::abs(fTanMag2)) ? (fricCoeff * std::abs(fNormal2)) : std::abs(fTanMag2);
-                        f_c1 = (fNormal1 * n_cm1) + (tanMin1 * fTanSign1 * tanDirection1);
-                        f_c2 = (fNormal2 * n_cm2) + (tanMin2 * fTanSign2 * tanDirection2);
+                    if(g.separable == 1){ //separable two field nodes
+                        //Compute magnitude of tangent components for each field
+                        T fTanMag1 = fTanComp1.norm();
+                        T fTanMag2 = fTanComp2.norm();
+
+                        //Sign of tangent component
+                        T fTanSign1 = (fTanMag1 > 0) ? 1.0 : 0.0; //NOTE: L2 norm is always >= 0
+                        T fTanSign2 = (fTanMag2 > 0) ? 1.0 : 0.0;
+
+                        //Tangent directions, all 0 if sign of mag was 0
+                        Vector<T, dim> tanDirection1 = (fTanSign1 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp1.normalized();
+                        Vector<T, dim> tanDirection2 = (fTanSign2 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp2.normalized();
+
+                        //Finally compute contact forces!
+                        //NOTE: we ONLY compute this if we detect interpenetration b/w the fields
+                        if ((v_cm - v_1).dot(n_cm1) + (v_cm - v_2).dot(n_cm2) < 0) {
+                            //interpenetration detected
+                            T tanMin1 = (fricCoeff * std::abs(fNormal1) < std::abs(fTanMag1)) ? (fricCoeff * std::abs(fNormal1)) : std::abs(fTanMag1);
+                            T tanMin2 = (fricCoeff * std::abs(fNormal2) < std::abs(fTanMag2)) ? (fricCoeff * std::abs(fNormal2)) : std::abs(fTanMag2);
+                            f_c1 = (fNormal1 * n_cm1) + (tanMin1 * fTanSign1 * tanDirection1);
+                            f_c2 = (fNormal2 * n_cm2) + (tanMin2 * fTanSign2 * tanDirection2);
+                        }
+                    } 
+                    else if(g.separable == 2){ //non separable two field nodes
+                        //treat two-field non-separable as "single field" --> correct each to v_cm I think
+                        f_c1 = (fNormal1 * n_cm1) + fTanComp1;
+                        f_c2 = (fNormal2 * n_cm2) + fTanComp2;
                     }
 
                     //Now let's save these contact forces and update velocity
@@ -839,7 +846,7 @@ public:
             g.x1 = node.template cast<T>() * dx + dt * new_v1;
 
             //only process second field if node is separable
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 Vector<T, dim> new_v2 = g.v2;
                 BC.mpm_explicit_update(node.template cast<T>() * dx, new_v2);
                 g.v2 = new_v2;
@@ -920,14 +927,14 @@ public:
                     
                     Vector<T, dim> xn = node.template cast<T>() * dx; //same regardless of separability
                     //these steps depend on which field the particle is in
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //treat as single field node
                         picV += w * g_v_new;
                         flipV += w * (g_v_new - g_v_old);   
                         picX += w * g.x1;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
                     }
-                    else if (g.separable == 1) {
+                    else if (g.separable != 0) {
                         //treat as two-field node
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -951,10 +958,10 @@ public:
                         Vector<T, dim> xn = dx * node.template cast<T>();
                         Vector<T, dim> g_v_new = g.v1;
                         Vector<T, dim> g_v2_new = g.v2;
-                        if (g.separable != 1 || !useDFG) {
+                        if (g.separable == 0 || !useDFG) {
                             Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
                         }
-                        else if (g.separable == 1){
+                        else if (g.separable != 0){
                             int fieldIdx = particleAF[i][oidx]; //grab field
                             if (fieldIdx == 0) {
                                 Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());

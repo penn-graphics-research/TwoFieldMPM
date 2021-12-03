@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp0.5s_noContours");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp0.5s_separable2");
 
         //material
         T E = 2.6e6;

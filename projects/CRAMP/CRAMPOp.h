@@ -77,7 +77,7 @@ public:
 
                     //Notice we treat single-field and two-field nodes differently
                     //NOTE: remember we are also including explicit force here if symplectic!
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         if (useAPIC) {
                             g.v1 += delta_APIC;
@@ -95,7 +95,7 @@ public:
                         //Transfer volume so we can add our Mode 1 loading
                         //g.gridViYi1 += vol * w;
                     }
-                    else if (g.separable == 1 && useDFG) {
+                    else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -140,7 +140,7 @@ public:
             g.v1 += gravity_term;
             g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
             g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 T mass2 = g.m2;
                 Vector<T, dim> alpha2;
                 alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
@@ -182,12 +182,12 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         g.cauchy1 += cauchyXmass * w;
                         g.Fi1 += defGradXmass * w;
                     }
-                    else if (g.separable == 1 && useDFG) {
+                    else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -207,7 +207,7 @@ public:
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             g.cauchy1 /= g.m1;
             g.Fi1 /= g.m1;
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 g.cauchy2 /= g.m2;
                 g.Fi2 /= g.m2;
             }
@@ -244,12 +244,12 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         cauchySmooth += g.cauchy1 * w;
                         FSmooth += g.Fi1 * w;
                     }
-                    else if (g.separable == 1 && useDFG) {
+                    else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -432,7 +432,7 @@ public:
 
                     // //Notice we treat single-field and two-field nodes differently
                     // //NOTE: remember we are also including explicit force here if symplectic!
-                    // if (g.separable != 1 || !useDFG) {
+                    // if (g.separable == 0 || !useDFG) {
                     //     //Single-field treatment if separable = 0 OR if we are using single field MPM
                     //     if (useAPIC) {
                     //         g.v1 += delta_APIC;
@@ -450,7 +450,7 @@ public:
                     //     //Transfer volume so we can add our Mode 1 loading
                     //     //g.gridViYi1 += vol * w;
                     // }
-                    // else if (g.separable == 1 && useDFG) {
+                    // else if (g.separable != 0 && useDFG) {
                     //     //Treat node as having two fields
                     //     int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                     //     if (fieldIdx == 0) {
@@ -495,7 +495,7 @@ public:
         //     g.v1 += gravity_term;
         //     g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
         //     g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
-        //     if (g.separable == 1) {
+        //     if (g.separable != 0) {
         //         T mass2 = g.m2;
         //         Vector<T, dim> alpha2;
         //         alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
@@ -700,8 +700,7 @@ public:
 
         //Iterate separable nodes and compute V_cm for each
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-            //For separable nodes, compute the frictional contact forces for each field
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 //Grab momentum
                 Vector<T, dim> q1 = g.v1 * g.m1;
                 Vector<T, dim> q2 = g.v2 * g.m2;
@@ -744,13 +743,13 @@ public:
                     // Vector<T, dim> g_v2_old = g.vn2;
                     
                     //these steps depend on which field the particle is in
-                    if (g.separable != 1) {
+                    if (g.separable == 0) {
                         //treat as single field node
                         picV += w * g.v1;
                         flipV += w * (g.v1 - g.vn1); 
                         //picX += w * g.x1;
                     }
-                    else if (g.separable == 1) {
+                    else if (g.separable != 0) {
                         //treat as two-field node -> use our computed v_cm (new and old) values in fi1 and fi2
                         picV += w * g.fi1;
                         flipV += w * (g.fi1 - g.fi2);
@@ -783,14 +782,14 @@ public:
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, DFGMPM::GridState<T, dim>& g) {
                     if (g.idx < 0) return;                    
                     //these steps depend on which field the particle is in
-                    if (g.separable != 1) {
+                    if (g.separable == 0) {
                         //treat as single field node -> if upward, add contribution for top crack
                         if(g.v1[1] > 0){
                             picV += w * g.v1;
                             flipV += w * (g.v1 - g.vn1);
                         }
                     }
-                    else if (g.separable == 1) {
+                    else if (g.separable != 0) {
                         //add contributions from ALL upward vel fields
                         if(g.v1[1] > 0){
                             picV += w * g.v1;
@@ -835,14 +834,14 @@ public:
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, DFGMPM::GridState<T, dim>& g) {
                     if (g.idx < 0) return;                    
                     //these steps depend on which field the particle is in
-                    if (g.separable != 1) {
+                    if (g.separable == 0) {
                         //treat as single field node -> if downard, add contribution for bottom crack
                         if(g.v1[1] < 0){
                             picV += w * g.v1;
                             flipV += w * (g.v1 - g.vn1);
                         }
                     }
-                    else if (g.separable == 1) {
+                    else if (g.separable != 0) {
                         //add contributions from ALL downward vel fields
                         if(g.v1[1] < 0){
                             picV += w * g.v1;
@@ -1784,7 +1783,7 @@ public:
                     //Storing accumulated weights in gridSeparability[0] (field 1 weight sum) and gridSeparability[1] (field 2 weight sum)
 
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable != 1 || !useDFG) {
+                    if (g.separable == 0 || !useDFG) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         
                         //g.fi1 += stress * dw; //transfer stress to grid, fi
@@ -1793,7 +1792,7 @@ public:
                         g.Vquat1 += Vquat * w;
                         g.gridSeparability[0] += w; //sum up the total weight
                     }
-                    else if (g.separable == 1 && useDFG) {
+                    else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -1822,7 +1821,7 @@ public:
                 g.Uquat1 /= g.gridSeparability[0];
                 g.Vquat1 /= g.gridSeparability[0]; //divide by field 1 weight sum
             }
-            if (g.separable == 1) {
+            if (g.separable != 0) {
                 if(g.gridSeparability[1] != 0){
                     g.sigma2 /= g.gridSeparability[1];
                     g.Uquat2 /= g.gridSeparability[1];
