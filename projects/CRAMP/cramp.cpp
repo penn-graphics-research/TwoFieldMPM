@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.5mm_sigmaA_2600_FCR_ramp0.5s_separable2");
+        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.1mm_sigmaA_2600_FCR_ramp4s_2DXcrackWithDFG");
 
         //material
         T E = 2.6e6;
@@ -121,9 +121,9 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 1000;
+        sim.end_frame = 1500;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
-        sim.st = 4.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
         sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
@@ -161,16 +161,19 @@ int main(int argc, char *argv[])
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
-        sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
-        //sim.samplGeridAlignedBoxWithPoissonDisk(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Crack
-        T crackSegmentLength = sim.dx / 5.0;
-        T damageRadius = sim.dx / 2.0;
-        T crackLength = 5e-3;
-        T crackY = y1 + height/2.0 - (0.5*sim.dx);
-        T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
-        sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
+        // T crackSegmentLength = sim.dx / 5.0;
+        // T damageRadius = sim.dx / 2.0;
+        // T crackLength = 5e-3;
+        // T crackY = y1 + height/2.0 - (0.5*sim.dx);
+        // T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
+        // sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
         //sim.addHorizontalCrackWithoutPoints(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
 
         //Add Boundary Conditions
@@ -193,7 +196,7 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 50; // ramp up 4 seconds
+        T rampTime = sim.frame_dt * 400; // ramp up 4 seconds
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
@@ -208,21 +211,23 @@ int main(int argc, char *argv[])
         
         //Add Contours
         
-        /*//contain crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
+        //contain crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,25,75), true); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,50,75), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,75,75), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,100,75), true); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,125,75), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,150,75), true);  
 
-        //do not contain crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
-        sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,25,125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,50,125), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,75,125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,100,125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,125,125), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,150,125), true); 
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        // contourTimes.push_back(sim.frame_dt * 200);
-        // contourTimes.push_back(sim.frame_dt * 250);
-        // contourTimes.push_back(sim.frame_dt * 300);
-        // contourTimes.push_back(sim.frame_dt * 350);
         contourTimes.push_back(sim.frame_dt * 400);
         contourTimes.push_back(sim.frame_dt * 450);
         contourTimes.push_back(sim.frame_dt * 500);
@@ -239,8 +244,14 @@ int main(int argc, char *argv[])
         contourTimes.push_back(sim.frame_dt * 1050);
         contourTimes.push_back(sim.frame_dt * 1100);
         contourTimes.push_back(sim.frame_dt * 1150);
-        contourTimes.push_back(sim.frame_dt * 1199);
-        sim.addJIntegralTiming(contourTimes);*/
+        contourTimes.push_back(sim.frame_dt * 1200);
+        contourTimes.push_back(sim.frame_dt * 1250);
+        contourTimes.push_back(sim.frame_dt * 1300);
+        contourTimes.push_back(sim.frame_dt * 1350);
+        contourTimes.push_back(sim.frame_dt * 1400);
+        contourTimes.push_back(sim.frame_dt * 1450);
+        contourTimes.push_back(sim.frame_dt * 1499);
+        sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
     }
@@ -747,7 +758,8 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = 0.2e-3;
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, false, Vector<T, dim>(0, 0), ppc, rho);
+        T crackHeight = y1 + (height/2.0);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
 
         //Add Tracton Boundary Condition        
         T sigmaA = 2600; //1000 times smaller than E
@@ -757,19 +769,19 @@ int main(int argc, char *argv[])
         //Add Contours
         
         //contain crack tip
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75)); //LEFT, DOWN, RIGHT, UP
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75), true); //LEFT, DOWN, RIGHT, UP
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75), true);
         
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125));
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125));
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125), true);
 
         //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
         //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
@@ -820,7 +832,7 @@ int main(int argc, char *argv[])
     if(testcase == 208){
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/ballpit2D_explicitFrictionalContact");
+        MPM::CRAMPSimulator<T, dim> sim("output/ballpit2D_explicitFrictionalContact_homelFriction");
 
         //Params
         T radius = 0.03;
@@ -865,6 +877,92 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0.95), Vector<T, dim>(0, -1)));
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0.05, 0), Vector<T, dim>(1, 0)));
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0.95, 0), Vector<T, dim>(-1, 0)));
+        sim.run(start_frame);
+    }
+
+    //Adding a Mode 1 Displacement boundary SENT with Rankine Damage
+    if(testcase == 209){
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/mode1SENT_DFGwithRankine");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 1500;
+        sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        T yBottom = y1 + heldMaterial;
+        T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
+
+        //Add Rankine Damage Model
+        T dMin = 0.25;
+        T Gf = 22.3e-3; //from Table2 Homel2016
+        T l0 = sqrt(2 * sim.dx * sim.dx);
+        T sigmaC = 2600;
+        sim.addRankineDamage(dMin, Gf, l0, -1.0, sigmaC); //-1 is for p which we dont want to use here
+
         sim.run(start_frame);
     }
 

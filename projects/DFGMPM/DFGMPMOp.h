@@ -799,13 +799,22 @@ public:
                         Vector<T, dim> tanDirection1 = (fTanSign1 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp1.normalized();
                         Vector<T, dim> tanDirection2 = (fTanSign2 == 0) ? Bow::Vector<T, dim>::Zero() : fTanComp2.normalized();
 
+                        T tanMin1 = (fricCoeff * std::abs(fNormal1) < std::abs(fTanMag1)) ? (fricCoeff * std::abs(fNormal1)) : std::abs(fTanMag1);
+                        T tanMin2 = (fricCoeff * std::abs(fNormal2) < std::abs(fTanMag2)) ? (fricCoeff * std::abs(fNormal2)) : std::abs(fTanMag2);
+
                         //Finally compute contact forces!
                         //NOTE: we ONLY compute this if we detect interpenetration b/w the fields
-                        if ((v_cm - v_1).dot(n_cm1) + (v_cm - v_2).dot(n_cm2) < 0) {
-                            //interpenetration detected
-                            T tanMin1 = (fricCoeff * std::abs(fNormal1) < std::abs(fTanMag1)) ? (fricCoeff * std::abs(fNormal1)) : std::abs(fTanMag1);
-                            T tanMin2 = (fricCoeff * std::abs(fNormal2) < std::abs(fTanMag2)) ? (fricCoeff * std::abs(fNormal2)) : std::abs(fTanMag2);
+                        // if ((v_cm - v_1).dot(n_cm1) + (v_cm - v_2).dot(n_cm2) < 0) {
+                        //     //interpenetration detected
+                        //     f_c1 = (fNormal1 * n_cm1) + (tanMin1 * fTanSign1 * tanDirection1);
+                        //     f_c2 = (fNormal2 * n_cm2) + (tanMin2 * fTanSign2 * tanDirection2);
+                        // }
+                        if ((v_cm - v_1).dot(n_cm1) < 0) { //NOTE: homel2016 has this sign flipped, and upon experimenting this is DEFINITELY wrong. Keep it < 0!
+                            //interpenetration detected, field 1
                             f_c1 = (fNormal1 * n_cm1) + (tanMin1 * fTanSign1 * tanDirection1);
+                        }
+                        if ((v_cm - v_2).dot(n_cm2) < 0) {
+                            //interpenetration detected, field 2
                             f_c2 = (fNormal2 * n_cm2) + (tanMin2 * fTanSign2 * tanDirection2);
                         }
                     } 

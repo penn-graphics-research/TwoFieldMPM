@@ -85,7 +85,6 @@ public:
     bool useImplicitContact = false;
     bool useRankineDamage = false;
     bool useAnisoMPMDamage = false;
-    bool initialized = false;
     bool useImpulse = false;
     bool crackInitialized = false;
     bool loading = false;
@@ -98,7 +97,7 @@ public:
     std::vector<T> Dp; //particle damage
     std::vector<T> damageLaplacians; //particle damage
     std::vector<T> dTildeH; //particle damage
-    std::vector<T> sigmaC; //particle damage
+    std::vector<T> sigmaC; //particle damage threshold
     std::vector<int> sp; //surface particle or not
     Field<TV> particleDG; //particle damage gradients
     Field<std::vector<int>> particleAF; //store which activefield each particle belongs to for the 3^d grid nodes it maps to
@@ -115,11 +114,10 @@ public:
     T halfEnvelope = 0;
     std::vector<Vector<int,4>> contourRadii; //holds contours defined by 4 integers: L, M, N, O (L left of center, D down from center, R right of center, U up from center)
     std::vector<Vector<T,dim>> contourCenters; //center points of the contours
+    std::vector<bool> contourTypes; //contains true if contour contains the crack tip, false if not
     std::vector<T> contourTimes; //hold the times to take the contours
     int contourIdx = 0;
     std::vector<std::vector<T>> contourData; //holds a vector of vectors, each vector is the set of computed contour values for a given time
-
-
 
     //Data for Simple Damping
     bool useSimpleDamping = true;
@@ -146,6 +144,11 @@ public:
     T minDp = 1.0;
     T dMin = 0.25;
     T fricCoeff = 0.2; //friction coefficient for contact forces
+
+    //Rankine Damage Params
+    T Gf = 0.0;
+    std::vector<T> Hs;
+    Field<TM> m_scaledCauchy; //scaled cauchy stresses
 
     //AnisoMPM Params
     T eta = 0.01;
@@ -189,11 +192,21 @@ public:
     /* Initialization Routines */
     void initialize()
     {
-        
+        //This routine gets called once by the base class to initialize sim!
+
         Bow::Logging::info("Simulation starts with ", std::is_same<T, double>::value ? "double" : "float", " ", dim);
 
-        if(useDFG){
+        //Collect mu and lambda
+        for (auto& model : Base::elasticity_models){
+            m_mu = model->m_mu;
+            m_la = model->m_lambda;
+        }
+
+        if(useAnisoMPMDamage){
             l0 = 0.5 * Base::dx;
+        }
+        
+        if(useDFG){
             if constexpr (dim == 2) {
                 rp = sqrt(2.0 * Base::dx * Base::dx);
             }
@@ -224,18 +237,28 @@ public:
                     }
                     sigmaC[i] = maxVal;
                 });
-                Bow::Logging::info("[AnisoMPM Damage] Stretched SigmaC: ", sigmaC[0]);
+                Bow::Logging::info("[Damage] Stretched SigmaC: ", sigmaC[0]);
             }
             else{
                 //set sigmaC directly from sigmaCRef
                 tbb::parallel_for(size_t(0), sigmaC.size(), [&](size_t i) {
                     sigmaC[i] = sigmaCRef;
                 });
-                Bow::Logging::info("[AnisoMPM Damage] Directly Set SigmaC: ", sigmaC[0]);
+                Bow::Logging::info("[Damage] Directly Set SigmaC: ", sigmaC[0]);
             }
         }
 
-        initialized = true;
+        if(useRankineDamage){
+            for(int i = 0; i < (int)Base::m_mass.size(); ++i){
+                T mu = m_mu[i];
+                T la = m_la[i];
+                T E = (mu*(3*la + 2*mu)) / (la + mu); //recompute E for this particle
+                T HsBar = (sigmaC[i] * sigmaC[i]) / (2 * E * Gf);
+                T HsRegularized = (HsBar * l0) / (1 - (HsBar*l0));
+                Hs.push_back(HsRegularized);
+            }
+            Bow::Logging::info("[Rankine Damage] Computed Hs: ", Hs[0]);
+        }
     }
 
     //DFG specific routines (partitioning)
@@ -260,8 +283,8 @@ public:
         
         //Rankine Damage Routines
         if (useRankineDamage) {
-            //TODO: updateRankineDamage
-            //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we can update this BEFORE computing DGs!
+            //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we update this BEFORE computing DGs!
+            updateRankineDamage();
         }
 
         Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid };
@@ -269,6 +292,12 @@ public:
 
         Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid };
         partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
+    }
+
+    //Rankine Damage Routines
+    void updateRankineDamage(){
+        Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, m_scaledCauchy, Dp, grid, sigmaC, Hs};
+        update_rankine();
     }
 
     //AnisoMPM Routines
@@ -306,7 +335,7 @@ public:
         //     }
         // }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, useRankineDamage, m_vol, m_scaledCauchy };
         P2G();
     }
 
@@ -360,10 +389,6 @@ public:
     /* Write our own advance function to override*/
     void advance(T dt) override
     {
-        // if(!initialized){
-        //     initialize();
-        //     std::cout << "Initialized..." << std::endl; //initialize() is already called by PhysicallyBasedSimulator.h befroe the main advance loop, this is redundant
-        // }
 
         std::cout << "Begin advance with dt= " << dt << std::endl;
 
@@ -373,6 +398,7 @@ public:
             m_F = model->m_F;
             m_FSmoothed = model->m_F; //dummy values to set up the right size
             m_cauchySmoothed = model->m_F; //dummy vals
+            m_scaledCauchy = model->m_F; //dummy vals
         }
 
         std::cout << "Finished collecting F and Cauchy..." << std::endl;
@@ -395,8 +421,14 @@ public:
         std::cout << "P2G Done..." << std::endl;
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
-        Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG };
-        tensorP2G();
+        if(useRankineDamage){
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use scaledCauchy if we are using RankineDamage
+            tensorP2G();
+        }
+        else{
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use regular Cauchy stress otherwise
+            tensorP2G();
+        }
         std::cout << "Tensor P2G Done..." << std::endl;
         Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG };
         tensorG2P();
@@ -424,12 +456,6 @@ public:
                 computeJIntegral = false;
             }
 
-            //Collect mu and lambda
-            for (auto& model : Base::elasticity_models){
-                m_mu = model->m_mu;
-                m_la = model->m_lambda;
-            }
-
             std::vector<T> contourValues; //empty vector to hold a value for each contour at this time
 
             //For this time, we will compute the J integral using however many contour radii the user asks for
@@ -438,7 +464,7 @@ public:
             Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegralOp{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
                 T J_I = 0;
-                J_I = computeJIntegralOp(contourCenters[i], contourRadii[i], jIntFile);
+                J_I = computeJIntegralOp(contourCenters[i], contourRadii[i], contourTypes[i], jIntFile);
                 contourValues.push_back(J_I);
             }
             jIntFile.close();
@@ -575,6 +601,28 @@ public:
         Bow::Logging::info("[AnisoMPM Damage] dMin: ", dMin);
     }
 
+    //Setup sim for Rankine damage (from Homel 2016)
+    void addRankineDamage(T _dMin, T _Gf, T _l0, T _p = -1.0, T _sigmaC = -1.0){
+        assert(_p > 0 ^ _sigmaC > 0); //assert that exactly one of these is set
+        assert(!useDamage); //if we've already added a damage model we can't add another!
+        Bow::Logging::info("[Rankine Damage] Simulating with Rankine Damage");
+        useDamage = true;
+        useRankineDamage = true;
+        dMin = _dMin;
+        Gf = _Gf;
+        l0 = _l0;
+        sigmaCRef = _sigmaC;
+        percentStretch = _p;
+        if (_p > 0) {
+            Bow::Logging::info("[Rankine Damage] Percent Stretch: ", percentStretch);
+        }
+        else {
+            Bow::Logging::info("[Rankine Damage] SigmaC: ", sigmaCRef);
+        }
+        Bow::Logging::info("[Rankine Damage] Gf: ", Gf);
+        Bow::Logging::info("[Rankine Damage] dMin: ", dMin);
+    }
+
     //Setup sim for an impulse of user defined strength and duration
     void addImpulse(TV _center, T _strength, T _startTime, T _duration)
     {
@@ -612,9 +660,10 @@ public:
 
     //Add a contour for us to take the J-integral over
     //NOTE: for ALL times we will calculate ALL contours (for more elegant design)
-    void addJIntegralContour(Vector<T,dim> _center, Vector<int,4> _contour){
+    void addJIntegralContour(Vector<T,dim> _center, Vector<int,4> _contour, bool _containsCrackTip){
         contourRadii.push_back(_contour);
         contourCenters.push_back(_center);
+        contourTypes.push_back(_containsCrackTip);
     }
     //Add times for these contours to be integrated over, ONLY CALL THIS ONCE WITH FULL LIST OF TIMES!
     void addJIntegralTiming(std::vector<T>& _times){
@@ -961,7 +1010,7 @@ public:
     }
 
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
-    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
+    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const T crackHeight, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000.)
     {
         BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
         // T width = max_corner[0] - min_corner[0];
@@ -997,8 +1046,8 @@ public:
             center(0) += length;
             center(1) += height/2.0;
             T dist = (position - center).norm();
-            T yMin = min_corner(1) + (height/2.0) - radius;
-            T yMax = min_corner(1) + (height/2.0) + radius;
+            T yMin = crackHeight - radius;
+            T yMax = crackHeight + radius;
             //T xMin = min_corner(0);
             T xMax = min_corner(0) + length;
             if(position(1) > yMin && position(1) < yMax && position(0) < xMax){ //excluded rectangle of size length * (2*radius)

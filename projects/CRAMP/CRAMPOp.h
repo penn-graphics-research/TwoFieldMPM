@@ -21,6 +21,8 @@ namespace CRAMP {
 class AbstractOp {
 };
 
+
+
 /* Transfer particle quantities to the grid as well as explicit update for velocity*/
 template <class T, int dim>
 class ParticlesToGridOp : public AbstractOp {
@@ -44,8 +46,10 @@ public:
     bool useDFG;
     bool useAPIC;
     bool useImplicitContact;
+    bool useRankineDamage;
 
-    //Field<T> m_vol;
+    Field<T> m_vol;
+    Field<Matrix<T, dim, dim>>& m_scaledCauchy;
 
     void operator()()
     {
@@ -57,11 +61,14 @@ public:
                 const T mass = m_mass[i];
                 const Matrix<T, dim, dim> C = m_C[i] * mass; //C * m_p
                 const Vector<T, dim> momentum = mass * v; //m_p * v_p
-                const Matrix<T, dim, dim> delta_t_tmp_force = -dt * stress[i]; //stress holds Vp^0 * PF^T
+                Matrix<T, dim, dim> delta_t_tmp_force = -dt * stress[i]; //stress holds Vp^0 * PF^T
                 BSplineWeights<T, dim> spline(pos, dx);
 
-                //Grab volume
-                //T vol = m_vol[i];
+                //Compute scaled stress forces (if using RankineDamage)
+                if(useRankineDamage){
+                    //Use damage scaled Cauchy stress for grid forces
+                    delta_t_tmp_force = -dt * m_vol[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
+                }
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     Vector<T, dim> xi_minus_xp = node.template cast<T>() * dx - pos;
@@ -151,6 +158,60 @@ public:
         });
     }
 };
+
+/* Update Rankine Damage */
+template <class T, int dim>
+class UpdateRankineDamageOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Matrix<T, dim, dim>>& m_cauchy;
+    Field<Matrix<T, dim, dim>>& m_scaledCauchy;
+    std::vector<T>& m_Dp;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    std::vector<T>& m_sigmaC; //particle sigmaC
+    std::vector<T>& Hs;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("updateRankineDamage");
+        grid.parallel_for([&](int i) {
+            //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
+            Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
+            Vector<T, dim> eigenVec;
+            T eigenVal = 0.0;
+            T maxEigVal = -10000000.0;
+            Eigen::EigenSolver<Matrix<T, dim, dim>> es(m_cauchy[i]);
+            
+            //Step 1.) compute maxEigVal
+            for (int j = 0; j < dim; j++) {
+                eigenVal = es.eigenvalues()(j).real();
+                maxEigVal = (maxEigVal > eigenVal) ? maxEigVal : eigenVal;
+            }
+
+            //Step 2.) Update Damage based on maxEigVal
+            if(maxEigVal > m_sigmaC[i]){
+                T newD = (1 + Hs[i]) * (1 - (m_sigmaC[i] / maxEigVal)); 
+                m_Dp[i] = std::max(m_Dp[i], std::min(1.0, newD));
+            }
+
+            //Step 3.) Compute Scaled Cauchy (Homel2016 Eq. 26,27)
+            for (int j = 0; j < dim; j++) {
+                for (int k = 0; k < dim; k++) {
+                    eigenVec(k) = es.eigenvectors().col(j)(k).real(); //get the real parts of each eigenvector
+                }
+                eigenVal = es.eigenvalues()(j).real();
+                if(eigenVal > 0){
+                    eigenVal *= (1 - m_Dp[i]);
+                }
+
+                sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());
+            }
+            m_scaledCauchy[i] = sigmaScaled;
+        });
+    }
+};
+
 
 /* Transfer Cauchy stress and deformation gradient to the grid */
 template <class T, int dim>
@@ -979,7 +1040,7 @@ public:
 
     bool useDFG;
 
-    T operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
+    T operator()(Vector<T,dim> center, Vector<int,4> contour, bool containsCrackTip, std::ofstream& file)
     {
         BOW_TIMER_FLAG("computeJIntegral");
 
@@ -1041,7 +1102,7 @@ public:
 
         //NOTE: Now this code greatly diverges between two cases, an INTERSECTING J!= 0 case, and a NON-INTERSECTING J = 0 case
         //INTERSECTION CASE
-        if(useDFG && foundIntersection){
+        if(useDFG && foundIntersection && containsCrackTip){
             //STEP 1b: Now look for the lower intersection -> start with topIntersectionIdx since this is the first segment that can have an intersection with the top points
             for(int i = topIntersectionIdx; i < (int)contourPoints.size() - 1; i++){
                 //check each contour line segment for intersections with top crack
@@ -1391,7 +1452,7 @@ public:
             file << "\n";
         }
         //NON-INTERSECTING CASE (J = 0) ==============================================================================
-        else if(useDFG && !foundIntersection){
+        else if(useDFG && !foundIntersection && !containsCrackTip){
             //STEP 1c: Construct our contour list- in this NON-INTERSECTING case, we simply must ensure that we start and end with the same point
             std::vector<Vector<T,dim>> finalContourPoints;
             std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
@@ -1489,17 +1550,21 @@ public:
             file << "\n";
         }
         //SINGLE FIELD MPM - INTERSECTING CASE (J = 0) ==============================================================================
-        else if(!useDFG){
+        else if(!useDFG || (useDFG && containsCrackTip)){
             //STEP 1c: Construct our contour list- in this SINGLE FIELD INTERSECTING case, we must make sure we start and end at the right points
             std::vector<Vector<T,dim>> finalContourPoints;
             std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
             //Crack intersection
             int U = contour[3];
-            topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
-            bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
-            // topIntersectionIdx = U - 1; //this INCLUDES the non-material grid points that still have mass
-            // bottomIntersectionIdx = U + 1;
-
+            if(!useDFG){ //for 4*dx wide cracks using single field MPM
+                topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
+                bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
+            }
+            else if(useDFG){ //for the 2*dx wide crack that DFG can handle!
+                topIntersectionIdx = U - 1; 
+                bottomIntersectionIdx = U + 1;
+            }
+            
             //bottom intersect
             finalContourPoints.push_back(contourPoints[bottomIntersectionIdx]);
             finalContourGridStates.push_back(contourGridStates[bottomIntersectionIdx]);
@@ -1588,7 +1653,12 @@ public:
 
             //Print it all out (later write to a simple file)
             file << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
-            file << "SINGLE FIELD MPM - INTERSECTING CONTOUR CASE (J == 0)" << "\n";
+            if(!useDFG){
+                file << "SINGLE FIELD MPM - INTERSECTING CONTOUR CASE (J != 0)" << "\n";
+            }
+            else if(useDFG){
+                file << "TWO-FIELD MPM - 2*DX INTERSECTING CONTOUR CASE (J != 0)" << "\n";
+            }
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
                 file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
                 file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";
