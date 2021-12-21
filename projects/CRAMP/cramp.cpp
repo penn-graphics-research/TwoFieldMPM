@@ -942,7 +942,7 @@ int main(int argc, char *argv[])
         T yTop = y2 - heldMaterial;
         T yBottom = y1 + heldMaterial;
         T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
-        T pullTime = (sim.frame_dt * sim.end_frame) / 2.0; //pull for half of the total time duration
+        T pullTime = 7.5; //in seconds
         T speed = (u2 / 2.0) / pullTime;
         std::cout << "speed:" << speed << std::endl;
         if(singlePuller){
