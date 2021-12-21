@@ -81,15 +81,14 @@ public:
     bool useAPIC = false;
     bool useDFG = false;
     bool useExplicitContact = true;
-    bool useDamage = false;
     bool useImplicitContact = false;
-    bool useRankineDamage = false;
-    bool useAnisoMPMDamage = false;
     bool useImpulse = false;
     bool crackInitialized = false;
     bool loading = false;
     bool nodalLoading = false;
     bool particlesMarkedForLoading = false;
+    int damageType = 0; //0 = none, 1 = Rankine, 2 = AnisoMPM, 3 = tanh
+    int elasticityDegradationType = 0; //0 = none, 1 = simpleLinearTension
     
     //Particle Data
     Field<TM> m_cauchy; //for anisoMPM
@@ -157,6 +156,10 @@ public:
     T zeta = 1.0;
     T l0;
 
+    //Tanh Damage Params
+    T lamC = 0.0;
+    T tanhWidth = 0.0;
+
     //Impulse Data
     TV impulseCenter = TV::Zero();
     T impulseStrength = 0;
@@ -202,7 +205,7 @@ public:
             m_la = model->m_lambda;
         }
 
-        if(useAnisoMPMDamage){
+        if(damageType == 2){
             l0 = 0.5 * Base::dx;
         }
         
@@ -224,7 +227,7 @@ public:
         }   
 
         //Initialize sigmaC if we are using damage
-        if(useDamage){
+        if(damageType == 1 || damageType == 2){ //for Rankine and AnisoMPM damage
 
             if(percentStretch > 0){
                 for (auto& model : Base::elasticity_models)
@@ -248,7 +251,7 @@ public:
             }
         }
 
-        if(useRankineDamage){
+        if(damageType == 1){ //for Rankine damage only
             for(int i = 0; i < (int)Base::m_mass.size(); ++i){
                 T mu = m_mu[i];
                 T la = m_la[i];
@@ -282,9 +285,10 @@ public:
         }
         
         //Rankine Damage Routines
-        if (useRankineDamage) {
+        if (damageType == 1) {
             //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we update this BEFORE computing DGs!
-            updateRankineDamage();
+            Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs};
+            update_rankine();
         }
 
         Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid };
@@ -292,12 +296,6 @@ public:
 
         Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid };
         partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
-    }
-
-    //Rankine Damage Routines
-    void updateRankineDamage(){
-        Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, m_scaledCauchy, Dp, grid, sigmaC, Hs};
-        update_rankine();
     }
 
     //AnisoMPM Routines
@@ -335,7 +333,7 @@ public:
         //     }
         // }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, useRankineDamage, m_vol, m_scaledCauchy };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_vol, m_scaledCauchy };
         P2G();
     }
 
@@ -410,10 +408,16 @@ public:
             std::cout << "Partitioned..." << std::endl;
 
             //AnisoMPM Routines
-            if(useAnisoMPMDamage) {
+            if(damageType == 2) {
                 anisoMPMDamage(dt); //note that we simply update and track damage, there is no elasticity deg
                 std::cout << "AnisoMPM Damage Updated..." << std::endl;
             }
+        }
+
+        //Compute Scaled Stress from Elasticity Degradation
+        if(elasticityDegradationType == 1){
+            Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, grid };
+            linearTensionDegradation();
         }
 
         p2g(dt); //compute forces, p2g transfer
@@ -421,7 +425,7 @@ public:
         std::cout << "P2G Done..." << std::endl;
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
-        if(useRankineDamage){
+        if(elasticityDegradationType == 1){
             Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use scaledCauchy if we are using RankineDamage
             tensorP2G();
         }
@@ -581,10 +585,9 @@ public:
     void addAnisoMPMDamage(T _eta, T _dMin, T _zeta, T _p = -1.0, T _sigmaC = -1.0)
     {
         assert(_p > 0 ^ _sigmaC > 0); //assert that exactly one of these is set
-        assert(!useDamage); //if we've already added a damage model we can't add another!
+        assert(damageType == 0); //if we've already added a damage model we can't add another!
         Bow::Logging::info("[AnisoMPM Damage] Simulating with AnisoMPM Damage");
-        useAnisoMPMDamage = true;
-        useDamage = true;
+        damageType = 2;
         eta = _eta;
         dMin = _dMin;
         sigmaCRef = _sigmaC;
@@ -602,17 +605,17 @@ public:
     }
 
     //Setup sim for Rankine damage (from Homel 2016)
-    void addRankineDamage(T _dMin, T _Gf, T _l0, T _p = -1.0, T _sigmaC = -1.0){
+    void addRankineDamage(T _dMin, T _Gf, T _l0, int _degType, T _p = -1.0, T _sigmaC = -1.0){
         assert(_p > 0 ^ _sigmaC > 0); //assert that exactly one of these is set
-        assert(!useDamage); //if we've already added a damage model we can't add another!
+        assert(damageType == 0); //if we've already added a damage model we can't add another!
         Bow::Logging::info("[Rankine Damage] Simulating with Rankine Damage");
-        useDamage = true;
-        useRankineDamage = true;
+        damageType = 1;
         dMin = _dMin;
         Gf = _Gf;
         l0 = _l0;
         sigmaCRef = _sigmaC;
         percentStretch = _p;
+        elasticityDegradationType = _degType;
         if (_p > 0) {
             Bow::Logging::info("[Rankine Damage] Percent Stretch: ", percentStretch);
         }
@@ -621,6 +624,17 @@ public:
         }
         Bow::Logging::info("[Rankine Damage] Gf: ", Gf);
         Bow::Logging::info("[Rankine Damage] dMin: ", dMin);
+    }
+
+    //Setup sim for Hyperbolic Tangent Damage
+    void addHyperbolicTangentDamage(T _lamC, T _tanhWidth, T _dMin, int _degType){
+        assert(damageType == 0); //if we've already added a damage model we can't add another!
+        Bow::Logging::info("[Hyperbolic Tangent Damage] Simulating with Hyperbolic Tangent Damage");
+        damageType = 3;
+        dMin = _dMin;
+        lamC = _lamC;
+        tanhWidth = _tanhWidth;
+        elasticityDegradationType = _degType;
     }
 
     //Setup sim for an impulse of user defined strength and duration

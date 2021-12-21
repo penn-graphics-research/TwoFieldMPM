@@ -894,8 +894,8 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 1500;
-        sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.end_frame = 500;
+        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -961,7 +961,8 @@ int main(int argc, char *argv[])
         T Gf = 22.3e-3; //from Table2 Homel2016
         T l0 = sqrt(2 * sim.dx * sim.dx);
         T sigmaC = 2600;
-        sim.addRankineDamage(dMin, Gf, l0, -1.0, sigmaC); //-1 is for p which we dont want to use here
+        int degType = 1;
+        sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
 
         sim.run(start_frame);
     }

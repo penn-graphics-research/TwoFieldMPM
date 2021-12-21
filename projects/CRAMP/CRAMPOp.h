@@ -46,7 +46,7 @@ public:
     bool useDFG;
     bool useAPIC;
     bool useImplicitContact;
-    bool useRankineDamage;
+    int elasticityDegradationType;
 
     Field<T> m_vol;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
@@ -64,8 +64,8 @@ public:
                 Matrix<T, dim, dim> delta_t_tmp_force = -dt * stress[i]; //stress holds Vp^0 * PF^T
                 BSplineWeights<T, dim> spline(pos, dx);
 
-                //Compute scaled stress forces (if using RankineDamage)
-                if(useRankineDamage){
+                //Compute scaled stress forces (if using elasticity degradation)
+                if(elasticityDegradationType == 1){
                     //Use damage scaled Cauchy stress for grid forces
                     delta_t_tmp_force = -dt * m_vol[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
                 }
@@ -159,13 +159,49 @@ public:
     }
 };
 
+/*Simple Linear Tension Elasticity Degradation (Homel2016 Eq. 26, 27) */
+template <class T, int dim>
+class SimpleLinearTensionElasticityDegOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Matrix<T, dim, dim>>& m_cauchy;
+    Field<Matrix<T, dim, dim>>& m_scaledCauchy;
+    std::vector<T>& m_Dp;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("simpleLinearTensionElasticityDegradation");
+        grid.parallel_for([&](int i) {
+            //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
+            Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
+            Vector<T, dim> eigenVec;
+            T eigenVal = 0.0;
+            Eigen::EigenSolver<Matrix<T, dim, dim>> es(m_cauchy[i]);
+
+            //Compute Scaled Cauchy (Homel2016 Eq. 26,27)
+            for (int j = 0; j < dim; j++) {
+                for (int k = 0; k < dim; k++) {
+                    eigenVec(k) = es.eigenvectors().col(j)(k).real(); //get the real parts of each eigenvector
+                }
+                eigenVal = es.eigenvalues()(j).real();
+                if(eigenVal > 0){
+                    eigenVal *= (1 - m_Dp[i]);
+                }
+
+                sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());
+            }
+            m_scaledCauchy[i] = sigmaScaled;
+        });
+    }
+};
+
 /* Update Rankine Damage */
 template <class T, int dim>
 class UpdateRankineDamageOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Matrix<T, dim, dim>>& m_cauchy;
-    Field<Matrix<T, dim, dim>>& m_scaledCauchy;
     std::vector<T>& m_Dp;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
@@ -177,7 +213,6 @@ public:
         BOW_TIMER_FLAG("updateRankineDamage");
         grid.parallel_for([&](int i) {
             //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
-            Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
             Vector<T, dim> eigenVec;
             T eigenVal = 0.0;
             T maxEigVal = -10000000.0;
@@ -194,20 +229,6 @@ public:
                 T newD = (1 + Hs[i]) * (1 - (m_sigmaC[i] / maxEigVal)); 
                 m_Dp[i] = std::max(m_Dp[i], std::min(1.0, newD));
             }
-
-            //Step 3.) Compute Scaled Cauchy (Homel2016 Eq. 26,27)
-            for (int j = 0; j < dim; j++) {
-                for (int k = 0; k < dim; k++) {
-                    eigenVec(k) = es.eigenvectors().col(j)(k).real(); //get the real parts of each eigenvector
-                }
-                eigenVal = es.eigenvalues()(j).real();
-                if(eigenVal > 0){
-                    eigenVal *= (1 - m_Dp[i]);
-                }
-
-                sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());
-            }
-            m_scaledCauchy[i] = sigmaScaled;
         });
     }
 };
