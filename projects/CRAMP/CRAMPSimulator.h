@@ -149,6 +149,9 @@ public:
     std::vector<T> Hs;
     Field<TM> m_scaledCauchy; //scaled cauchy stresses
 
+    //Elasticity Degradation Params
+    T degAlpha = 1.0; //exponent for simple linear tension
+
     //AnisoMPM Params
     T eta = 0.01;
     T sigmaCRef = -1.0;
@@ -416,7 +419,7 @@ public:
 
         //Compute Scaled Stress from Elasticity Degradation
         if(elasticityDegradationType == 1){
-            Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, grid };
+            Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, degAlpha, grid };
             linearTensionDegradation();
         }
 

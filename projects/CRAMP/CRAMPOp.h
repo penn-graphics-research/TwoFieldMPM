@@ -167,6 +167,7 @@ public:
     Field<Matrix<T, dim, dim>>& m_cauchy;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
     std::vector<T>& m_Dp;
+    T degAlpha;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
     void operator()()
@@ -186,7 +187,7 @@ public:
                 }
                 eigenVal = es.eigenvalues()(j).real();
                 if(eigenVal > 0){
-                    eigenVal *= (1 - m_Dp[i]);
+                    eigenVal *= std::pow((1 - m_Dp[i]), degAlpha);
                 }
 
                 sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());

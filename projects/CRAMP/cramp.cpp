@@ -884,7 +884,7 @@ int main(int argc, char *argv[])
     if(testcase == 209){
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/mode1SENT_DFGwithRankine");
+        MPM::CRAMPSimulator<T, dim> sim("output/mode1SENT_DFGwithRankine_alpha1.5");
 
         //material
         T E = 2.6e6;
@@ -963,6 +963,9 @@ int main(int argc, char *argv[])
         T sigmaC = 2600;
         int degType = 1;
         sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+        
+        //Set degradation alpha
+        sim.degAlpha = 1.5;
 
         sim.run(start_frame);
     }
