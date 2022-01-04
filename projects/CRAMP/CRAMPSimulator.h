@@ -287,11 +287,15 @@ public:
             surface_detection(); //Detect surface particles on first substep
         }
         
-        //Rankine Damage Routines
-        if (damageType == 1) {
+        //Damage Routines (Rankine or Tanh)
+        if (damageType == 1) { //Rankine
             //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we update this BEFORE computing DGs!
             Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs};
             update_rankine();
+        }
+        else if(damageType == 3){ //tanh damage
+            Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth };
+            update_tanh();
         }
 
         Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid };
@@ -305,9 +309,6 @@ public:
     void anisoMPMDamage(T dt){
         Bow::DFGMPM::ComputeDamageLaplaciansOp<T, dim> compute_damageLaplacians{ {}, Base::m_X, Dp, damageLaplacians, particleAF, Base::dx, grid };
         compute_damageLaplacians();
-
-        // for (auto& model : Base::elasticity_models) //compute cauchy stress to pass to next method
-        //     model->compute_cauchy(m_cauchy); //NOTE: already do this now in main loop
 
         Bow::DFGMPM::UpdateAnisoMPMDamageOp<T, dim> update_anisoMPM_damage{ {}, Dp, damageLaplacians, dTildeH, sigmaC, m_cauchy, dt, eta, zeta, l0, grid };
         update_anisoMPM_damage();

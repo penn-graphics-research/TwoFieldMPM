@@ -213,7 +213,7 @@ public:
     {
         BOW_TIMER_FLAG("updateRankineDamage");
         grid.parallel_for([&](int i) {
-            //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
+            //Compute updated damage
             Vector<T, dim> eigenVec;
             T eigenVal = 0.0;
             T maxEigVal = -10000000.0;
@@ -230,6 +230,36 @@ public:
                 T newD = (1 + Hs[i]) * (1 - (m_sigmaC[i] / maxEigVal)); 
                 m_Dp[i] = std::max(m_Dp[i], std::min(1.0, newD));
             }
+        });
+    }
+};
+
+/* Update Hyperbolic Tangent Damage */
+template <class T, int dim>
+class UpdateTanhDamageOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Matrix<T, dim, dim>>& m_F;
+    std::vector<T>& m_Dp;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    T lamC;
+    T tanhWidth;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("updateTanhDamage");
+        
+        //Compute updated damage using d = 0.5 + 0.5tanh((lamMax - lamC) / tanhWidth)
+        grid.parallel_for([&](int i) {
+            //Compute polar decomposition so we can compute maximum stretch, lamMax
+            Matrix<T, dim, dim> R, S;
+            Math::polar_decomposition(m_F[i], R, S);
+            T lamMax = S(0,0); //NOTE: this assumes SVs were sorted in SVD
+
+            //Update damage values
+            T newD = 0.5 + (0.5 * tanh((lamMax - lamC)/tanhWidth));
+            m_Dp[i] = std::max(m_Dp[i], newD); //function will always be between 0 and 1, so we just have to make sure it's monotonically increasing
         });
     }
 };
