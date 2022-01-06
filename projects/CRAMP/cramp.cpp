@@ -982,7 +982,7 @@ int main(int argc, char *argv[])
         T crackRadius = sim.dx;
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
         //Add Boundary Conditions
         bool singlePuller = false;
@@ -1108,7 +1108,7 @@ int main(int argc, char *argv[])
         T crackRadius = sim.dx;
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
         //Add Boundary Conditions
         bool singlePuller = false;
@@ -1116,7 +1116,7 @@ int main(int argc, char *argv[])
         T yTop = y2 - heldMaterial;
         T yBottom = y1 + heldMaterial;
         T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
-        T pullTime = 7.5; //in seconds
+        T pullTime = 3; //in seconds
         T speed = (u2 / 2.0) / pullTime;
         std::cout << "speed:" << speed << std::endl;
         if(singlePuller){
@@ -1177,7 +1177,7 @@ int main(int argc, char *argv[])
         std::vector<std::string> cleanedStrings;
         for(int i = 2; i < 7; ++i){
             std::string cleanString = argv[i];
-            if(i == 2 || i == 5 || i == 6){
+            if(i == 5 || i == 6){
                 cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
             }
             cleanedStrings.push_back(cleanString);
@@ -1193,8 +1193,8 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //1 mm
         sim.symplectic = true;
-        sim.end_frame = 1000;
-        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.end_frame = 500;
+        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -1219,41 +1219,35 @@ int main(int argc, char *argv[])
         // Using `new` to avoid redundant copy constructor
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
 
-        //Sample Particles
+        //Sample Target's Particles
         int ppc = 4;
-        T height = 32e-3; //32mm
-        T width = 20e-3; //20mm
-        T x1 = 0.05 - width/2.0;
-        T y1 = 0.05 - height/2.0;
+        T height = 100e-3; //32mm
+        T width = 100e-3; //20mm
+        T x1 = 0.5 - width/2.0;
+        T y1 = 0.5 - height/2.0;
         T x2 = x1 + width;
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
-        T crackLength = 5e-3;
+        T crackLength = 0.05; //50mm
         T crackRadius = sim.dx;
-        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
-        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+        T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Sample Impactor Particles
+        T distFromTarget = sim.dx*2.0;
+        x1 -= (0.1 + distFromTarget);
+        x2 -= (width + distFromTarget);
+        T y2New = y2 - 0.075 - crackRadius;
+        Vector<T,dim> minPoint2(x1, y1);
+        Vector<T,dim> maxPoint2(x2, y2New);
+        T impactorSpeed = 33.0;
+        sim.sampleGridAlignedBox(material1, minPoint2, maxPoint2, Vector<T,dim>(impactorSpeed, 0.0), ppc, rho, false);
 
         //Add Boundary Conditions
-        bool singlePuller = false;
         T heldMaterial = 2.0 * sim.dx;
         T yTop = y2 - heldMaterial;
-        T yBottom = y1 + heldMaterial;
-        T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
-        T pullTime = 7.5; //in seconds
-        T speed = (u2 / 2.0) / pullTime;
-        std::cout << "speed:" << speed << std::endl;
-        if(singlePuller){
-            //fix bottom constant, pull on top the full u2
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
-        }
-        else{
-            //pull from top and bottom, each pulling u2/2
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
-            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
-        }
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0))); //hold the top
 
         //Add Rankine Damage Model
         T l0 = sqrt(2 * sim.dx * sim.dx);
