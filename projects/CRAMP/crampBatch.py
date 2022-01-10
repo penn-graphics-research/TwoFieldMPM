@@ -2,14 +2,16 @@ import subprocess
 
 #TEST CONTROL CENTER
 #Set which tests you want to run in the following lists of demos, then see next section of controls
-sectorA = [0, 0, 1, 0]                #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine]
+sectorA = [0, 0, 0, 0]            #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine] 
+sectorB = [1, 1]                  #[Damage Suite FCR, Damage Suite NH]
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
 test1 = [1, 0, 0, 0, 0]                 #uniaxialTension: [control, eta, zeta, p, dMin]
 test2 = [0, 1, 1, 1, 0, 0]              #SENT with displacement BCs and Rankine Damage: [control, Gf, sigmaC, alpha, dMin, minDp]
 test3 = [0, 1, 1, 0, 0, 0]              #SENT with displacement BCs and Tanh Damage: [control, lamC, width, alpha, dMin, mnDp]
-test4 = [1]                             #Shear Fracture Test (Homel2016) wth Rankine Damage
+test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress, SENT FCR stretch, shear FCR stress, shear FCR stretch]
+test5 = [1, 1, 1, 1]                    #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch]
 
 #Uniaxial Tension Test with Displacement BCs and AnisoMPM Damage
 if sectorA[0]:
@@ -124,9 +126,9 @@ if sectorA[1]:
 
 #SENT with Displacement BCs and Tanh Damage
 if sectorA[2]:
-    constants = [1.005, 0.0007, 1.0, 0.25, 1.0] #lamC, tanhWidth, alpha, dMin, minDp
-    lamCArray = [1.001, 1.003, 1.007, 1.009]
-    tanhWidthArray = [0.003, 0.005, 0.009, 0.011]
+    constants = [1.5, 0.1, 1.0, 0.25, 1.0] #lamC, tanhWidth, alpha, dMin, minDp
+    lamCArray = [1.3, 1.4, 1.6, 1.75, 1.8, 2.0] #[1.001, 1.003, 1.007, 1.009]
+    tanhWidthArray = [0.25, 0.2, 0.15, 0.125, 0.05]
     # alphaArray = [0.5, 0.75, 1.25, 1.5]
     # dMinArray = [0.15, 0.2, 0.3, 0.35]
     # minDpArray = [0.8, 0.9, 0.95]
@@ -158,17 +160,80 @@ if sectorA[2]:
             print(runCommand)
             subprocess.call([runCommand], shell=True)
 
-
-
-#Shear Fracture Test With Rankine Damage
-if sectorA[3]:
-    constants = [22300, 570000000, 1.0, 0.25, 1.0]
-    if test4[0]:
-        Gf = constants[0]
-        sigmaC = constants[1]
-        alpha = constants[2]
-        dMin = constants[3]
-        minDp = constants[4]
+#Damage Suite FCR
+if sectorB[0]:
+    if test4[0]: #SENT, stress based
+        Gf = 0.0223
+        sigmaC = 2600
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 209 ' + str(Gf) + ' ' + str(sigmaC) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test4[1]: #SENT, stretch based
+        lamC = 1.5
+        tanhWidth = 0.15
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 210 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test4[2]: #shear fracture, stress based
+        Gf = 22300
+        sigmaC = 570000000
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
         runCommand = './cramp 211 ' + str(Gf) + ' ' + str(sigmaC) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test4[3]: #shear fracture, stretch based
+        lamC = 1.006
+        tanhWidth = 0.001
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 212 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+
+#Damage Suite NH
+if sectorB[1]:
+    if test5[0]: #SENT, stress based
+        Gf = 0.0223
+        sigmaC = 2600
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 213 ' + str(Gf) + ' ' + str(sigmaC) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test5[1]: #SENT, stretch based
+        lamC = 1.5
+        tanhWidth = 0.15
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 214 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test5[2]: #shear fracture, stress based
+        Gf = 22300
+        sigmaC = 570000000
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 215 ' + str(Gf) + ' ' + str(sigmaC) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test5[3]: #shear fracture, stretch based
+        lamC = 1.006
+        tanhWidth = 0.001
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 216 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
         print(runCommand)
         subprocess.call([runCommand], shell=True)

@@ -25,8 +25,14 @@ int main(int argc, char *argv[])
     206 ... Plate with Hole Test
     207 ... SENT with Wider Crack to compute J-integrals with single-field MPM
     208 ... Ballpit 2D (test DFG frictional contact)
-    209 ... [PYTHON] SENT, Displacement BCs, Rankine Damage
-    210 ... [PYTHON] SENT, Displacement BCs, Hyperbolic Tangent Damage
+    209 ... [PYTHON] FCR, SENT, Displacement BCs, "Stress Based" Damage
+    210 ... [PYTHON] FCR, SENT, Displacement BCs, "Stretch Based" Damage
+    211 ... [PYTHON] FCR, Shear Fracture, "Stress Based" Damage, Homel 2016 config and params
+    212 ... [PYTHON] FCR, Shear Fracture, "Stretch Based" Damage
+    213 ... [PYTHON] NH, SENT, Displacement BCs, "Stress Based" Damage
+    214 ... [PYTHON] NH, SENT, Displacement BCs, "Stretch Based" Damage
+    215 ... [PYTHON] NH, Shear Fracture, "Stress Based" Damage, Homel 2016 config and params
+    216 ... [PYTHON] NH, Shear Fracture, "Stretch Based" Damage
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -931,7 +937,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_RankineDamage_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -942,7 +948,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 500;
+        sim.end_frame = 300;
         sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
@@ -1052,12 +1058,12 @@ int main(int argc, char *argv[])
         std::vector<std::string> cleanedStrings;
         for(int i = 2; i < 7; ++i){
             std::string cleanString = argv[i];
-            if(i == 2 || i == 3 || i == 5 || i == 6){
+            if(i == 3 || i == 5 || i == 6){
                 cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_TanhDamage_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1068,8 +1074,8 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 500;
-        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.end_frame = 100;
+        sim.frame_dt = 1e-3; //500 frames at 1e-3 is 0.5s
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -1115,8 +1121,8 @@ int main(int argc, char *argv[])
         T heldMaterial = 2.0 * sim.dx;
         T yTop = y2 - heldMaterial;
         T yBottom = y1 + heldMaterial;
-        T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
-        T pullTime = 3; //in seconds
+        T u2 = height*0.5; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = 0.3; //in seconds
         T speed = (u2 / 2.0) / pullTime;
         std::cout << "speed:" << speed << std::endl;
         if(singlePuller){
@@ -1143,7 +1149,7 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
-    //[PYTHON] 70 Degree Shear Fracture Test (Homel 2016 configuration)
+    //[PYTHON] 70 Degree Shear Fracture Test (Homel 2016 configuration, Stress based damage with FCR elasticity)
     if(testcase == 211){
         
         using T = double;
@@ -1182,7 +1188,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_RankineDamage_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/HomelShearFractureTest_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1193,7 +1199,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //1 mm
         sim.symplectic = true;
-        sim.end_frame = 500;
+        sim.end_frame = 300;
         sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
@@ -1253,6 +1259,615 @@ int main(int argc, char *argv[])
         T l0 = sqrt(2 * sim.dx * sim.dx);
         int degType = 1;
         sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] 70 Degree Shear Fracture Test (Stretch Based Damage with FCR elasticity)
+    if(testcase == 212){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = lamC
+        //argv[3] = tanhWidth
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T lamC = 1.5; //from Table2 Homel2016
+        // T tanhWidth = 0.2;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 212 USAGE: ./cramp testcase lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 3 || i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material (from Homel)
+        T E = 1.9e11;
+        T nu = 0.2647;
+        T rho = 8000;
+
+        //Params
+        sim.dx = 1e-3; //1 mm
+        sim.symplectic = true;
+        sim.end_frame = 300;
+        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Target's Particles
+        int ppc = 4;
+        T height = 100e-3; //32mm
+        T width = 100e-3; //20mm
+        T x1 = 0.5 - width/2.0;
+        T y1 = 0.5 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 0.05; //50mm
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Sample Impactor Particles
+        T distFromTarget = sim.dx*2.0;
+        x1 -= (0.1 + distFromTarget);
+        x2 -= (width + distFromTarget);
+        T y2New = y2 - 0.075 - crackRadius;
+        Vector<T,dim> minPoint2(x1, y1);
+        Vector<T,dim> maxPoint2(x2, y2New);
+        T impactorSpeed = 33.0;
+        sim.sampleGridAlignedBox(material1, minPoint2, maxPoint2, Vector<T,dim>(impactorSpeed, 0.0), ppc, rho, false);
+
+        //Add Boundary Conditions
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0))); //hold the top
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] SENT with Displacement BCs, using Stress-Based Damage and NeoHookean elasticity
+    if(testcase == 213){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = Gf
+        //argv[3] = sigmaC
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T Gf = 22.3e-3; //from Table2 Homel2016
+        // T sigmaC = 2600;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 213 USAGE: ./cramp testcase Gf sigmaC alpha dMin minDp");
+            exit(0);
+        }
+
+        T Gf = std::atof(argv[2]);
+        T sigmaC = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2 || i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 300;
+        sim.frame_dt = 1e-3; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        T yBottom = y1 + heldMaterial;
+        T u2 = 1e-3; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = 7.5; //in seconds
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
+
+        //Add Rankine Damage Model
+        T l0 = sqrt(2 * sim.dx * sim.dx);
+        int degType = 1;
+        sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] SENT with Displacement BCs, using Stretch-Based Damage and NeoHookean elasticity
+    if(testcase == 214){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = lamC
+        //argv[3] = tanhWidth
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T lamC = ???; //from Table2 Homel2016
+        // T tanhWidth = ???;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 214 USAGE: ./cramp testcase lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 3 || i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 100;
+        sim.frame_dt = 1e-3; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        T yBottom = y1 + heldMaterial;
+        T u2 = height*0.5; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = 0.3; //in seconds
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] 70 Degree Shear Fracture Test (Homel 2016 configuration, Stress based damage with NH elasticity)
+    if(testcase == 215){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = Gf
+        //argv[3] = sigmaC
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T Gf = 22.3e-3; //from Table2 Homel2016
+        // T sigmaC = 2600;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 215 USAGE: ./cramp testcase Gf sigmaC alpha dMin minDp");
+            exit(0);
+        }
+
+        T Gf = std::atof(argv[2]);
+        T sigmaC = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/HomelShearFractureTest_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material (from Homel)
+        T E = 1.9e11;
+        T nu = 0.2647;
+        T rho = 8000;
+
+        //Params
+        sim.dx = 1e-3; //1 mm
+        sim.symplectic = true;
+        sim.end_frame = 300;
+        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+
+        //Sample Target's Particles
+        int ppc = 4;
+        T height = 100e-3; //32mm
+        T width = 100e-3; //20mm
+        T x1 = 0.5 - width/2.0;
+        T y1 = 0.5 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 0.05; //50mm
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Sample Impactor Particles
+        T distFromTarget = sim.dx*2.0;
+        x1 -= (0.1 + distFromTarget);
+        x2 -= (width + distFromTarget);
+        T y2New = y2 - 0.075 - crackRadius;
+        Vector<T,dim> minPoint2(x1, y1);
+        Vector<T,dim> maxPoint2(x2, y2New);
+        T impactorSpeed = 33.0;
+        sim.sampleGridAlignedBox(material1, minPoint2, maxPoint2, Vector<T,dim>(impactorSpeed, 0.0), ppc, rho, false);
+
+        //Add Boundary Conditions
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0))); //hold the top
+
+        //Add Rankine Damage Model
+        T l0 = sqrt(2 * sim.dx * sim.dx);
+        int degType = 1;
+        sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] 70 Degree Shear Fracture Test (Stretch Based Damage with NH elasticity)
+    if(testcase == 216){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = lamC
+        //argv[3] = tanhWidth
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T lamC = 1.5; //from Table2 Homel2016
+        // T tanhWidth = 0.2;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 216 USAGE: ./cramp testcase lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 3 || i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material (from Homel)
+        T E = 1.9e11;
+        T nu = 0.2647;
+        T rho = 8000;
+
+        //Params
+        sim.dx = 1e-3; //1 mm
+        sim.symplectic = true;
+        sim.end_frame = 300;
+        sim.frame_dt = 1e-6; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+
+        //Sample Target's Particles
+        int ppc = 4;
+        T height = 100e-3; //32mm
+        T width = 100e-3; //20mm
+        T x1 = 0.5 - width/2.0;
+        T y1 = 0.5 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 0.05; //50mm
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Sample Impactor Particles
+        T distFromTarget = sim.dx*2.0;
+        x1 -= (0.1 + distFromTarget);
+        x2 -= (width + distFromTarget);
+        T y2New = y2 - 0.075 - crackRadius;
+        Vector<T,dim> minPoint2(x1, y1);
+        Vector<T,dim> maxPoint2(x2, y2New);
+        T impactorSpeed = 33.0;
+        sim.sampleGridAlignedBox(material1, minPoint2, maxPoint2, Vector<T,dim>(impactorSpeed, 0.0), ppc, rho, false);
+
+        //Add Boundary Conditions
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0))); //hold the top
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
         
         //Set degradation alpha
         sim.degAlpha = alpha;
