@@ -33,6 +33,7 @@ int main(int argc, char *argv[])
     214 ... [PYTHON] NH, SENT, Displacement BCs, "Stretch Based" Damage
     215 ... [PYTHON] NH, Shear Fracture, "Stress Based" Damage, Homel 2016 config and params
     216 ... [PYTHON] NH, Shear Fracture, "Stretch Based" Damage
+    217 ... [PYTHON] Numerical Fracture exploration -- FCR, SENT, Displacement BCs, no Damage, variable dx
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -986,6 +987,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
@@ -1112,6 +1116,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
@@ -1237,6 +1244,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 0.05; //50mm
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
@@ -1357,6 +1367,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 0.05; //50mm
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
@@ -1427,7 +1440,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_noDFG_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1448,7 +1461,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = true;
+        sim.useDFG = false;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1476,6 +1489,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
@@ -1553,7 +1569,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_noDFG_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1574,7 +1590,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = true;
+        sim.useDFG = false;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1602,6 +1618,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
@@ -1678,7 +1697,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/HomelShearFractureTest_StressBasedDamage_noDFG_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1699,7 +1718,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = true;
+        sim.useDFG = false;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1727,6 +1746,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 0.05; //50mm
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
@@ -1798,7 +1820,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_noDFG_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1819,7 +1841,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = true;
+        sim.useDFG = false;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1847,6 +1869,9 @@ int main(int argc, char *argv[])
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 0.05; //50mm
         T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
         T crackHeight = y1 + (height / 4.0); //- (sim.dx / 2.0); 
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
@@ -1874,6 +1899,109 @@ int main(int argc, char *argv[])
 
         //set minDp
         sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Numerical Fracture exploration -- FCR, SENT, Displacement BCs, no Damage, variable dx
+    if(testcase == 217){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = dx
+        
+        if (argc < 3) {
+            puts("ERROR: please add parameters");
+            puts("TEST 217 USAGE: ./cramp testcase dx");
+            exit(0);
+        }
+
+        T resolution = std::atof(argv[2]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 3; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/SENT_DisplacementBCs_noDamage_FCR_dx" + cleanedStrings[0];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = resolution; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 100;
+        sim.frame_dt = 1e-3; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        if(sim.useDFG == false){
+            crackRadius *= 2.0;
+        }
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        T yBottom = y1 + heldMaterial;
+        T u2 = height*0.5; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = 0.3; //in seconds
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
 
         sim.run(start_frame);
     }

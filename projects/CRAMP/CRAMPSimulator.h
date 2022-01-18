@@ -423,6 +423,18 @@ public:
                 std::cout << "AnisoMPM Damage Updated..." << std::endl;
             }
         }
+        //if no DFG but we still want to use damage
+        else{ 
+            //Damage Routines (Rankine or Tanh)
+            if (damageType == 1) { //Rankine
+                Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage};
+                update_rankine();
+            }
+            else if(damageType == 3){ //tanh damage
+                Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax };
+                update_tanh();
+            }
+        }
 
         //Compute Scaled Stress from Elasticity Degradation
         if(elasticityDegradationType == 1){
