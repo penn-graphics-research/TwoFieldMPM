@@ -39,12 +39,7 @@ public:
     std::vector<std::shared_ptr<ElasticityOp<T, dim>>> elasticity_models;
     BoundaryConditionManager<T, dim> BC; */
 
-    //Hold our massless explicit crack particles
-    // Field<TV> m_crackPlane;
-    // Field<TV> m_topPlane;
-    // Field<TV> m_bottomPlane;
-
-    Field<int> m_marker; //0 = material particle, 1 = crack particle, 2 = top plane, 3 = bottom plane
+    Field<int> m_marker; //0 = solid material particle, 1 = crack particle, 2 = top plane, 3 = bottom plane, 4 = fluid
     int crackPlane_startIdx = 0;
     int topPlane_startIdx = 0;
     int bottomPlane_startIdx = 0;
@@ -331,13 +326,6 @@ public:
                 m_vol = model->m_vol;
             }
         }
-        // else if(useImplicitContact){ //grab mu, la, and vol for barrier eval -- TAG=BARRIER
-        //     for (auto& model : Base::elasticity_models){
-        //         m_mu = model->m_mu;
-        //         m_la = model->m_lambda;
-        //         m_vol = model->m_vol;
-        //     }
-        // }
         //Notice that this P2G is from CRAMPOp.h
         Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_vol, m_scaledCauchy };
         P2G();
@@ -450,18 +438,18 @@ public:
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
         if(elasticityDegradationType == 1 && ((int)m_F.size() > 0)){
-            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use scaledCauchy if we are using RankineDamage
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use scaledCauchy if we are using RankineDamage
             tensorP2G();
-            std::cout << "Tensor P2G Done..." << std::endl;
+            std::cout << "Tensor P2G Done (Scaled)..." << std::endl;
         }
         else if((int)m_F.size() > 0){
-            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use regular Cauchy stress otherwise
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use regular Cauchy stress otherwise
             tensorP2G();
-            std::cout << "Tensor P2G Done..." << std::endl;
+            std::cout << "Tensor P2G Done (Unscaled)..." << std::endl;
         }
         
         if((int)m_F.size() > 0){
-            Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG };
+            Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker };
             tensorG2P();
             std::cout << "Tensor G2P Done..." << std::endl;
         }
@@ -795,12 +783,12 @@ public:
         particleDG.push_back(TV::Zero());
         dTildeH.push_back(0.0);
         sigmaC.push_back(0.0);
-        m_marker.push_back(0);
+        m_marker.push_back(marker);
         m_useDamage.push_back(useDamage);
         m_lamMax.push_back(0.0);
     }
 
-    void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false)
+    void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
         ppc = (T)_ppc; //set sim ppc
@@ -812,13 +800,13 @@ public:
         iterateRegion(region, [&](const Vector<int, dim>& offset) {
             TV position = min_corner + offset.template cast<T>() * interval;
             position += TV::Ones() * 0.5 * interval + TV::Random() * 0.5 * interval;
-            addParticle(position, velocity, density*vol, 0.0, 0, 0, useDamage);
+            addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
     }
 
-    void samplePrecutRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false)
+    void samplePrecutRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
         //T vol = dim == 2 ? Base::dx * Base::dx / 4 : Base::dx * Base::dx * Base::dx / 8;
@@ -849,13 +837,13 @@ public:
                 damage = 0.0;
             }
 
-            addParticle(position, velocity, density*vol, damage, 0, 0, useDamage);
+            addParticle(position, velocity, density*vol, damage, 0, marker, useDamage);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
     }
 
-    void sampleRandomSphere(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const T radius, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false)
+    void sampleRandomSphere(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const T radius, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
         T vol = dim == 2 ? Base::dx * Base::dx / 4 : Base::dx * Base::dx * Base::dx / 8;
@@ -873,14 +861,14 @@ public:
             TV position = min_corner + offset.template cast<T>() * interval;
             position += TV::Ones() * 0.5 * interval + TV::Random() * 0.5 * interval;
             if((position - center).norm() < radius){
-                addParticle(position, velocity, density*vol, 0.0, 0, 0, useDamage);
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
             }
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
     }
 
-    void sampleFromObj(std::shared_ptr<ElasticityOp<T, dim>> model, const std::string filepath, const TV& velocity, T volume, T density, bool useDamage = false)
+    void sampleFromObj(std::shared_ptr<ElasticityOp<T, dim>> model, const std::string filepath, const TV& velocity, T volume, T density, bool useDamage = false, int marker = 0)
     {
         // sample particles from OBJ file
         int start = Base::m_X.size();
@@ -899,7 +887,7 @@ public:
                 for (size_t i = 0; i < dim; i++)
                     ss >> position[i];
                 //std::cout << "Position:" << position << std::endl;
-                addParticle(position, velocity, 0.0, 0.0, 0, 0, useDamage); //dummy mass passed in
+                addParticle(position, velocity, 0.0, 0.0, 0, marker, useDamage); //dummy mass passed in
             }
         }
 
@@ -915,7 +903,7 @@ public:
     }
 
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
-    void sampleGridAlignedBox(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false)
+    void sampleGridAlignedBox(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
         BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
         // T width = max_corner[0] - min_corner[0];
@@ -953,14 +941,14 @@ public:
             else{
                 surface = 0;
             }
-            addParticle(position, velocity, density*vol, 0.0, surface, 0, useDamage);
+            addParticle(position, velocity, density*vol, 0.0, surface, marker, useDamage);
         });
         int end = Base::m_X.size();
         model->append(start, end, vol);
     }
 
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
-    void sampleGridAlignedBoxWithHole(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false)
+    void sampleGridAlignedBoxWithHole(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
         BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
         // T width = max_corner[0] - min_corner[0];
@@ -1000,7 +988,7 @@ public:
                 else{
                     surface = 0;
                 }
-                addParticle(position, velocity, density*vol, 0.0, surface, 0, useDamage);
+                addParticle(position, velocity, density*vol, 0.0, surface, marker, useDamage);
             }
         });
         int end = Base::m_X.size();
@@ -1008,7 +996,7 @@ public:
     }
 
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
-    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const T crackHeight, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false)
+    void sampleGridAlignedBoxWithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const T crackHeight, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
         BOW_ASSERT_INFO(min_corner != max_corner, "min_corner == max_corner in sampleGridAlignedBox");
         // T width = max_corner[0] - min_corner[0];
@@ -1064,7 +1052,7 @@ public:
                 else{
                     surface = 0;
                 }
-                addParticle(position, velocity, density*vol, 0.0, surface, 0, useDamage);
+                addParticle(position, velocity, density*vol, 0.0, surface, marker, useDamage);
             }
             
         });
@@ -1072,7 +1060,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false){
+    void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1081,7 +1069,7 @@ public:
         Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
         poisson_disk.sample(new_samples);
         for(auto position : new_samples){
-            addParticle(position, velocity, density*vol, 0.0, 0, 0, useDamage);
+            addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
         }
         int end = Base::m_X.size();
         model->append(start, end, vol);

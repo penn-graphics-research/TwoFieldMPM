@@ -321,12 +321,13 @@ public:
     T dx;
 
     bool useDFG;
+    Field<int>& m_marker;
 
     void operator()()
     {
         BOW_TIMER_FLAG("tensorP2G");
         grid.colored_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles if we have them and only process SOLID particles!
                 const Vector<T, dim> pos = m_X[i];
                 const T mass = m_mass[i];
                 const Matrix<T, dim, dim> cauchyXmass = m_cauchy[i] * mass; //cauchy * m_p
@@ -383,12 +384,13 @@ public:
     T dx;
 
     bool useDFG;
+    Field<int>& m_marker;
 
     void operator()()
     {
         BOW_TIMER_FLAG("tensorG2P");
         grid.parallel_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles if we have them and only process SOLID particles!
                 const Vector<T, dim> pos = m_X[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 

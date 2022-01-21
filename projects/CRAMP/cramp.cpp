@@ -2015,13 +2015,18 @@ int main(int argc, char *argv[])
         
         using T = double;
         static const int dim = 2;
-        std::string path = "output/SolidFluidCouplingDemo_RandomSampled";
+        std::string path = "output/SolidFluidCouplingDemo_AddSolidCube";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
-        //material
-        // T E = 2.6e6;
-        // T nu = 0.25;
+        //water material
+        T bulk = 1e4;
+        T gamma = 7;
         T rho = 1000; //density of water
+
+        //solid material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho2 = 900; //make it float
 
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
@@ -2031,7 +2036,7 @@ int main(int argc, char *argv[])
         sim.gravity = -9.81;
 
         //Interpolation Scheme
-        sim.useAPIC = false;
+        sim.useAPIC = true;
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
@@ -2047,12 +2052,13 @@ int main(int argc, char *argv[])
         //Compute time step for symplectic
         // sim.cfl = 0.4;
         // T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
-        sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-5;
 
         // Using `new` to avoid redundant copy constructor
-        auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(1e7, 7)); //K = 1e7 from glacier, gamma = 7 always for water
-
-        //Sample Particles
+        auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        
+        //Sample Fluid Particles
         int ppc = 4;
         T height = 30e-3; //32mm
         T width = 30e-3; //20mm
@@ -2062,14 +2068,25 @@ int main(int argc, char *argv[])
         T y2 = y1 + height;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2); 
-        sim.sampleRandomCube(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
-        //sim.sampleGridAlignedBox(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
+        //sim.sampleRandomCube(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Sample solid cube
+        T h = 10e-3;
+        T w = 10e-3;
+        x1 = 0.05 - w/2.0;
+        y1 = 0.075 - h/2.0;
+        x2 = x1 + w;
+        y2 = y1 + h;
+        Vector<T,dim> minPoint2(x1, y1);
+        Vector<T,dim> maxPoint2(x2, y2);
+        sim.sampleGridAlignedBox(material2, minPoint2, maxPoint2, Vector<T, dim>(0, 0), ppc, rho2, false);
 
         //Add Boundary Conditions
         T boundLength = width*2.0;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0.05 - (boundLength/2.0), 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0.05 + (boundLength/2.0), 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0.05 + (boundLength/2.0)), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0.05 + (boundLength/2.0) + 0.02), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0.05 - (boundLength/2.0)), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom
 
         sim.run(start_frame);
