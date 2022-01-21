@@ -3,8 +3,8 @@ import subprocess
 #TEST CONTROL CENTER
 #Set which tests you want to run in the following lists of demos, then see next section of controls
 sectorA = [0, 0, 0, 0]            #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine] 
-sectorB = [0, 0]                  #[Damage Suite FCR, Damage Suite NH]
-sectorC = [1]                     #[Numerical Fracture Exploration (SENT, 150% Displacement Stretch, No Damage)]
+sectorB = [0, 1]                  #[Damage Suite FCR, Damage Suite NH]
+sectorC = [0]                     #[Numerical Fracture Exploration (SENT, 150% Displacement Stretch, No Damage)]
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
@@ -12,7 +12,8 @@ test1 = [1, 0, 0, 0, 0]                 #uniaxialTension: [control, eta, zeta, p
 test2 = [0, 1, 1, 1, 0, 0]              #SENT with displacement BCs and Rankine Damage: [control, Gf, sigmaC, alpha, dMin, minDp]
 test3 = [0, 1, 1, 0, 0, 0]              #SENT with displacement BCs and Tanh Damage: [control, lamC, width, alpha, dMin, mnDp]
 test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress, SENT FCR stretch, shear FCR stress, shear FCR stretch]
-test5 = [1, 1, 0, 1]                    #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch]
+test5 = [0, 0, 0, 0, 1]                 #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH]
+test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
 
 #Uniaxial Tension Test with Displacement BCs and AnisoMPM Damage
 if sectorA[0]:
@@ -238,9 +239,29 @@ if sectorB[1]:
         runCommand = './cramp 216 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
         print(runCommand)
         subprocess.call([runCommand], shell=True)
+    if test5[4]: #LARGER shear fracture, stretch based
+        lamC = 1.8
+        tanhWidth = 0.2
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 219 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
 
 #Numerical Fracture Exploration
 if sectorC[0]:
-    dxArray = [0.0001, 0.00025, 0.0005, 0.001, 0.002, 0.004]
-    for dx in dxArray:
-        runCommand = './cramp 217 ' + str(dx)
+    if test6[0]:
+        dxArray = [0.0001, 0.00025, 0.0005] #[0.0001, 0.00025, 0.0005, 0.001, 0.002, 0.004]
+        ppc = 4
+        for dx in dxArray:
+            runCommand = './cramp 217 ' + str(dx) + ' ' + str(ppc)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)
+    if test6[1]:
+        ppcArray = [4, 9, 16]
+        dx = 0.00025
+        for ppc in ppcArray:
+            runCommand = './cramp 217 ' + str(dx) + ' ' + str(ppc)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)

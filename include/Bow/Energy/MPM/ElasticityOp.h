@@ -343,6 +343,16 @@ public:
         });
     }
 
+    void compute_cauchy(Field<Matrix<T, dim, dim>>& stress) override
+    {
+        BOW_TIMER_FLAG("compute cauchy stress (J-Based Fluid)");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            T J = m_J[i];
+            T P = first_piola(J, bulk, gamma);
+            stress[m_global_index[i]] = (1.0/J) * P * J * Matrix<T, dim, dim>::Identity();
+        });
+    }
+
     T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) override
     {
         if (m_J.size() == 0) return 1.0;

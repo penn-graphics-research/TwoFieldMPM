@@ -405,9 +405,11 @@ public:
             m_scaledCauchy = model->m_F; //dummy vals
         }
 
-        //Now let's compute the maximum stretch for each particle
-        Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_lamMax };
-        computeLamMax();
+        if((int)m_F.size() > 0){
+            //Now let's compute the maximum stretch for each particle
+            Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_lamMax };
+            computeLamMax();
+        }
 
         std::cout << "Finished collecting F, Cauchy, and lamMax..." << std::endl;
 
@@ -447,19 +449,23 @@ public:
         std::cout << "P2G Done..." << std::endl;
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
-        if(elasticityDegradationType == 1){
+        if(elasticityDegradationType == 1 && ((int)m_F.size() > 0)){
             Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use scaledCauchy if we are using RankineDamage
             tensorP2G();
+            std::cout << "Tensor P2G Done..." << std::endl;
         }
-        else{
+        else if((int)m_F.size() > 0){
             Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG }; //use regular Cauchy stress otherwise
             tensorP2G();
+            std::cout << "Tensor P2G Done..." << std::endl;
         }
-        std::cout << "Tensor P2G Done..." << std::endl;
-        Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG };
-        tensorG2P();
-        std::cout << "Tensor G2P Done..." << std::endl;
-
+        
+        if((int)m_F.size() > 0){
+            Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG };
+            tensorG2P();
+            std::cout << "Tensor G2P Done..." << std::endl;
+        }
+        
         //Now take our stress snapshot (if we have one, and it's the right time)
         if(takeStressSnapshot && elapsedTime >= stressSnapshotTime){
 
@@ -794,11 +800,12 @@ public:
         m_lamMax.push_back(0.0);
     }
 
-    void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false)
+    void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false)
     {
         // sample particles
-        T vol = dim == 2 ? Base::dx * Base::dx / 4 : Base::dx * Base::dx * Base::dx / 8;
-        T interval = Base::dx / std::pow((T)ppc, (T)1 / dim);
+        ppc = (T)_ppc; //set sim ppc
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        T interval = Base::dx / std::pow(_ppc, (T)1 / dim);
         Vector<int, dim> region = ((max_corner - min_corner) / interval).template cast<int>();
         printf("%d %d %d\n", region(0), region(1), region(2));
         int start = Base::m_X.size();
