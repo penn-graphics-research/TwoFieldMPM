@@ -35,7 +35,8 @@ int main(int argc, char *argv[])
     216 ... [PYTHON] NH, Shear Fracture, "Stretch Based" Damage
     217 ... [PYTHON] Numerical Fracture exploration -- FCR, SENT, Displacement BCs, no Damage, variable dx
     218 ... Fluid Test
-    219 ... //[PYTHON] 70 Degree LARGER Shear Fracture Test (Stretch Based Damage with NH elasticity)
+    219 ... [PYTHON] 70 Degree LARGER Shear Fracture Test (Stretch Based Damage with NH elasticity)
+    220 ... Clot in Pipe Test with Reservoir
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -2208,6 +2209,224 @@ int main(int argc, char *argv[])
         T duration = sim.frame_dt * sim.end_frame;
         T speed = u1 / duration;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(speed, 0), duration));
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //Fluid Tank with Clot in Pipe
+    if(testcase == 220){
+        
+        using T = double;
+        static const int dim = 2;
+        std::string path = "output/FluidTankWithClotInPipe_CFLExplore";
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        T bulk = 1e4;
+        T gamma = 7;
+        T rho = 1000; //density of water
+
+        //solid material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho2 = 900; //make it float
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.81;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        sim.suggested_dt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!
+        //sim.suggested_dt = 1e-2;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 120e-3; //32mm
+        T width_f = 40e-3; //20mm
+        T x1 = minX;
+        T y1 = minY;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        //sim.sampleRandomCube(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Sample solid clot hemisphere
+        T radius = 5e-3;
+        T x_s = 30e-3; //dist into pipe
+        Vector<T,dim> center(minX + width_f + x_s, minY);
+        sim.sampleHemispherePoissonDisk(material2, center, radius, Vector<T, dim>(0, 0), ppc, rho2, false);
+
+        //Add Boundary Conditions
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall, SEP
+        T pipeLength = 150e-3;
+        T height_floor = height_f * 1.1;
+        T width_floor = width_f + pipeLength;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - 5e-3, minY - (1.1*height_floor)), Vector<T, dim>(minX + width_floor, minY), Vector<T, 4>(0, 0, 0, 1.0))); //FLOOR, SEP
+        
+        //RESERVOIR
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - height_floor), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //reservoir floor, SEP
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_floor + width_f, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall, SEP
+
+        //Add box boundaries now
+        T pipeHeight = 10e-3;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_f, minY + pipeHeight), Vector<T, dim>(minX + width_f + pipeLength + (width_f*1.1), minY + (1.2*height_f)), Vector<T, 4>(0, 0, 0, 1.0))); //box enforcing pipe, SLIP
+
+        //Add STICKY box to hold clot in place
+        T height_holder = 1e-3;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(center[0] - radius, center[1] - (height_holder/2.0)), Vector<T, dim>(center[0] + radius, center[1] + (height_holder/2.0)), Vector<T, 4>(0, 0, 0, 1.0)));
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY - belowPipeAmt), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //floor, SLIP
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] LARGER stretch SENT with Displacement BCs, using Stretch-Based Damage and NeoHookean elasticity
+    if(testcase == 221){
+        
+        using T = double;
+        static const int dim = 2;
+        
+        //Setup command line options
+        //argv[2] = lamC
+        //argv[3] = tanhWidth
+        //argv[4] = alpha (elasticity degradation degree)
+        //argv[5] = dMin
+        //argv[6] = minDp
+
+        //Good Params to Wedge Around
+        // T lamC = ???; //from Table2 Homel2016
+        // T tanhWidth = ???;
+        // T alpha = 1.0;
+        // T dMin = 0.25;
+        // T minDp = 1.0;
+        
+        if (argc < 7) {
+            puts("ERROR: please add parameters");
+            puts("TEST 221 USAGE: ./cramp testcase lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T alpha = std::atof(argv[4]);
+        T dMin = std::atof(argv[5]);
+        T minDp = std::atof(argv[6]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 7; ++i){
+            std::string cleanString = argv[i];
+            if(i == 3 || i == 5 || i == 6){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/LARGERStretch_SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 300;
+        sim.frame_dt = 1e-3; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
+        //sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithTriangularNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, Vector<T, dim>(0, 0), ppc, rho, false);
+        //sim.sampleGridAlignedBoxWithNotchWithPoissonDisk(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, false);
+
+        //Add Boundary Conditions
+        bool singlePuller = false;
+        T heldMaterial = 2.0 * sim.dx;
+        T yTop = y2 - heldMaterial;
+        T yBottom = y1 + heldMaterial;
+        T u2 = height*0.5; // pull a total displacement of 0.2 mm, so each puller will pull half this distance
+        T pullTime = 0.3; //in seconds
+        T speed = (u2 / 2.0) / pullTime;
+        std::cout << "speed:" << speed << std::endl;
+        if(singlePuller){
+            //fix bottom constant, pull on top the full u2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed * 2.0), pullTime)); //top puller (pull up u2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), pullTime)); //bottom puller (constant)
+        }
+        else{
+            //pull from top and bottom, each pulling u2/2
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yTop), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), pullTime)); //top puller (pull up u2/2)
+            sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
+        }
 
         //Add Tanh Damage Model
         int degType = 1;

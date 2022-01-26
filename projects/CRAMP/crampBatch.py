@@ -12,7 +12,7 @@ test1 = [1, 0, 0, 0, 0]                 #uniaxialTension: [control, eta, zeta, p
 test2 = [0, 1, 1, 1, 0, 0]              #SENT with displacement BCs and Rankine Damage: [control, Gf, sigmaC, alpha, dMin, minDp]
 test3 = [0, 1, 1, 0, 0, 0]              #SENT with displacement BCs and Tanh Damage: [control, lamC, width, alpha, dMin, mnDp]
 test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress, SENT FCR stretch, shear FCR stress, shear FCR stretch]
-test5 = [0, 0, 0, 0, 1]                 #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH]
+test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
 
 #Uniaxial Tension Test with Displacement BCs and AnisoMPM Damage
@@ -246,6 +246,15 @@ if sectorB[1]:
         dMin = 0.25
         minDp = 1.0
         runCommand = './cramp 219 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if test5[5]: #LARGER uniaxial tension fracture, stretch based
+        lamC = 1.8
+        tanhWidth = 0.2
+        alpha = 1.0
+        dMin = 0.25
+        minDp = 1.0
+        runCommand = './cramp 221 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
         print(runCommand)
         subprocess.call([runCommand], shell=True)
 
