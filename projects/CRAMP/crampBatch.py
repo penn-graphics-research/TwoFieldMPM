@@ -249,8 +249,8 @@ if sectorB[1]:
         print(runCommand)
         subprocess.call([runCommand], shell=True)
     if test5[5]: #LARGER uniaxial tension fracture, stretch based
-        lamC = 1.8
-        tanhWidth = 0.2
+        lamC = 2.5
+        tanhWidth = 0.08
         alpha = 1.0
         dMin = 0.25
         minDp = 1.0

@@ -2374,7 +2374,7 @@ int main(int argc, char *argv[])
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
-        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.st = 35; //5.5 good for dx = 0.5e-3 and ppc = 4, 38 for ppc = 25 (both for uniform grid distributed particles)  
         sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
@@ -2392,7 +2392,7 @@ int main(int argc, char *argv[])
         auto material1 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
 
         //Sample Particles
-        int ppc = 4;
+        int ppc = 25;
         T height = 32e-3; //32mm
         T width = 20e-3; //20mm
         T x1 = 0.05 - width/2.0;
@@ -2405,7 +2405,7 @@ int main(int argc, char *argv[])
         T crackRadius = sim.dx;
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, false);
-        sim.sampleGridAlignedBoxWithTriangularNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithTriangularNotchWithPoissonDisk(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, Vector<T, dim>(0, 0), ppc, rho, true);
         //sim.sampleGridAlignedBoxWithNotchWithPoissonDisk(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, false);
 
         //Add Boundary Conditions

@@ -1113,6 +1113,36 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleGridAlignedBoxWithTriangularNotchWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const T crackHeight, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
+    {
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples) {
+            //Now check to make sure this is outside the desired triangular notch
+            T yMin = crackHeight - radius;
+            T yMax = crackHeight + radius;
+            TV A(min_corner(0), yMax);
+            TV B(min_corner(0) + length, crackHeight);
+            TV C(min_corner(0), yMin);
+            T cross1 = ((B(0)-A(0))*(position(1)-A(1)) - (B(1)-A(1))*(position(0)-A(0)));
+            T cross2 = ((B(0)-C(0))*(position(1)-C(1)) - (B(1)-C(1))*(position(0)-C(0)));
+            bool pointIncluded = true;
+            if(cross1 < 0 && cross2 > 0 && position(0) < B(0)){ //excluded rectangle of size length * (2*radius)
+                pointIncluded = false;
+            }
+            if(pointIncluded){
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
         // sample particles
         ppc = (T)_ppc;
@@ -1122,7 +1152,6 @@ public:
         Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
         poisson_disk.sample(new_samples);
         for(auto position : new_samples){
-
             addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
         }
         int end = Base::m_X.size();

@@ -349,7 +349,7 @@ public:
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T J = m_J[i];
             T P = first_piola(J, bulk, gamma);
-            stress[m_global_index[i]] = (1.0/J) * P * J * Matrix<T, dim, dim>::Identity();
+            stress[m_global_index[i]] = P * Matrix<T, dim, dim>::Identity(); //piola is pressure here
         });
     }
 
