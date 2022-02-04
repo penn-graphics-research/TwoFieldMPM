@@ -26,6 +26,7 @@ public:
     virtual void compute_stress(Field<Matrix<T, dim, dim>>& stress) {}
     virtual void compute_piola(Field<Matrix<T, dim, dim>>& piola) {}
     virtual void compute_cauchy(Field<Matrix<T, dim, dim>>& stress) {}
+    virtual void compute_volume(Field<T>& volume) {}
     virtual void compute_von_mises(Field<T>& stress) {}
     virtual void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy) { BOW_NOT_IMPLEMENTED }
     virtual void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) = 0;
@@ -36,6 +37,7 @@ public:
     virtual void trial_hessian(Field<Matrix<T, dim * dim, dim * dim>>& t_hessian, bool project_pd) { BOW_NOT_IMPLEMENTED }
     virtual T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) { return 1.0; }
     virtual void collect_strain(Field<Matrix<T, dim, dim>>& m_Fs) { BOW_NOT_IMPLEMENTED }
+    virtual void set_dt(T _dt) { BOW_NOT_IMPLEMENTED }
 };
 
 template <class T, int dim, class Model, bool inversion_free>
@@ -155,6 +157,15 @@ public:
         });
     }
 
+    void compute_volume(Field<T>& volume){
+        BOW_TIMER_FLAG("compute current volume");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            T J = F.determinant();
+            volume[m_global_index[i]] = J * m_vol[i]; //current volume VpN = J * Vp0
+        });
+    }
+
     void compute_von_mises(Field<T>& stress)
     {
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
@@ -242,6 +253,11 @@ public:
             alphas(i) = t;
         });
         return alphas.minCoeff();
+    }
+
+    void set_dt(T _dt) override
+    {
+        return;
     }
 };
 
@@ -343,7 +359,16 @@ public:
         });
     }
 
-    void compute_cauchy(Field<Matrix<T, dim, dim>>& stress) override
+    void compute_volume(Field<T>& volume)
+    {
+        BOW_TIMER_FLAG("compute current volume");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            T J = m_J[i];
+            volume[m_global_index[i]] = m_vol[i] * J;
+        });
+    }
+
+    void compute_cauchy(Field<Matrix<T, dim, dim>>& stress)
     {
         BOW_TIMER_FLAG("compute cauchy stress (J-Based Fluid)");
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
@@ -367,6 +392,164 @@ public:
         });
         return alphas.minCoeff();
     }
+
+    void set_dt(T _dt) override
+    {
+        return;
+    }
+};
+
+template <class T, int dim>
+class ViscousEquationOfStateOp : public ElasticityOp<T, dim>, public ConstitutiveModel::EquationOfState<T> {
+public:
+    using TV = Vector<T, dim>;
+    using TM = Matrix<T, dim, dim>;
+    using ConstitutiveModel::EquationOfState<T>::psi;
+    using ConstitutiveModel::EquationOfState<T>::first_piola;
+    using ConstitutiveModel::EquationOfState<T>::first_piola_derivative;
+    using ElasticityOp<T, dim>::m_F;
+    using ElasticityOp<T, dim>::m_J;
+    using ElasticityOp<T, dim>::m_global_index;
+    using ElasticityOp<T, dim>::m_vol;
+    Field<T> t_J; // only used in implicit
+    Field<TM> m_Fprevious; //for computing Fdot
+    T bulk, gamma, viscosity, dt;
+
+    SERIALIZATION_REGISTER(m_J)
+    SERIALIZATION_REGISTER(m_F)
+    SERIALIZATION_REGISTER(m_Fprevious)
+    SERIALIZATION_REGISTER(m_vol)
+    SERIALIZATION_REGISTER(m_global_index)
+
+    ViscousEquationOfStateOp(T bulk, T gamma, T viscosity)
+        : bulk(bulk), gamma(gamma), viscosity(viscosity), dt(1.0) {}
+
+    void append(int start, int end, T vol) override
+    {
+        for (int i = start; i < end; ++i) {
+            m_J.push_back(1);
+            m_F.push_back(Matrix<T, dim, dim>::Identity());
+            m_Fprevious.push_back(Matrix<T, dim, dim>::Identity());
+            m_vol.push_back(vol);
+            m_global_index.push_back(i);
+        }
+    }
+
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            m_Fprevious[i] = m_F[i]; //save Fprevious
+            m_F[i] = (m_gradXp[m_global_index[i]]) * m_F[i]; //also evolve F for viscosity!
+            m_J[i] = (1 + (m_gradXp[m_global_index[i]].trace() - dim)) * m_J[i];
+        });
+    }
+
+    // void trial_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    // {
+    //     t_J = m_J;
+    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+    //         t_J[i] = (1 + (m_gradXp[m_global_index[i]].trace() - dim)) * m_J[i];
+    //     });
+    // }
+
+    // void trial_energy(Field<T>& t_energy) override
+    // {
+    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+    //         T energy = m_vol[i] * psi(t_J[i], bulk, gamma);
+    //         t_energy[m_global_index[i]] += energy;
+    //     });
+    // }
+
+    // void trial_gradient(Field<Matrix<T, dim, dim>>& t_gradient) override
+    // {
+    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+    //         T P = first_piola(t_J[i], bulk, gamma);
+    //         // Eqn 194. https://www.seas.upenn.edu/~cffjiang/research/mpmcourse/mpmcourse.pdf
+    //         Matrix<T, dim, dim> stress = m_vol[i] * P * m_J[i] * Matrix<T, dim, dim>::Identity();
+    //         t_gradient[m_global_index[i]] += stress;
+    //     });
+    // }
+
+    // void trial_hessian(Field<Matrix<T, dim * dim, dim * dim>>& t_hessian, bool project_pd) override
+    // {
+    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+    //         T dPdJ = first_piola_derivative(t_J[i], bulk, gamma);
+    //         Matrix<T, dim * dim, dim* dim> deformed_dPdF = Matrix<T, dim * dim, dim * dim>::Zero();
+    //         for (int u = 0; u < dim; ++u)
+    //             for (int x = 0; x < dim; ++x)
+    //                 for (int p = 0; p < dim; ++p)
+    //                     for (int y = 0; y < dim; ++y)
+    //                         if (u == x && p == y)
+    //                             deformed_dPdF(u + x * dim, p + y * dim) += dPdJ * m_J[i] * m_J[i];
+    //         t_hessian[m_global_index[i]] += m_vol[i] * deformed_dPdF;
+    //     });
+    // }
+
+    void compute_volume(Field<T>& volume)
+    {
+        BOW_TIMER_FLAG("Compute Current Volume (V_p^n)");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            T J = m_J[i];
+            volume[m_global_index[i]] = m_vol[i] * J;
+        });
+    }
+
+    void compute_cauchy(Field<Matrix<T, dim, dim>>& stress)
+    {
+        BOW_TIMER_FLAG("Compute Cauchy Stress (Viscous Equation of State)");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            TM F = m_F[i];
+            TM Fprev = m_Fprevious[i];
+            T J = m_J[i];
+            T pressure = first_piola(J, bulk, gamma); //for EoS, P = cauchy, so this is actully just pressure!
+            
+            //Now compute viscous effects by computing the velocity gradient
+            TM Fdot = (F - Fprev) / dt;
+            TM Finv = F.inverse();
+            TM L = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
+
+            stress[m_global_index[i]] = (pressure * Matrix<T, dim, dim>::Identity()) + (viscosity * (L + L.transpose())); //Cauchy Stress for Viscous Fluid: Cauchy = -pI + mu(L + L^T)
+        });
+    }
+
+    void compute_stress(Field<Matrix<T, dim, dim>>& stress) override
+    {
+        BOW_TIMER_FLAG("Compute Stress (Viscous Equation of State)");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            TM F = m_F[i];
+            TM Fprev = m_Fprevious[i];
+            T J = m_J[i];
+            T pressure = first_piola(J, bulk, gamma); //for EoS, P = cauchy, so this is actully just pressure!
+            
+            //Now compute viscous effects by computing the velocity gradient
+            TM Fdot = (F - Fprev) / dt;
+            TM Finv = F.inverse();
+            TM L = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
+
+            TM cauchy = (pressure * Matrix<T, dim, dim>::Identity()) + (viscosity * (L + L.transpose())); //Cauchy Stress for Viscous Fluid: Cauchy = -pI + mu(L + L^T)
+            stress[m_global_index[i]] = m_vol[i] * J * cauchy; //force to integrate = VpN * cauchy = Vp0 * J * cauchy!
+        });
+    }
+
+    void set_dt(T _dt){
+        dt = _dt;
+        return;
+    }
+
+    // T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) override
+    // {
+    //     if (m_J.size() == 0) return 1.0;
+    //     Vector<T, Eigen::Dynamic> alphas(m_J.size());
+    //     alphas.setOnes();
+    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+    //         T A = m_gradDXp[m_global_index[i]].trace() * m_J[i];
+    //         T d = -0.9 * t_J[i];
+    //         T alpha = d / A;
+    //         if (alpha <= 0 || alpha > 1) alpha = 1;
+    //         alphas(i) = alpha;
+    //     });
+    //     return alphas.minCoeff();
+    // }
 };
 
 } // namespace Bow::MPM

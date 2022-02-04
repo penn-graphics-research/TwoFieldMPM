@@ -37,6 +37,8 @@ int main(int argc, char *argv[])
     218 ... Fluid Test
     219 ... [PYTHON] 70 Degree LARGER Shear Fracture Test (Stretch Based Damage with NH elasticity)
     220 ... Clot in Pipe Test with Reservoir
+    221 ... [PYTHON] LARGER stretch SENT with Displacement BCs, using Stretch-Based Damage and NeoHookean elasticity
+    222 ... Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -941,7 +943,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_SENT_DisplacementBCs_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1070,7 +1072,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_SENT_DisplacementBCs_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1198,7 +1200,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_HomelShearFractureTest_StressBasedDamage_FCR_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1321,7 +1323,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_HomelShearFractureTest_StretchBasedDamage_FCR_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1443,7 +1445,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StressBasedDamage_noDFG_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_SENT_DisplacementBCs_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1464,7 +1466,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = false;
+        sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1572,7 +1574,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/SENT_DisplacementBCs_StretchBasedDamage_noDFG_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -1593,7 +1595,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = false;
+        sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1700,7 +1702,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StressBasedDamage_noDFG_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_HomelShearFractureTest_StressBasedDamage_NH_Gf" + cleanedStrings[0] + "_SigmaC" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1721,7 +1723,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = false;
+        sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -1823,7 +1825,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelShearFractureTest_StretchBasedDamage_noDFG_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_HomelShearFractureTest_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -1844,7 +1846,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
-        sim.useDFG = false;
+        sim.useDFG = true;
         sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
@@ -2132,7 +2134,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/HomelLARGERShearFractureTest_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_HomelLARGERShearFractureTest_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material (from Homel)
@@ -2354,7 +2356,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/LARGERStretch_SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
+        std::string path = "output/currentVolumeFix_LARGERStretch_SENT_DisplacementBCs_StretchBasedDamage_NH_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1] + "_Alpha" + cleanedStrings[2] + "_dMin" + cleanedStrings[3] + "_minDp" + cleanedStrings[4];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -2437,6 +2439,81 @@ int main(int argc, char *argv[])
 
         //set minDp
         sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    if(testcase == 222){
+        
+        using T = double;
+        static const int dim = 2;
+        std::string path = "output/FluidTankWithLongPipe_TestForParabolicVelocity_wViscosity";
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        T bulk = 1e4;
+        T gamma = 7;
+        T rho = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.81;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        sim.suggested_dt = 1e-5; //Solid CFL condition, will be overridden when particle velocity gets too big though!
+
+        // Using `new` to avoid redundant copy constructor
+        T viscosity = 1e-3;
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 200e-3; //32mm
+        T width_f = 40e-3; //20mm
+        T x1 = minX;
+        T y1 = minY;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        //sim.sampleRandomCube(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Add Boundary Conditions
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall, SEP
+        T pipeLength = 150e-3;
+        T height_floor = height_f * 1.1;
+        T width_floor = width_f + pipeLength;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - 5e-3, minY - (1.1*height_floor)), Vector<T, dim>(minX + width_floor, minY), Vector<T, 4>(0, 0, 0, 1.0))); //FLOOR, SEP
+        
+        //RESERVOIR
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - height_floor), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //reservoir floor, SEP
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_floor + width_f, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall, SEP
+
+        //Add box boundaries now
+        T pipeHeight = 5e-3;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_f, minY + pipeHeight), Vector<T, dim>(minX + width_f + pipeLength + (width_f*1.1), minY + (1.2*height_f)), Vector<T, 4>(0, 0, 0, 1.0))); //box enforcing pipe, SLIP
 
         sim.run(start_frame);
     }

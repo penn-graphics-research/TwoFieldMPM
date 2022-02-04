@@ -48,7 +48,7 @@ public:
     bool useImplicitContact;
     int elasticityDegradationType;
 
-    Field<T> m_vol;
+    Field<T> m_currentVolume;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
 
     void operator()()
@@ -67,7 +67,7 @@ public:
                 //Compute scaled stress forces (if using elasticity degradation)
                 if(elasticityDegradationType == 1){
                     //Use damage scaled Cauchy stress for grid forces
-                    delta_t_tmp_force = -dt * m_vol[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
+                    delta_t_tmp_force = -dt * m_currentVolume[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
                 }
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {

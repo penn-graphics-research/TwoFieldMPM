@@ -54,7 +54,8 @@ public:
     T x1, x2;
 
     //Additional Particle Data
-    Field<T> m_vol;
+    Field<T> m_currentVolume;
+    Field<T> m_initialVolume;
     Field<T> m_mu, m_la;
     Field<TM> m_F; //def grad --> for j integral
     Field<TM> m_FSmoothed;
@@ -323,11 +324,11 @@ public:
             //Now compute forces for P2G and grid update (ONLY FOR SYMPLECTIC)
             for (auto& model : Base::elasticity_models){
                 model->compute_stress(Base::stress);
-                m_vol = model->m_vol;
+                model->compute_volume(m_currentVolume);
             }
         }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_vol, m_scaledCauchy };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy };
         P2G();
     }
 
@@ -386,6 +387,7 @@ public:
 
         //Always collect cauchy and F for each particle for analysis
         for (auto& model : Base::elasticity_models){
+            model->set_dt(dt); //pass dt into elastic model for viscous fluids! all others this is just a quick return
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
             m_F = model->m_F;
             m_FSmoothed = model->m_F; //dummy values to set up the right size
@@ -517,12 +519,17 @@ public:
                 particlesMarkedForLoading = true;
             }
             
+            //Grab initial volume
+            for (auto& model : Base::elasticity_models){
+                m_initialVolume = model->m_vol;
+            }
+
             //Pass the right portion of sigmaA to the loading (based on the user defined rampTime)
             T scaledSigmaA = sigmaA;
             if(elapsedTime < rampTime && rampTime > 0.0){
                 scaledSigmaA *= (elapsedTime / rampTime);
             }
-            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, nodalLoading, width, y1, y2, x1, x2, Base::dx, dt, grid, m_vol, ppc };
+            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, nodalLoading, width, y1, y2, x1, x2, Base::dx, dt, grid, m_initialVolume, ppc };
             mode1Loading();
 
             std::cout << "Mode 1 Loading Applied..." << std::endl;
@@ -785,6 +792,7 @@ public:
         Base::m_C.push_back(TM::Zero());
         Base::m_mass.push_back(mass);
         Base::stress.push_back(TM::Zero());
+        m_currentVolume.push_back(0.0);
         m_cauchy.push_back(TM::Zero());
         Dp.push_back(damage);
         damageLaplacians.push_back(0.0);

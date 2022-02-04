@@ -15,6 +15,10 @@ test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress,
 test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
 
+################################
+########### SECTOR A ###########
+################################
+
 #Uniaxial Tension Test with Displacement BCs and AnisoMPM Damage
 if sectorA[0]:
     constants = [10, 10000, 0.03, 0.4]
@@ -162,6 +166,10 @@ if sectorA[2]:
             print(runCommand)
             subprocess.call([runCommand], shell=True)
 
+################################
+########### SECTOR B ###########
+################################
+
 #Damage Suite FCR
 if sectorB[0]:
     if test4[0]: #SENT, stress based
@@ -257,6 +265,10 @@ if sectorB[1]:
         runCommand = './cramp 221 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(alpha) + ' ' + str(dMin) + ' ' + str(minDp)
         print(runCommand)
         subprocess.call([runCommand], shell=True)
+
+################################
+########### SECTOR C ###########
+################################
 
 #Numerical Fracture Exploration
 if sectorC[0]:
