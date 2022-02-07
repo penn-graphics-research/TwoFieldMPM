@@ -38,7 +38,8 @@ int main(int argc, char *argv[])
     219 ... [PYTHON] 70 Degree LARGER Shear Fracture Test (Stretch Based Damage with NH elasticity)
     220 ... Clot in Pipe Test with Reservoir
     221 ... [PYTHON] LARGER stretch SENT with Displacement BCs, using Stretch-Based Damage and NeoHookean elasticity
-    222 ... Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    222 ... [PYTHON] Horizontal Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    223 ... [PYTHON] Vertical Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -2443,17 +2444,35 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
-    //Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    //[PYTHON] Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
     if(testcase == 222){
         
         using T = double;
         static const int dim = 2;
-        std::string path = "output/FluidTankWithLongPipe_TestForParabolicVelocity_wViscosity";
+
+        if (argc < 5) {
+            puts("ERROR: please add parameters");
+            puts("TEST 222 USAGE: ./cramp testcase bulk gamma viscosity");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 5; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/HorizontalPipeFlowTest_ViscousFluid_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
-        T bulk = 1e4;
-        T gamma = 7;
+        // T bulk = 1e4;
+        // T gamma = 7;
         T rho = 1000; //density of water
 
         //Params
@@ -2482,7 +2501,7 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 1e-5; //Solid CFL condition, will be overridden when particle velocity gets too big though!
 
         // Using `new` to avoid redundant copy constructor
-        T viscosity = 1e-3;
+        // T viscosity = 4e-3;
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         
         //Sample Fluid Particles
@@ -2514,6 +2533,200 @@ int main(int argc, char *argv[])
         //Add box boundaries now
         T pipeHeight = 5e-3;
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_f, minY + pipeHeight), Vector<T, dim>(minX + width_f + pipeLength + (width_f*1.1), minY + (1.2*height_f)), Vector<T, 4>(0, 0, 0, 1.0))); //box enforcing pipe, SLIP
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Vertical Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    if(testcase == 223){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 5) {
+            puts("ERROR: please add parameters");
+            puts("TEST 223 USAGE: ./cramp testcase bulk gamma viscosity");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 5; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/VerticalPipeFlowTest_ViscousFluid_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        // T bulk = 1e4;
+        // T gamma = 7;
+        T rho = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.81;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        sim.suggested_dt = 1e-5; //Solid CFL condition, will be overridden when particle velocity gets too big though!
+
+        // Using `new` to avoid redundant copy constructor
+        // T viscosity = 4e-3;
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 200e-3; //32mm
+        T width_f = 40e-3; //20mm
+        T x1 = minX;
+        T y1 = minY;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        //sim.sampleRandomCube(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false);
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Add Boundary Conditions
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall, SEP
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width_f, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall, SEP
+
+        //Add boxes for left andd right side of pipe
+        T pipeLength = 150e-3;
+        T pipeWidth = 5e-3;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - 5e-3, minY - pipeLength), Vector<T, dim>(minX + (0.5*width_f) - (pipeWidth*0.5), minY), Vector<T, 4>(0, 0, 0, 1.0))); //PIPE WALL LEFT, SEP
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + (0.5*width_f) + (pipeWidth*0.5), minY - pipeLength), Vector<T, dim>(minX + width_f + 5e-3, minY), Vector<T, 4>(0, 0, 0, 1.0))); //PIPE WALL RIGHT, SEP
+        
+        //Cap for the pipe
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - pipeLength - height_f), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall, SEP
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Horizontal Pipe Flow with Elastic Pipe Walls -- Test for Parabolic Velocity under Viscous Fluid Model
+    if(testcase == 224){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 5) {
+            puts("ERROR: please add parameters");
+            puts("TEST 224 USAGE: ./cramp testcase bulk gamma viscosity");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 5; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/HorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        // T bulk = 1e4;
+        // T gamma = 7;
+        T rhoFluid = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.81;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 0; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Solid Material properties (soft artery walls)
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoSolid = 1300;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!        
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 200e-3; //32mm
+        T width_f = 40e-3; //20mm
+        T x1 = minX;
+        T y1 = minY + sim.dx;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rhoFluid, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Add solid arterial walls
+        T wallWidth = sim.dx * 2;
+        T heldMaterial = wallWidth;
+        T pipeLength = 150e-3;
+        T pipeWidth = 5e-3;
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX - 3e-3, minY - wallWidth - heldMaterial), Vector<T,dim>(minX + width_f + pipeLength, minY), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + sim.dx, minY + pipeWidth), Vector<T,dim>(minX + width_f + pipeLength + width_f + 3e-3, minY + pipeWidth + wallWidth + heldMaterial), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
+
+        //Add Boundary Conditions
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall, SEP
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength + width_f, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall, SEP
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY - wallWidth - height_f), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall, SEP
+
+        //Add boxes to hold the free ends of the arterial walls
+        T boxWidth = wallWidth;
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f, minY + pipeWidth), Vector<T, dim>(minX + width_f + boxWidth, minY + pipeWidth + height_f + 5e-3), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength - boxWidth, minY - pipeWidth - height_f - 5e-3), Vector<T,dim>(minX + width_f + pipeLength, minY), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL   
+
+        //Add boxes to hold the arterial walls in place
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (1.1*boxWidth), minY + pipeWidth + wallWidth), Vector<T,dim>(minX + width_f + pipeLength + width_f + 5e-3, minY + pipeWidth + wallWidth + heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX - 3e-3, minY - wallWidth - heldMaterial), Vector<T,dim>(minX + width_f + pipeLength - (1.1*boxWidth), minY - wallWidth), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL       
 
         sim.run(start_frame);
     }

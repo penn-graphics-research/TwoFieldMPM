@@ -237,9 +237,18 @@ public:
     T dMin;
 
     DFGMPMGrid<T, dim>& grid;
+    Field<int>& m_marker;
 
     void operator()()
-    {
+    {   
+        //SEPARABLE VALUE KEY
+        //0 = single field
+        //1 = two field with contact
+        //2 = two field, contact treats like single field with v_cm
+        //3 = solid and fluid detected
+        //4 = only fluid detected so far
+        //5 = only solid detected so far
+        
         BOW_TIMER_FLAG("partitioning");
         grid.colored_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
@@ -253,6 +262,7 @@ public:
                 BSplineWeights<T, dim> spline(pos, dx);
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
                     if (particleDG[i].dot(g.gridDG) >= 0) {
+                        
                         //field 1
                         g.m1 += mass * w; //add mass to active field for this particle
                         g.gridSeparability[0] += w * maxD * mass; //numerator, field 1
@@ -260,6 +270,26 @@ public:
                         particleAF[i].push_back(0); //set this particle's AF to 0 for this grid node
                         if (g.gridMaxDamage[0] < maxD) {
                             g.gridMaxDamage[0] = maxD; //compute the max damage seen in this field at this grid node
+                        }
+
+                        //Now mark separable = 4 if this was fluid, 5 if it was solid, and mark it 3 if we've now been hit by both solid and fluid!
+                        if(g.separable == 0){ //if previously never mapped to
+                            if(m_marker[i] == 0){
+                                g.separable = 5;
+                            }
+                            else if(m_marker[i] == 4){
+                                g.separable = 4;
+                            }
+                        }
+                        else if(g.separable == 4){ //if previously hit fluid
+                            if(m_marker[i] == 5){
+                                g.separable = 3; //already hit by fluid, now hit by solid
+                            }
+                        }
+                        else if(g.separable == 5){ //if previously hit solid
+                            if(m_marker[i] == 4){
+                                g.separable = 3; //already hit by solid, now hit by fluid
+                            }
                         }
                     }
                     else {
@@ -275,6 +305,8 @@ public:
                 });
             }
         });
+
+        //TODO: SPECIAL CASE when m2 > 0 AND separable = 3 (partitioned by damage AND coupling)
 
         //Now iterate grid nodes to compute each one's separability
         grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
@@ -308,6 +340,14 @@ public:
                     //g.m1 += g.m2;
                     //g.m2 = 0.0;
                 }
+            }
+            else if(g.separable != 3){
+                g.separable = 0; //if nothing in field 2 and we didn't detect solid-fluid coupling reset separable = 0
+            }
+
+            if(g.separable == 3){
+                g.m1 = 0;
+                g.m2 = 0; //if solid-fluid coupling, set these 0 for later transfer in P2G
             }
         });
 
@@ -786,7 +826,7 @@ public:
 
                     Vector<T, dim> f_c1 = Bow::Vector<T, dim>::Zero();
                     Vector<T, dim> f_c2 = Bow::Vector<T, dim>::Zero();
-                    if(g.separable == 1){ //separable two field nodes
+                    if(g.separable == 1 || g.separable == 3){ //separable two field nodes
                         //Compute magnitude of tangent components for each field
                         T fTanMag1 = fTanComp1.norm();
                         T fTanMag2 = fTanComp2.norm();
@@ -909,6 +949,7 @@ public:
 
     T flipPicRatio;
     bool useDFG;
+    Field<int>& m_marker;
 
     Field<Matrix<T, dim, dim>> m_gradXp = Field<Matrix<T, dim, dim>>();
 
@@ -943,7 +984,7 @@ public:
                         picX += w * g.x1;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
                     }
-                    else if (g.separable != 0) {
+                    else if (g.separable == 1 || g.separable == 2) {
                         //treat as two-field node
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
@@ -953,6 +994,22 @@ public:
                             gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
                         }
                         else if (fieldIdx == 1) {
+                            picV += w * g_v2_new;
+                            flipV += w * (g_v2_new - g_v2_old);
+                            picX += w * g.x2;
+                            gradXp.noalias() += (g.x2 - xn) * dw.transpose();
+                        }
+                    }
+                    else if (g.separable == 3) { //solid-fluid coupling case
+                        //treat as two-field node
+                        int materialIdx = m_marker[i]; //solid in field 1, fluid in field 2
+                        if (materialIdx == 0) {
+                            picV += w * g_v_new;
+                            flipV += w * (g_v_new - g_v_old);
+                            picX += w * g.x1;
+                            gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
+                        }
+                        else if (materialIdx == 4) {
                             picV += w * g_v2_new;
                             flipV += w * (g_v2_new - g_v2_old);
                             picX += w * g.x2;
@@ -970,12 +1027,21 @@ public:
                         if (g.separable == 0 || !useDFG) {
                             Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
                         }
-                        else if (g.separable != 0){
+                        else if (g.separable == 1 || g.separable == 2){
                             int fieldIdx = particleAF[i][oidx]; //grab field
                             if (fieldIdx == 0) {
                                 Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
                             }
                             else if (fieldIdx == 1) {
+                                Bp += 0.5 * w * (g_v2_new * (xn - m_X[i] + g.x2 - picX).transpose() + (xn - m_X[i] - g.x2 + picX) * g_v2_new.transpose());
+                            }
+                        }
+                        else if (g.separable == 3){ //solid-fluid coupling case
+                            int materialIdx = m_marker[i]; //grab materialIdx, solid in field 1, fluid in field 2
+                            if (materialIdx == 0) {
+                                Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
+                            }
+                            else if (materialIdx == 4) {
                                 Bp += 0.5 * w * (g_v2_new * (xn - m_X[i] + g.x2 - picX).transpose() + (xn - m_X[i] - g.x2 + picX) * g_v2_new.transpose());
                             }
                         }

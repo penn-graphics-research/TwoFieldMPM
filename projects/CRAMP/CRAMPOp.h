@@ -50,6 +50,7 @@ public:
 
     Field<T> m_currentVolume;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
+    Field<int>& m_marker;
 
     void operator()()
     {
@@ -104,29 +105,62 @@ public:
                     }
                     else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
-                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
-                        if (fieldIdx == 0) {
-                            if (useAPIC) {
-                                g.v1 += delta_APIC;
+
+                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
+                            int materialIdx = m_marker[i];
+                            if(materialIdx == 0){
+                                g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                
+                                if (useAPIC) {
+                                    g.v1 += delta_APIC;
+                                }
+                                else {
+                                    g.v1 += delta_FLIP;
+                                    g.vn1 += delta_vn; //transfer momentum to compute v^n
+                                }
+                                //Compute normal for field 1 (solid) particles
+                                g.n1 += mass * dw; //remember to normalize this later!
                             }
-                            else {
-                                g.v1 += delta_FLIP;
-                                g.vn1 += delta_vn; //transfer momentum to compute v^n
+                            else if(materialIdx == 4){ //transfer fluid particles to field 2
+                                g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                
+                                if (useAPIC) {
+                                    g.v2 += delta_APIC;
+                                }
+                                else {
+                                    g.v2 += delta_FLIP;
+                                    g.vn2 += delta_vn; //transfer momentum to compute v^n
+                                }
+                                //Compute normal for field 2 (fluid) particles
+                                g.n2 += mass * dw; //remember to normalize this later!
                             }
-                            //Compute normal for field 1 particles
-                            g.n1 += mass * dw; //remember to normalize this later!
                         }
-                        else if (fieldIdx == 1) {
-                            if (useAPIC) {
-                                g.v2 += delta_APIC;
+                        else{ //regular two field transfer from DFG
+                            int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                            if (fieldIdx == 0) {
+                                if (useAPIC) {
+                                    g.v1 += delta_APIC;
+                                }
+                                else {
+                                    g.v1 += delta_FLIP;
+                                    g.vn1 += delta_vn; //transfer momentum to compute v^n
+                                }
+                                //Compute normal for field 1 particles
+                                g.n1 += mass * dw; //remember to normalize this later!
                             }
-                            else {
-                                g.v2 += delta_FLIP;
-                                g.vn2 += delta_vn; //transfer momentum to compute v^n
+                            else if (fieldIdx == 1) {
+                                if (useAPIC) {
+                                    g.v2 += delta_APIC;
+                                }
+                                else {
+                                    g.v2 += delta_FLIP;
+                                    g.vn2 += delta_vn; //transfer momentum to compute v^n
+                                }
+                                //Compute normal for field 2 particles
+                                g.n2 += mass * dw; //remember to normalize this later!
                             }
-                            //Compute normal for field 2 particles
-                            g.n2 += mass * dw; //remember to normalize this later!
                         }
+                        
                     }
                 });
             }

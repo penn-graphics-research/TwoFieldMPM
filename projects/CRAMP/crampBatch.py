@@ -3,8 +3,9 @@ import subprocess
 #TEST CONTROL CENTER
 #Set which tests you want to run in the following lists of demos, then see next section of controls
 sectorA = [0, 0, 0, 0]            #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine] 
-sectorB = [0, 1]                  #[Damage Suite FCR, Damage Suite NH]
+sectorB = [0, 0]                  #[Damage Suite FCR, Damage Suite NH]
 sectorC = [0]                     #[Numerical Fracture Exploration (SENT, 150% Displacement Stretch, No Damage)]
+sectorD = [1]                     #[Pipe Flow with Viscous Fluid]
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
@@ -14,6 +15,7 @@ test3 = [0, 1, 1, 0, 0, 0]              #SENT with displacement BCs and Tanh Dam
 test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress, SENT FCR stretch, shear FCR stress, shear FCR stretch]
 test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
+pipeFlowTests = [0, 0, 1]               #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls]
 
 ################################
 ########### SECTOR A ###########
@@ -284,5 +286,39 @@ if sectorC[0]:
         dx = 0.00025
         for ppc in ppcArray:
             runCommand = './cramp 217 ' + str(dx) + ' ' + str(ppc)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)
+
+################################
+########### SECTOR D ###########
+################################
+
+#Pipe Flow with Viscous Fluid
+if sectorD[0]:
+    if pipeFlowTests[0]:
+        #horizontal pipe with dirichlet BCs
+        bulk = 10000
+        gamma = 7
+        viscosityArray = [0.0075, 0.01]
+        for viscosity in viscosityArray:
+            runCommand = './cramp 222 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)
+    if pipeFlowTests[1]:
+        #vertical pipe with dirichlet BCs
+        bulk = 10000
+        gamma = 7
+        viscosityArray = [0.004]
+        for viscosity in viscosityArray:
+            runCommand = './cramp 223 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)
+    if pipeFlowTests[2]:
+        #horizontal with deformable pipe walls
+        bulk = 10000
+        gamma = 7
+        viscosityArray = [0.004]
+        for viscosity in viscosityArray:
+            runCommand = './cramp 224 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
             print(runCommand)
             subprocess.call([runCommand], shell=True)
