@@ -15,7 +15,7 @@ test3 = [0, 1, 1, 0, 0, 0]              #SENT with displacement BCs and Tanh Dam
 test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress, SENT FCR stretch, shear FCR stress, shear FCR stretch]
 test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
-pipeFlowTests = [0, 0, 1]               #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls]
+pipeFlowTests = [0, 0, 0, 1]            #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls, Horizontal with Elastic Walls and Constant Pressure]
 
 ################################
 ########### SECTOR A ###########
@@ -317,8 +317,17 @@ if sectorD[0]:
         #horizontal with deformable pipe walls
         bulk = 10000
         gamma = 7
-        viscosityArray = [0.004]
+        viscosityArray = [4] #0.004 bfore
         for viscosity in viscosityArray:
             runCommand = './cramp 224 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
+            print(runCommand)
+            subprocess.call([runCommand], shell=True)
+    if pipeFlowTests[3]:
+        #no gravity, constant pressure, horizontal with deformable pipe walls
+        bulk = 10000
+        gamma = 7
+        viscosityArray = [0.004] #0.004 bfore
+        for viscosity in viscosityArray:
+            runCommand = './cramp 225 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
             print(runCommand)
             subprocess.call([runCommand], shell=True)

@@ -40,6 +40,8 @@ int main(int argc, char *argv[])
     221 ... [PYTHON] LARGER stretch SENT with Displacement BCs, using Stretch-Based Damage and NeoHookean elasticity
     222 ... [PYTHON] Horizontal Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
     223 ... [PYTHON] Vertical Pipe w/o clot, Test for Parabolic Velocity under Viscous Fluid Model
+    224 ... [PYTHON] Horizontal Pipe Flow with Elastic Pipe Walls -- Test for Parabolic Velocity under Viscous Fluid Model
+    225 ... [PYTHON] Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -2019,7 +2021,7 @@ int main(int argc, char *argv[])
         
         using T = double;
         static const int dim = 2;
-        std::string path = "output/SolidFluidCouplingDemo_AddSolidCube";
+        std::string path = "output/SolidFluidCouplingDemo_AddSolidCube_withViscosity4e-1";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2059,7 +2061,7 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 1e-5;
 
         // Using `new` to avoid redundant copy constructor
-        auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, 4e-1)); //K = 1e7 from glacier, gamma = 7 always for water
         auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
         
         //Sample Fluid Particles
@@ -2662,7 +2664,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 240;
+        sim.end_frame = 360;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
         sim.gravity = -9.81;
 
@@ -2673,7 +2675,7 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 0; //5.5 good for dx = 0.2, 
         sim.useDFG = true;
-        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
         //Debug mode
@@ -2710,7 +2712,7 @@ int main(int argc, char *argv[])
         T wallWidth = sim.dx * 2;
         T heldMaterial = wallWidth;
         T pipeLength = 150e-3;
-        T pipeWidth = 5e-3;
+        T pipeWidth = sim.dx * 10;
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX - 3e-3, minY - wallWidth - heldMaterial), Vector<T,dim>(minX + width_f + pipeLength, minY), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + sim.dx, minY + pipeWidth), Vector<T,dim>(minX + width_f + pipeLength + width_f + 3e-3, minY + pipeWidth + wallWidth + heldMaterial), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
 
@@ -2727,6 +2729,114 @@ int main(int argc, char *argv[])
         //Add boxes to hold the arterial walls in place
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (1.1*boxWidth), minY + pipeWidth + wallWidth), Vector<T,dim>(minX + width_f + pipeLength + width_f + 5e-3, minY + pipeWidth + wallWidth + heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX - 3e-3, minY - wallWidth - heldMaterial), Vector<T,dim>(minX + width_f + pipeLength - (1.1*boxWidth), minY - wallWidth), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL       
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
+    if(testcase == 225){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 5) {
+            puts("ERROR: please add parameters");
+            puts("TEST 225 USAGE: ./cramp testcase bulk gamma viscosity");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 5; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        // T bulk = 1e4;
+        // T gamma = 7;
+        T rhoFluid = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 360;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0.0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 0; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Solid Material properties (soft artery walls)
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoSolid = 1300;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!        
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        
+        //-----PARTICLE SAMPLING-----
+
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 90e-3; //32mm
+        T width_f = 90e-3; //20mm
+        T x1 = minX + sim.dx;
+        T y1 = minY + sim.dx;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rhoFluid, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Add solid arterial walls
+        T wallWidth = sim.dx * 4.0;
+        T heldMaterial = sim.dx * 2.0;
+        T pipeLength = 150e-3;
+        T pipeWidth = sim.dx * 10;
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) + (0.5*pipeWidth)), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) + (0.5*pipeWidth) + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height_f + (2.0*sim.dx)), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength + width_f + (4.0*sim.dx), 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+        
+        //Piston Wall
+        T speed = 0.1;
+        T duration = 3;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(speed, 0), duration)); //left side piston wall
+
+        //Add boxes to hold the free ends of the arterial walls
+        T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial), Vector<T, dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx,minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial + boxHeight), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial - boxHeight), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL         
 
         sim.run(start_frame);
     }

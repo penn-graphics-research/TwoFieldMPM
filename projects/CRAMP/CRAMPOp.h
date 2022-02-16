@@ -376,15 +376,21 @@ public:
                         g.Fi1 += defGradXmass * w;
                     }
                     else if (g.separable != 0 && useDFG) {
-                        //Treat node as having two fields
-                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
-                        if (fieldIdx == 0) {
+
+                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             g.cauchy1 += cauchyXmass * w;
                             g.Fi1 += defGradXmass * w;
                         }
-                        else if (fieldIdx == 1) {
-                            g.cauchy2 += cauchyXmass * w;
-                            g.Fi2 += defGradXmass * w;
+                        else{ //regular two field transfer from DFG
+                            int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                            if (fieldIdx == 0) {
+                                g.cauchy1 += cauchyXmass * w;
+                                g.Fi1 += defGradXmass * w;
+                            }
+                            else if (fieldIdx == 1) {
+                                g.cauchy2 += cauchyXmass * w;
+                                g.Fi2 += defGradXmass * w;
+                            }
                         }
                     }
                 });
@@ -395,7 +401,7 @@ public:
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             g.cauchy1 /= g.m1;
             g.Fi1 /= g.m1;
-            if (g.separable != 0) {
+            if (g.separable != 0 && g.separable != 3) { //don't treat field 2 if coupling case (solid-fluid is sep = 3)
                 g.cauchy2 /= g.m2;
                 g.Fi2 /= g.m2;
             }
@@ -439,21 +445,30 @@ public:
                         FSmooth += g.Fi1 * w;
                     }
                     else if (g.separable != 0 && useDFG) {
-                        //Treat node as having two fields
-                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
-                        if (fieldIdx == 0) {
+
+                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             cauchySmooth += g.cauchy1 * w;
                             FSmooth += g.Fi1 * w;
                         }
-                        else if (fieldIdx == 1) {
-                            cauchySmooth += g.cauchy2 * w;
-                            FSmooth += g.Fi2 * w;
+                        else{
+                            //Treat node as having two fields
+                            int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                            if (fieldIdx == 0) {
+                                cauchySmooth += g.cauchy1 * w;
+                                FSmooth += g.Fi1 * w;
+                            }
+                            else if (fieldIdx == 1) {
+                                cauchySmooth += g.cauchy2 * w;
+                                FSmooth += g.Fi2 * w;
+                            }
                         }
                     }
                 });
 
+                //std::cout << "Before setting values in tensorG2P for index: " << i << std::endl;
                 m_cauchySmoothed[i] = cauchySmooth;
                 m_FSmoothed[i] = FSmooth;
+                //std::cout << "Finished tensorG2P for index: " << i << std::endl;
             }
         });
     }
