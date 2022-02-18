@@ -326,7 +326,7 @@ if sectorD[0]:
         #no gravity, constant pressure, horizontal with deformable pipe walls
         bulk = 10000
         gamma = 7
-        viscosityArray = [0.004] #0.004 bfore
+        viscosityArray = [0, 0.004, 0.04, 0.4, 4] #0.004 before
         for viscosity in viscosityArray:
             runCommand = './cramp 225 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
             print(runCommand)

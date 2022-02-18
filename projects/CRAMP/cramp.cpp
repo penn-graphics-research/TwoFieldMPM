@@ -2756,7 +2756,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/Duration_2s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2767,7 +2767,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 360;
+        sim.end_frame = 240;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
         sim.gravity = 0.0;
 
@@ -2829,8 +2829,9 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
         
         //Piston Wall
-        T speed = 0.1;
-        T duration = 3;
+        T dist = width_f + (2.*sim.dx); //distance to compress in one second
+        T duration = 2;
+        T speed = dist / duration;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(speed, 0), duration)); //left side piston wall
 
         //Add boxes to hold the free ends of the arterial walls

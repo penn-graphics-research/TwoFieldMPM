@@ -28,6 +28,8 @@ public:
 
     DFGMPMGrid<T, dim>& grid;
     T rp; //kernel radius for DFG
+    Field<int>& m_marker;
+    Field<bool> m_useDamage;
 
     void operator()()
     {
@@ -40,7 +42,7 @@ public:
         
         //Now we can do backGrid sorting!
         grid.serial_for([&](int i) {   
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them        
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0 && m_useDamage[i]){ //skip crack particles, fluid particles, or non-damaging solid particles     
                 const Vector<T, dim> pos = m_X[i];
 
                 //convert particle position to gridIdx
@@ -69,12 +71,14 @@ public:
 
     DFGMPMGrid<T, dim>& grid;
     T rp; //kernel radius for DFG
+    Field<int>& m_marker;
+    Field<bool> m_useDamage;
 
     void operator()()
     {
         BOW_TIMER_FLAG("particleNeighborSorting");
         grid.parallel_for([&](int p_i) {
-            if(!grid.crackInitialized || p_i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0 && m_useDamage[p_i]){ //skip crack particles, fluid particles, or non-damaging solid particles    
                 const Vector<T, dim> pos_i = m_X[p_i];
                 BSplineWeights<T, dim> spline(pos_i, rp);
                 particleNeighbors[p_i].clear(); //empty neighbor list for this particle before we fill it up
@@ -111,7 +115,8 @@ public:
     std::vector<int>& sp; //contains whether particle is surface or not
 
     DFGMPMGrid<T, dim>& grid;
-
+    Field<int>& m_marker;
+    
     void operator()()
     {
         BOW_TIMER_FLAG("surfaceDetection");
@@ -119,7 +124,7 @@ public:
         //parallel loop over particles
         tbb::parallel_for(tbb::blocked_range<int>(0, particleNeighbors.size()), [&](tbb::blocked_range<int> b) {
             for (int p_i = b.begin(); p_i < b.end(); ++p_i) {
-                if(!grid.crackInitialized || p_i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0){ //skip crack particles or fluid particles if we have them   
                     const Vector<T, dim> pos_i = m_X[p_i];
                     T S = 0.0;
                     for (size_t j = 0; j < particleNeighbors[p_i].size(); ++j) { //iter particle neighbors
@@ -158,13 +163,15 @@ public:
     std::vector<int>& sp;
 
     DFGMPMGrid<T, dim>& grid;
+    Field<int>& m_marker;
+    Field<bool> m_useDamage;
 
     void operator()()
     {
 
         BOW_TIMER_FLAG("computeDGs");
         grid.colored_for([&](int p_i) {
-            if(!grid.crackInitialized || p_i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0 && m_useDamage[p_i]){ //skip crack particles, fluid particles, or non-damaging solid particles 
                 const Vector<T, dim> pos_i = m_X[p_i];
                 T D = 0.0;
                 T S = 0.0;

@@ -267,21 +267,24 @@ public:
 
     //DFG specific routines (partitioning)
     void partitioningRoutines(){
-        //First sort particles into a grid with dx = rp
-        grid.sortParticles(Base::m_X, rp);
-
-        Bow::DFGMPM::BackGridSortOp<T, dim> backGrid_sort{ {}, Base::m_X, grid, rp };
-        backGrid_sort(); //Sort particles into spatial hash grid
         
-        Bow::DFGMPM::NeighborSortOp<T, dim> neighbor_sort{ {}, Base::m_X, particleNeighbors, grid, rp };
-        neighbor_sort(); //Create neighbor list for each particle
+        if(damageType != 0){
+            //First sort particles into a grid with dx = rp
+            grid.sortParticles(Base::m_X, rp);
 
+            Bow::DFGMPM::BackGridSortOp<T, dim> backGrid_sort{ {}, Base::m_X, grid, rp, m_marker, m_useDamage };
+            backGrid_sort(); //Sort particles into spatial hash grid
+            
+            Bow::DFGMPM::NeighborSortOp<T, dim> neighbor_sort{ {}, Base::m_X, particleNeighbors, grid, rp, m_marker, m_useDamage };
+            neighbor_sort(); //Create neighbor list for each particle
+        }
+        
         //Now, with particle neighbor lists in hand, we need to resort into a grid with dx = dx
         grid.sortParticles(Base::m_X, Base::dx);
 
         //Surface Detection -> only on first substep
         if (elapsedTime == 0.0) {
-            Bow::DFGMPM::SurfaceDetectionOp<T, dim> surface_detection{ {}, Base::m_X, particleNeighbors, rp, st, sp, grid };
+            Bow::DFGMPM::SurfaceDetectionOp<T, dim> surface_detection{ {}, Base::m_X, particleNeighbors, rp, st, sp, grid, m_marker };
             surface_detection(); //Detect surface particles on first substep
         }
         
@@ -296,8 +299,10 @@ public:
             update_tanh();
         }
 
-        Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid };
-        compute_DGs(); //Compute particle damage gradients
+        if(damageType != 0){
+            Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid, m_marker, m_useDamage };
+            compute_DGs(); //Compute particle damage gradients
+        }
 
         Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker };
         partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
