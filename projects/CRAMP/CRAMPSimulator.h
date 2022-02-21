@@ -1222,7 +1222,7 @@ public:
         poisson_disk.sample(new_samples);
         for(auto position : new_samples){
             T dist = (position - center).norm();
-            if(dist < radius){
+            if(dist < radius && position[1] > center[1]){
                 addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
             }
         }
