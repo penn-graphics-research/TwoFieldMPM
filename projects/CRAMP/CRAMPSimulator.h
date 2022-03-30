@@ -133,6 +133,7 @@ public:
 
     //Spatial Hash Data (use same grid for spatial hash and for sim)
     T rp;
+    T rpFactor = sqrt(2.0);
     Bow::Field<std::vector<int>> particleNeighbors;
 
     //DFGMPM Params
@@ -212,7 +213,7 @@ public:
         
         if(useDFG){
             if constexpr (dim == 2) {
-                rp = sqrt(2.0 * Base::dx * Base::dx);
+                rp = rpFactor * Base::dx; //rp = sqrt(2.0 * Base::dx * Base::dx);
             }
             else if constexpr (dim == 3) {
                 rp = sqrt(3.0 * Base::dx * Base::dx);
@@ -268,7 +269,7 @@ public:
     //DFG specific routines (partitioning)
     void partitioningRoutines(){
         
-        if(damageType != 0){
+        if(damageType != 0 || elasticityDegradationType != 0){ //allow DFG with damage region and elast.Deg.
             //First sort particles into a grid with dx = rp
             grid.sortParticles(Base::m_X, rp);
 
@@ -277,6 +278,8 @@ public:
             
             Bow::DFGMPM::NeighborSortOp<T, dim> neighbor_sort{ {}, Base::m_X, particleNeighbors, grid, rp, m_marker, m_useDamage };
             neighbor_sort(); //Create neighbor list for each particle
+
+            Bow::Logging::info("Finished neighbor sorting for DFGP-MPM...");
         }
         
         //Now, with particle neighbor lists in hand, we need to resort into a grid with dx = dx
@@ -299,9 +302,10 @@ public:
             update_tanh();
         }
 
-        if(damageType != 0){
+        if(damageType != 0 || elasticityDegradationType != 0){ //allow DFG with damage region and elast.Deg.
             Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid, m_marker, m_useDamage };
             compute_DGs(); //Compute particle damage gradients
+            Bow::Logging::info("Damage Gradients Computed...");
         }
 
         Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker };
@@ -404,9 +408,10 @@ public:
             //Now let's compute the maximum stretch for each particle
             Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_lamMax };
             computeLamMax();
+            std::cout << "Finished collecting lamMax..." << std::endl;
         }
 
-        std::cout << "Finished collecting F, Cauchy, and lamMax..." << std::endl;
+        std::cout << "Finished collecting F and Cauchy..." << std::endl;
 
         if(useDFG) {
             //DFG specific routines (partitioning)
@@ -435,8 +440,9 @@ public:
 
         //Compute Scaled Stress from Elasticity Degradation
         if(elasticityDegradationType == 1){
-            Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, degAlpha, grid };
+            Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, degAlpha, grid, m_marker };
             linearTensionDegradation();
+            std::cout << "Elasticity Degradation Done..." << std::endl;
         }
 
         p2g(dt); //compute forces, p2g transfer
@@ -1007,9 +1013,13 @@ public:
                 if(offset[0] == 0 || offset[1] == 0 || offset[0] == region[0] - 1 || offset[1] == region[1] - 1){
                     surface = 1;
                 }
+                else if(dist < radius + (Base::dx / std::pow(_ppc, (T)1 / dim))){
+                    surface = 1; //mark particles near the hole as surfaces
+                }
                 else{
                     surface = 0;
                 }
+
                 addParticle(position, velocity, density*vol, 0.0, surface, marker, useDamage);
             }
         });
@@ -1349,8 +1359,8 @@ public:
                 //     Dp[i] = 1.0;
                 // }
                 if(dist < radius){
-                    //Dp[i] = 1.0;
-                    sp[i] = 1;
+                    Dp[i] = 1.0;
+                    //sp[i] = 1;
                 }
             }
         }

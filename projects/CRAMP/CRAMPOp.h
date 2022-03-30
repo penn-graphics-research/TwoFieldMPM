@@ -203,30 +203,36 @@ public:
     std::vector<T>& m_Dp;
     T degAlpha;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
+    Field<int>& m_marker;
 
     void operator()()
     {
         BOW_TIMER_FLAG("simpleLinearTensionElasticityDegradation");
         grid.parallel_for([&](int i) {
-            //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
-            Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
-            Vector<T, dim> eigenVec;
-            T eigenVal = 0.0;
-            Eigen::EigenSolver<Matrix<T, dim, dim>> es(m_cauchy[i]);
+            if(m_marker[i] == 0){
+                //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
+                Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
+                Vector<T, dim> eigenVec;
+                T eigenVal = 0.0;
+                Eigen::EigenSolver<Matrix<T, dim, dim>> es(m_cauchy[i]);
 
-            //Compute Scaled Cauchy (Homel2016 Eq. 26,27)
-            for (int j = 0; j < dim; j++) {
-                for (int k = 0; k < dim; k++) {
-                    eigenVec(k) = es.eigenvectors().col(j)(k).real(); //get the real parts of each eigenvector
-                }
-                eigenVal = es.eigenvalues()(j).real();
-                if(eigenVal > 0){
-                    eigenVal *= std::pow((1 - m_Dp[i]), degAlpha);
-                }
+                //Compute Scaled Cauchy (Homel2016 Eq. 26,27)
+                for (int j = 0; j < dim; j++) {
+                    for (int k = 0; k < dim; k++) {
+                        eigenVec(k) = es.eigenvectors().col(j)(k).real(); //get the real parts of each eigenvector
+                    }
+                    eigenVal = es.eigenvalues()(j).real();
+                    if(eigenVal > 0){
+                        eigenVal *= std::pow((1 - m_Dp[i]), degAlpha);
+                    }
 
-                sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());
+                    sigmaScaled += eigenVal * (eigenVec * eigenVec.transpose());
+                }
+                m_scaledCauchy[i] = sigmaScaled;
             }
-            m_scaledCauchy[i] = sigmaScaled;
+            else if(m_marker[i] == 4){
+                m_scaledCauchy[i] = m_cauchy[i]; //no degradation of fluid particles
+            }
         });
     }
 };

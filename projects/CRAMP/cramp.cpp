@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     /*---TEST INDEX---*/
     /* 2D tests are 200-series, 3D tests are 300 series (201, 202, 301, 302, etc.)
     0 ..... Sandbox (test grid state size, Eigen routines, etc)
-    201 ... SENT with fibrin params, traction BCs, used for computing J Integrals
+    201 ... SENT with fibrin params, traction BCs, used for computing J Integrals with 2*dx DFG
     202 ... SENT with CRAMP params
     203 ... Hanging Cube
     204 ... [PYTHON] Old AnisoMPM Damage Propagation Test
@@ -43,6 +43,15 @@ int main(int argc, char *argv[])
     224 ... [PYTHON] Horizontal Pipe Flow with Elastic Pipe Walls -- Test for Parabolic Velocity under Viscous Fluid Model
     225 ... [PYTHON] Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
     226 ... [PYTHON] With Clot Inclusion - Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
+
+    TGC Presentation Sims
+    2001 .. SENT with Damage Region and Elasticity Degradation -> Single Field
+    2002 .. SENT with Damage Region and Elasticity Degradation -> Two-Field
+    2003 .. [PYTHON] SENT with Constant Width Crack & Variable Dx -> Single-Field
+    2004 .. [PYTHON] SENT with Constant Width Crack & Variable Dx -> Two-Field
+    2005 .. [PYTHON] Plate with Constant Radius Hole and Variable Dx -> Single Field
+    2006 .. [PYTHON] Plate with Constant Radius Hole and Variable Dx -> Two-Field
+    2007 .. SENT with 2*dx Wide Crack and Single Field (compare against equatorial stress results from two field 201 and single field 207)
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -141,7 +150,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/SENT_dx0.1mm_sigmaA_2600_FCR_ramp4s_2DXcrackWithDFG");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s");
 
         //material
         T E = 2.6e6;
@@ -2757,7 +2766,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/Duration_2s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/Duration_4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2768,7 +2777,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 240;
+        sim.end_frame = 360;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
         sim.gravity = 0.0;
 
@@ -2831,7 +2840,7 @@ int main(int argc, char *argv[])
         
         //Piston Wall
         T dist = width_f + (2.*sim.dx); //distance to compress in one second
-        T duration = 2;
+        T duration = 4;
         T speed = dist / duration;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(speed, 0), duration)); //left side piston wall
 
@@ -2940,10 +2949,13 @@ int main(int argc, char *argv[])
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
 
         //Add fibrin clot
-        T radius = pipeWidth * 0.75;
+        T radius = pipeWidth * 0.5;
         T x_s = pipeWidth * 10.0; //dist into pipe
         Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
-        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, false);
+        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true);
+
+        //Add elastodamage coupling
+        sim.elasticityDegradationType = 1;
 
         //-----BOUNDARY CONDITIONS-----
 
@@ -2962,6 +2974,720 @@ int main(int argc, char *argv[])
         T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial), Vector<T, dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx,minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial + boxHeight), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial - boxHeight), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL         
+
+        sim.run(start_frame);
+    }
+    
+    //---------------------------------------------------------------------
+    //---------------------------------------------------------------------
+    //----------------------  FINAL TESTING SIMS  -------------------------
+    //---------------------------------------------------------------------
+    //---------------------------------------------------------------------
+
+
+    //SENT with Damage Region and Elasticity Degradation -> Single Field MPM
+    if (testcase == 2001) {
+        
+        //Fibrin Parameters from Tutwiler2020
+        // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
+        // folded state stiffness,      cf = 4.4e4 N/m^2
+        // unfolded state stiffness,    cu = 2.6e6 N/m^2
+        // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
+
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/2001_SENT_withDamageRegion_andElasticityDegradation_SingleFieldMPM_dx0.5mm");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 150;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 5.5; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, false, 0);
+
+        //Add Crack
+        T crackSegmentLength = sim.dx / 5.0;
+        T damageRadius = sim.dx / 2.0;
+        T crackLength = 5e-3;
+        T crackY = y1 + height/2.0 - (0.5*sim.dx);
+        T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
+        sim.addHorizontalCrackWithoutPoints(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
+        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 40; // ramp up 4 seconds
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        sim.run(start_frame);
+    }
+
+    //SENT with Damage Region and Elasticity Degradation -> Two-Field MPM
+    if (testcase == 2002) {
+        
+        //Fibrin Parameters from Tutwiler2020
+        // fracture toughness,          Gc = 7.6 +/- 0.45 J/m^2
+        // folded state stiffness,      cf = 4.4e4 N/m^2
+        // unfolded state stiffness,    cu = 2.6e6 N/m^2
+        // fibrinogen density,          rho = 1395 g/cm^3 = 1,395,000 kg/m^3 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3044599/
+
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/2002_SENT_withDamageRegion_andElasticityDegradation_TwoFieldMPM_dx0.5mm_dMin0.15");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 150;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 0; //automatically markign surface for sampleGridAlignedBox
+        sim.useDFG = true;
+        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        //sim.rpFactor = 1.8; //TODO: explore if this helps results or not? default value is sqrt(2) ~= 1.414
+        sim.dMin = 0.15;
+
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho, true, 0);
+
+        //Add Crack
+        T crackSegmentLength = sim.dx / 5.0;
+        T damageRadius = sim.dx / 2.0;
+        T crackLength = 5e-3;
+        T crackY = y1 + height/2.0 - (0.5*sim.dx);
+        T crackX = x1 + (sim.dx / std::pow(ppc, (T)1 / dim) / 2.0);
+        sim.addHorizontalCrackWithoutPoints(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, damageRadius);
+        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 40; // ramp up 4 seconds
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] SENT with Constant Width Crack & Variable Dx -> Single-Field
+    if (testcase == 2003) {
+
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 3) {
+            puts("ERROR: please add parameters");
+            puts("TEST 2003 USAGE: ./cramp testcase dx");
+            exit(0);
+        }
+
+        T userDx = std::atof(argv[2]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 3; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/2003_noHolder_SENT_withWiderCrack_SingleFieldMPM_dx" + cleanedStrings[0];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = userDx; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 150; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.useDFG = false;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = 0.6e-3; //crack width = 3.75% of specimen height 1.2/32
+        T crackHeight = y1 + (height/2.0);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+
+        //Add Tracton Boundary Condition        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 40; //ramp up to full sigmaA over 500 frames
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Holder at the bottom (variable dx makes nodal loading imbalanced, so hold the bottom of the specimen)
+        //T heldMaterial = sim.dx;
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
+
+        //Add Contours
+        
+        //contain crack tip
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75), true); //LEFT, DOWN, RIGHT, UP
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75), true);
+        
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125), true);
+        
+        // //Add timing for contours (NOTE: without this we wont calculate anything!)
+        // std::vector<T> contourTimes;
+        // contourTimes.push_back(sim.frame_dt * 40);
+        // contourTimes.push_back(sim.frame_dt * 45);
+        // contourTimes.push_back(sim.frame_dt * 50);
+        // contourTimes.push_back(sim.frame_dt * 55);
+        // contourTimes.push_back(sim.frame_dt * 60);
+        // contourTimes.push_back(sim.frame_dt * 65);
+        // contourTimes.push_back(sim.frame_dt * 70);
+        // contourTimes.push_back(sim.frame_dt * 75);
+        // contourTimes.push_back(sim.frame_dt * 80);
+        // contourTimes.push_back(sim.frame_dt * 85);
+        // contourTimes.push_back(sim.frame_dt * 90);
+        // contourTimes.push_back(sim.frame_dt * 95);
+        // contourTimes.push_back(sim.frame_dt * 100);
+        // contourTimes.push_back(sim.frame_dt * 105);
+        // contourTimes.push_back(sim.frame_dt * 110);
+        // contourTimes.push_back(sim.frame_dt * 115);
+        // contourTimes.push_back(sim.frame_dt * 120);
+        // contourTimes.push_back(sim.frame_dt * 125);
+        // contourTimes.push_back(sim.frame_dt * 130);
+        // contourTimes.push_back(sim.frame_dt * 135);
+        // contourTimes.push_back(sim.frame_dt * 140);
+        // contourTimes.push_back(sim.frame_dt * 145);
+        // contourTimes.push_back(sim.frame_dt * 149);
+        // sim.addJIntegralTiming(contourTimes);
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] SENT with Constant Width Crack & Variable Dx -> Two-Field
+    if (testcase == 2004) {
+
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 4) {
+            puts("ERROR: please add parameters");
+            puts("TEST 2004 USAGE: ./cramp testcase dx st");
+            exit(0);
+        }
+
+        T userDx = std::atof(argv[2]);
+        T userSt = std::atof(argv[3]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 4; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/2004_noHolder_SENT_withWiderCrack_TwoFieldMPM_dx" + cleanedStrings[0] + "_st" + cleanedStrings[1];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = userDx; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 150; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = userSt;
+        sim.useDFG = true;
+        sim.fricCoeff = 0.15;
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = 0.6e-3; //crack width = 3.75% of specimen height 1.2/32
+        T crackHeight = y1 + (height/2.0);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        //Add Tracton Boundary Condition        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 40; //ramp up to full sigmaA over 500 frames
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        //Add Holder at the bottom (variable dx makes nodal loading imbalanced, so hold the bottom of the specimen)
+        //T heldMaterial = sim.dx;
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
+
+        //Add Contours
+        
+        //contain crack tip
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75), true); //LEFT, DOWN, RIGHT, UP
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75), true);
+        
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125), true);
+        
+        // //Add timing for contours (NOTE: without this we wont calculate anything!)
+        // std::vector<T> contourTimes;
+        // contourTimes.push_back(sim.frame_dt * 40);
+        // contourTimes.push_back(sim.frame_dt * 45);
+        // contourTimes.push_back(sim.frame_dt * 50);
+        // contourTimes.push_back(sim.frame_dt * 55);
+        // contourTimes.push_back(sim.frame_dt * 60);
+        // contourTimes.push_back(sim.frame_dt * 65);
+        // contourTimes.push_back(sim.frame_dt * 70);
+        // contourTimes.push_back(sim.frame_dt * 75);
+        // contourTimes.push_back(sim.frame_dt * 80);
+        // contourTimes.push_back(sim.frame_dt * 85);
+        // contourTimes.push_back(sim.frame_dt * 90);
+        // contourTimes.push_back(sim.frame_dt * 95);
+        // contourTimes.push_back(sim.frame_dt * 100);
+        // contourTimes.push_back(sim.frame_dt * 105);
+        // contourTimes.push_back(sim.frame_dt * 110);
+        // contourTimes.push_back(sim.frame_dt * 115);
+        // contourTimes.push_back(sim.frame_dt * 120);
+        // contourTimes.push_back(sim.frame_dt * 125);
+        // contourTimes.push_back(sim.frame_dt * 130);
+        // contourTimes.push_back(sim.frame_dt * 135);
+        // contourTimes.push_back(sim.frame_dt * 140);
+        // contourTimes.push_back(sim.frame_dt * 145);
+        // contourTimes.push_back(sim.frame_dt * 149);
+        // sim.addJIntegralTiming(contourTimes);
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Plate with Constant Radius Hole and Variable Dx -> Single Field
+    if (testcase == 2005) {
+
+
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 3) {
+            puts("ERROR: please add parameters");
+            puts("TEST 2005 USAGE: ./cramp testcase dx");
+            exit(0);
+        }
+
+        T userDx = std::atof(argv[2]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 3; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/2005_HoleinPlate_with_SingleFieldMPM_dx" + cleanedStrings[0];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = userDx; //0.5 mm
+        sim.symplectic = true;
+        sim.end_frame = 40;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        sim.useDFG = false;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T center = 0.05;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = center - width/2.0;
+        T y1 = center - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T aOverB = 0.1;
+        T radius = aOverB * (width / 2.0);
+        sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho, false);
+
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 5; //ramp up to full sigmaA over 500 frames
+
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+    
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Plate with Constant Radius Hole and Variable Dx -> Two-Field
+    if (testcase == 2006) {
+
+
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 4) {
+            puts("ERROR: please add parameters");
+            puts("TEST 2006 USAGE: ./cramp testcase dx st");
+            exit(0);
+        }
+
+        T userDx = std::atof(argv[2]);
+        T userSt = std::atof(argv[3]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 4; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/2006_HoleinPlate_with_TwoFieldMPM_dx" + cleanedStrings[0] + "_st" + cleanedStrings[1];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = userDx; //0.5 mm
+        sim.symplectic = true;
+        sim.end_frame = 40;
+        //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = userSt; //4.0 is close to working, but we actually don't want surfacing for this demo
+        sim.useDFG = true;
+        sim.fricCoeff = 0.15;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T center = 0.05;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = center - width/2.0;
+        T y1 = center - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T aOverB = 0.1;
+        T radius = aOverB * (width / 2.0);
+        sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho, true);
+
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 5; //ramp up to full sigmaA over 500 frames
+
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+    
+        sim.run(start_frame);
+    }
+
+    // SENT with 2*dx Wide Crack and Single Field (compare against equatorial stress results from two field 201 and single field 207)
+    if (testcase == 2007) {
+
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/2007_SENT_2dxCrack_singleField_dx0.1mm_sigmaA_2600_FCR_ramp4s");
+
+        //material
+        T E = 2.6e6;
+        T nu = 0.25;
+        T rho = 1395000;
+
+        //Params
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 150; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.useDFG = false;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Sample Particles
+        int ppc = 4;
+        T height = 32e-3; //32mm
+        T width = 20e-3; //20mm
+        T x1 = 0.05 - width/2.0;
+        T y1 = 0.05 - height/2.0;
+        T x2 = x1 + width;
+        T y2 = y1 + height;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2);
+        T crackLength = 5e-3;
+        T crackRadius = sim.dx;
+        T crackHeight = y1 + (height/2.0);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+
+        //Add Tracton Boundary Condition        
+        T sigmaA = 2600; //1000 times smaller than E
+        T rampTime = sim.frame_dt * 40; //ramp up to full sigmaA over 500 frames
+        sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
+        
+        //Add Contours
+        
+        //contain crack tip
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 25, 75), true); //LEFT, DOWN, RIGHT, UP
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 50, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 75, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 100, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 125, 75), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 75, 150, 75), true);
+        
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 25, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 50, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 75, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 100, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 125, 125), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int, 4>(25, 125, 150, 125), true);
+
+        // //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(10,54,50,54)); //centered on crack tip
+        // //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,49,45,49)); //centered on crack tip. inset contour to check against
+
+        // //do not contain crack tip
+        // //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(15,54,20,54)); //centered ahead of crack tip and contains NO SINGULARITY
+        // //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,5,15,49)); //same center, but inset and upper half
+        // //sim.addJIntegralContour(Vector<T,dim>(0.05175, 0.05), Vector<int,4>(10,49,15,5)); //same center, but inset and lower half
+        
+        // //Add timing for contours (NOTE: without this we wont calculate anything!)
+        // std::vector<T> contourTimes;
+        // // contourTimes.push_back(sim.frame_dt * 0.2);
+        // // contourTimes.push_back(sim.frame_dt * 0.7);
+        // // contourTimes.push_back(sim.frame_dt * 200);
+        // // contourTimes.push_back(sim.frame_dt * 2500);
+        // // contourTimes.push_back(sim.frame_dt * 300);
+        // // contourTimes.push_back(sim.frame_dt * 350);
+
+        // contourTimes.push_back(sim.frame_dt * 400);
+        // contourTimes.push_back(sim.frame_dt * 450);
+        // contourTimes.push_back(sim.frame_dt * 500);
+        // contourTimes.push_back(sim.frame_dt * 550);
+        // contourTimes.push_back(sim.frame_dt * 600);
+        // contourTimes.push_back(sim.frame_dt * 650);
+        // contourTimes.push_back(sim.frame_dt * 700);
+        // contourTimes.push_back(sim.frame_dt * 750);
+        // contourTimes.push_back(sim.frame_dt * 800);
+        // contourTimes.push_back(sim.frame_dt * 850);
+        // contourTimes.push_back(sim.frame_dt * 900);
+        // contourTimes.push_back(sim.frame_dt * 950);
+        // contourTimes.push_back(sim.frame_dt * 1000);
+        // contourTimes.push_back(sim.frame_dt * 1050);
+        // contourTimes.push_back(sim.frame_dt * 1100);
+        // contourTimes.push_back(sim.frame_dt * 1150);
+        // contourTimes.push_back(sim.frame_dt * 1200);
+        // contourTimes.push_back(sim.frame_dt * 1250);
+        // contourTimes.push_back(sim.frame_dt * 1300);
+        // contourTimes.push_back(sim.frame_dt * 1350);
+        // contourTimes.push_back(sim.frame_dt * 1400);
+        // contourTimes.push_back(sim.frame_dt * 1450);
+        // contourTimes.push_back(sim.frame_dt * 1499);
+        // sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
     }
