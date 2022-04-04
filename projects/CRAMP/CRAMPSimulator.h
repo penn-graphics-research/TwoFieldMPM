@@ -1181,6 +1181,33 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleGridAlignedBoxWithHole_PoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            //Now check to make sure this is outside the desired hole
+            T dist = (position - center).norm();
+            if(dist > radius){ //outside hole
+                int surface = 0;
+                if(dist < radius + (Base::dx / std::pow(_ppc, (T)1 / dim))){
+                    surface = 1; //mark particles near the hole as surfaces
+                }
+                else{
+                    surface = 0;
+                }
+
+                addParticle(position, velocity, density*vol, 0.0, surface, marker, useDamage);
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     void sampleGridAlignedBoxWithNotchWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const T length, const T radius, const T crackHeight, const bool useCircularNotch = false, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
         // sample particles
         T height = max_corner[1] - min_corner[1];

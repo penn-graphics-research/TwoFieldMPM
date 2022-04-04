@@ -5,8 +5,8 @@ import subprocess
 sectorA = [0, 0, 0, 0]            #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine] 
 sectorB = [0, 0]                  #[Damage Suite FCR, Damage Suite NH]
 sectorC = [0]                     #[Numerical Fracture Exploration (SENT, 150% Displacement Stretch, No Damage)]
-sectorD = [1]                     #[Pipe Flow with Viscous Fluid]
-sectorE = [0]                     #Final Tests Towards Paper 1
+sectorD = [0]                     #[Pipe Flow with Viscous Fluid]
+sectorE = [1]                     #Final Tests Towards Paper 1
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
@@ -17,7 +17,7 @@ test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress,
 test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
 pipeFlowTests = [0, 0, 0, 0, 1]         #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls, Horizontal with Elastic Walls and Constant Pressure, Clot Inclusion with Const Pressure]
-paper1Tests = [0, 0, 1, 1]              #[SENT with const width crack and variable dx for 1F MPM, then with 2F MPM, Hole in Plate with SF, Hole in Plate with TF]
+paper1Tests = [0, 0, 1, 0]              #[SENT with const width crack and variable dx for 1F MPM, then with 2F MPM, Hole in Plate with SF, Hole in Plate with TF]
 
 ################################
 ########### SECTOR A ###########
@@ -367,7 +367,7 @@ if sectorE[0]:
             subprocess.call([runCommand], shell=True)
     if paper1Tests[2]:
         #dxArray = [0.001, 0.0005, 0.0004, 0.00025]
-        dxArray = [0.0008]
+        dxArray = [0.00025]
         for dx in dxArray:
             runCommand = './cramp 2005 ' + str(dx)
             print(runCommand)

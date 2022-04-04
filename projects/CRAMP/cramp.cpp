@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC");
 
         //material
         T E = 2.6e6;
@@ -160,9 +160,9 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 1500;
+        sim.end_frame = 150;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
-        sim.frame_dt = 1e-2; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
+        sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
         T crackRadius = sim.dx;
         T crackHeight = y1 + (height / 2.0); //- (sim.dx / 2.0); 
         //sim.sampleGridAlignedBox(material1, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rho);
-        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
+        sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho, true);
 
         //Add Crack
         // T crackSegmentLength = sim.dx / 5.0;
@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
         // }
         
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 400; // ramp up 4 seconds
+        T rampTime = sim.frame_dt * 40; // ramp up 4 seconds
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 
         // T simpleDampFactor = 0.5;
@@ -246,6 +246,9 @@ int main(int argc, char *argv[])
         //T halfEnvelope = sim.dx;
         //sim.addStressSnapshot(snapshotTime, halfEnvelope);
         
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
         //Add Contours
         
         //contain crack tip
@@ -265,29 +268,29 @@ int main(int argc, char *argv[])
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        contourTimes.push_back(sim.frame_dt * 400);
-        contourTimes.push_back(sim.frame_dt * 450);
-        contourTimes.push_back(sim.frame_dt * 500);
-        contourTimes.push_back(sim.frame_dt * 550);
-        contourTimes.push_back(sim.frame_dt * 600);
-        contourTimes.push_back(sim.frame_dt * 650);
-        contourTimes.push_back(sim.frame_dt * 700);
-        contourTimes.push_back(sim.frame_dt * 750);
-        contourTimes.push_back(sim.frame_dt * 800);
-        contourTimes.push_back(sim.frame_dt * 850);
-        contourTimes.push_back(sim.frame_dt * 900);
-        contourTimes.push_back(sim.frame_dt * 950);
-        contourTimes.push_back(sim.frame_dt * 1000);
-        contourTimes.push_back(sim.frame_dt * 1050);
-        contourTimes.push_back(sim.frame_dt * 1100);
-        contourTimes.push_back(sim.frame_dt * 1150);
-        contourTimes.push_back(sim.frame_dt * 1200);
-        contourTimes.push_back(sim.frame_dt * 1250);
-        contourTimes.push_back(sim.frame_dt * 1300);
-        contourTimes.push_back(sim.frame_dt * 1350);
-        contourTimes.push_back(sim.frame_dt * 1400);
-        contourTimes.push_back(sim.frame_dt * 1450);
-        contourTimes.push_back(sim.frame_dt * 1499);
+        contourTimes.push_back(sim.frame_dt * 40);
+        contourTimes.push_back(sim.frame_dt * 45);
+        contourTimes.push_back(sim.frame_dt * 50);
+        contourTimes.push_back(sim.frame_dt * 55);
+        contourTimes.push_back(sim.frame_dt * 60);
+        contourTimes.push_back(sim.frame_dt * 65);
+        contourTimes.push_back(sim.frame_dt * 70);
+        contourTimes.push_back(sim.frame_dt * 75);
+        contourTimes.push_back(sim.frame_dt * 80);
+        contourTimes.push_back(sim.frame_dt * 85);
+        contourTimes.push_back(sim.frame_dt * 90);
+        contourTimes.push_back(sim.frame_dt * 95);
+        contourTimes.push_back(sim.frame_dt * 100);
+        contourTimes.push_back(sim.frame_dt * 105);
+        contourTimes.push_back(sim.frame_dt * 110);
+        contourTimes.push_back(sim.frame_dt * 115);
+        contourTimes.push_back(sim.frame_dt * 120);
+        contourTimes.push_back(sim.frame_dt * 125);
+        contourTimes.push_back(sim.frame_dt * 130);
+        contourTimes.push_back(sim.frame_dt * 135);
+        contourTimes.push_back(sim.frame_dt * 140);
+        contourTimes.push_back(sim.frame_dt * 145);
+        contourTimes.push_back(sim.frame_dt * 149);
         sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
@@ -3424,7 +3427,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/2005_HoleinPlate_with_SingleFieldMPM_dx" + cleanedStrings[0];
+        std::string path = "output/2005_HoleinPlate_UniformSampled_ppc9_with_SingleFieldMPM_dx" + cleanedStrings[0];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -3463,7 +3466,7 @@ int main(int argc, char *argv[])
         //auto material1 = sim.create_elasticity(new MPM::LinearElasticityOp<T, dim>(E, nu));
 
         //Sample Particles
-        int ppc = 4;
+        int ppc = 9;
         T center = 0.05;
         T height = 32e-3; //32mm
         T width = 20e-3; //20mm
@@ -3476,6 +3479,7 @@ int main(int argc, char *argv[])
         T aOverB = 0.1;
         T radius = aOverB * (width / 2.0);
         sim.sampleGridAlignedBoxWithHole(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho, false);
+        //sim.sampleGridAlignedBoxWithHole_PoissonDisk(material1, minPoint, maxPoint, Vector<T,dim>(center, center), radius, Vector<T, dim>(0, 0), ppc, rho, false);
 
         T sigmaA = 2600; //1000 times smaller than E
         T rampTime = sim.frame_dt * 5; //ramp up to full sigmaA over 500 frames
