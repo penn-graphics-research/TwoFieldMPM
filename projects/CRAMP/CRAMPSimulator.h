@@ -59,6 +59,8 @@ public:
     Field<T> m_mu, m_la;
     Field<TM> m_F; //def grad --> for j integral
     Field<TM> m_FSmoothed;
+    Field<TM> m_Fprevious; //hold previous def grad to compute Fdot, need this for dynamic J-Integral only
+    Field<TV> m_Vprevious; //needed for dynamic J-integral
 
     //Sim Data
     std::string outputPath;
@@ -85,6 +87,12 @@ public:
     bool particlesMarkedForLoading = false;
     int damageType = 0; //0 = none, 1 = Rankine, 2 = AnisoMPM, 3 = tanh
     int elasticityDegradationType = 0; //0 = none, 1 = simpleLinearTension
+    bool trackEnergy = false;
+
+    //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
+    std::vector<Vector<T,7>> systemEnergy;
+    T energyDt = 0.0;
+    Field<T> m_energies; //hold particle PEs
     
     //Particle Data
     Field<TM> m_cauchy; //for anisoMPM
@@ -113,6 +121,7 @@ public:
     std::vector<T> contourTimes; //hold the times to take the contours
     int contourIdx = 0;
     std::vector<std::vector<T>> contourData; //holds a vector of vectors, each vector is the set of computed contour values for a given time
+    std::vector<std::vector<T>> areaData; //same as contourData but for the area integral component of each contour at each time!
 
     //Data for Simple Damping
     bool useSimpleDamping = true;
@@ -205,6 +214,12 @@ public:
         for (auto& model : Base::elasticity_models){
             m_mu = model->m_mu;
             m_la = model->m_lambda;
+            
+            //grab F and use this to set the size of some particle vectors
+            m_F = model->m_F;
+            m_FSmoothed = m_F; //dummy values to set up the right size
+            m_cauchySmoothed = m_F; //dummy vals
+            m_scaledCauchy = m_F; //dummy vals
         }
 
         if(damageType == 2){
@@ -375,8 +390,12 @@ public:
     }
 
     void g2p(T dt){
+        m_Vprevious = Base::m_V; //make a copy of the particle velocities before we update them in G2P
+        
         Bow::DFGMPM::GridToParticlesOp<T, dim> G2P{ {}, Base::m_X, Base::m_V, Base::m_C, particleAF, grid, Base::dx, dt, flipPicRatio, useDFG, m_marker };
         G2P(useAPIC); //P2G
+
+        m_Fprevious = m_F; //make a copy of the deformation gradients before we update them
 
         //Now evolve strain (updateF)
         for (auto& model : Base::elasticity_models){
@@ -399,12 +418,9 @@ public:
             model->set_dt(dt); //pass dt into elastic model for viscous fluids! all others this is just a quick return
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
             m_F = model->m_F;
-            m_FSmoothed = model->m_F; //dummy values to set up the right size
-            m_cauchySmoothed = model->m_F; //dummy vals
-            m_scaledCauchy = model->m_F; //dummy vals
         }
 
-        if((int)m_F.size() > 0){
+        if((int)m_F.size() > 0 && damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
             //Now let's compute the maximum stretch for each particle
             Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_lamMax };
             computeLamMax();
@@ -489,37 +505,85 @@ public:
                 computeJIntegral = false;
             }
 
-            std::vector<T> contourValues; //empty vector to hold a value for each contour at this time
-
             //For this time, we will compute the J integral using however many contour radii the user asks for
-            std::string jIntFilePath = outputPath + "/JIntegralData" + std::to_string(elapsedTime) + ".txt";
+
+            //LINE INTEGRAL
+            std::vector<T> contourValues; //empty vector to hold a value for each line integral at this time
+            std::string jIntFilePath = outputPath + "/JIntegral_LineIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
-            Bow::CRAMP::ComputeJIntegralOp<T,dim>computeJIntegralOp{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
+            Bow::CRAMP::ComputeJIntegralLineTermOp<T,dim>computeJIntegralLineTermOp{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
                 T J_I = 0;
-                J_I = computeJIntegralOp(contourCenters[i], contourRadii[i], contourTypes[i], jIntFile);
+                J_I = computeJIntegralLineTermOp(contourCenters[i], contourRadii[i], contourTypes[i], jIntFile);
                 contourValues.push_back(J_I);
             }
             jIntFile.close();
             contourData.push_back(contourValues);
 
-            std::cout << "J Integral Computed At t = " << elapsedTime << std::endl;
+            //AREA INTEGRAL
+            std::vector<T> areaValues; //empty vector to hold a value for each area integral at this time
+            std::string areaFilePath = outputPath + "/JIntegral_AreaIntegralData" + std::to_string(elapsedTime) + ".txt";
+            std::ofstream areaFile(areaFilePath);
+            Bow::CRAMP::ComputeJIntegralAreaTermOp<T,dim>computeJIntegralAreaTermOp{ {}, Base::m_X, Base::m_V, m_Vprevious, Base::m_mass, m_initialVolume, m_F, m_Fprevious, grid, Base::dx, dt };
+            for(int i = 0; i < (int)contourRadii.size(); ++i){
+                T J_I = 0;
+                J_I = computeJIntegralAreaTermOp(contourCenters[i], contourRadii[i], areaFile);
+                areaValues.push_back(J_I);
+            }
+            areaFile.close();
+            areaData.push_back(areaValues);
+
+            std::cout << "J-Integral Computed At t = " << elapsedTime << std::endl;
 
             //Now write a data file with all contour values across all times if we are done computing them
             if(!computeJIntegral){
                 std::string jIntFilePath = outputPath + "/JIntegralData_COMPLETE.txt";
                 std::ofstream file(jIntFilePath);
                 file << "=====Complete Computed J-Integral Data=====\n";
+                file << "=====Dynamic Line Integral Data=====\n";
+                file << "Time, ";
+                for(int i = 0; i < (int)contourRadii.size(); ++i){
+                    file << "Contour " << (i+1) << ", ";
+                }
+                file << "\n";
                 for(int i = 0; i < (int)contourTimes.size(); ++i){
-                    file << "Time = " << contourTimes[i] << " s: ";
+                    file << contourTimes[i] << ", ";
                     for(int j = 0; j < (int)contourValues.size(); ++j){
                         file << contourData[i][j] << ", ";
+                    }
+                    file << "\n";
+                }
+
+                file << "=====Dynamic Area Integral Data=====\n";
+                file << "Time, ";
+                for(int i = 0; i < (int)contourRadii.size(); ++i){
+                    file << "Contour " << (i+1) << ", ";
+                }
+                file << "\n";
+                for(int i = 0; i < (int)contourTimes.size(); ++i){
+                    file << contourTimes[i] << ", ";
+                    for(int j = 0; j < (int)areaValues.size(); ++j){
+                        file << areaData[i][j] << ", ";
                     }
                     file << "\n";
                 }
                 file.close();
             }
         }
+
+        //Energy Tracking Routine
+        if(trackEnergy && (fmod(elapsedTime, energyDt) < dt)){
+            Vector<T,7> energy;
+            systemEnergy.push_back(energy);
+
+            for (auto& model : Base::elasticity_models){
+                model->trial_energy(m_energies); //grab particle PEs
+            }
+
+            //TODO HERE
+
+        }
+
 
         //If Loading this specimen:
         if(loading){
@@ -624,6 +688,12 @@ public:
 
     //------------ADDING TO SIM--------------
 
+    //Setup sim for energy tracking
+    void addEnergyTracking(T _energy_dt){
+        trackEnergy = true;
+        energyDt = _energy_dt;
+    }
+    
     //Setup sim for AnisoMPM Damage -- NOTE: if you want to set sigmaC directly, pass p < 0 and your sigmaC
     void addAnisoMPMDamage(T _eta, T _dMin, T _zeta, T _p = -1.0, T _sigmaC = -1.0)
     {

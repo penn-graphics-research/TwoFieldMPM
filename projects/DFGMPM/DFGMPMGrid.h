@@ -34,9 +34,9 @@ public:
     Vector<T, dim> fi1, fi2; //impulse force
 
     //To get grid def grad, F_i, transfer singular values and quaternion coefficients for U and V rotations from SVD!
-    Vector<T, dim> sigma1, sigma2;
-    Vector<T, 4> Uquat1, Uquat2;
-    Vector<T, 4> Vquat1, Vquat2;
+    // Vector<T, dim> sigma1, sigma2;
+    // Vector<T, 4> Uquat1, Uquat2;
+    // Vector<T, 4> Vquat1, Vquat2;
 
     //To transfer cauchy stress and def grad to the grid
     Matrix<T, dim, dim> cauchy1, cauchy2;
@@ -67,7 +67,7 @@ public:
     //Float3D: 528 B -> add 496 B -> 124 Ts
     //Double2D: 768 B -> add 256 B -> 32 Ts
     //Double3D: 1056 B -> add 992 B -> 124 Ts
-    Vector<T, (92 * dim) - 152> padding; //dim2 = 32 Ts, dim3 = 124 Ts --> y = 92x - 152
+    Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
 
     GridState()
     {
@@ -85,12 +85,12 @@ public:
         fct2 = Vector<T, dim>::Zero();
         fi1 = Vector<T, dim>::Zero();
         fi2 = Vector<T, dim>::Zero();
-        sigma1 = Vector<T, dim>::Zero();
-        sigma2 = Vector<T, dim>::Zero();
-        Uquat1 = Vector<T, 4>::Zero();
-        Uquat2 = Vector<T, 4>::Zero();
-        Vquat1 = Vector<T, 4>::Zero();
-        Vquat2 = Vector<T, 4>::Zero();
+        // sigma1 = Vector<T, dim>::Zero();
+        // sigma2 = Vector<T, dim>::Zero();
+        // Uquat1 = Vector<T, 4>::Zero();
+        // Uquat2 = Vector<T, 4>::Zero();
+        // Vquat1 = Vector<T, 4>::Zero();
+        // Vquat2 = Vector<T, 4>::Zero();
         cauchy1 = Matrix<T, dim, dim>::Zero();
         cauchy2 = Matrix<T, dim, dim>::Zero();
         Fi1 = Matrix<T, dim, dim>::Zero();
@@ -281,12 +281,12 @@ public:
                     g[k].fct2 = Vector<T, dim>::Zero();
                     g[k].fi1 = Vector<T, dim>::Zero();
                     g[k].fi2 = Vector<T, dim>::Zero();
-                    g[k].sigma1 = Vector<T, dim>::Zero();
-                    g[k].sigma2 = Vector<T, dim>::Zero();
-                    g[k].Uquat1 = Vector<T, 4>::Zero();
-                    g[k].Uquat2 = Vector<T, 4>::Zero();
-                    g[k].Vquat1 = Vector<T, 4>::Zero();
-                    g[k].Vquat2 = Vector<T, 4>::Zero();
+                    // g[k].sigma1 = Vector<T, dim>::Zero();
+                    // g[k].sigma2 = Vector<T, dim>::Zero();
+                    // g[k].Uquat1 = Vector<T, 4>::Zero();
+                    // g[k].Uquat2 = Vector<T, 4>::Zero();
+                    // g[k].Vquat1 = Vector<T, 4>::Zero();
+                    // g[k].Vquat2 = Vector<T, 4>::Zero();
 
                     //To transfer cauchy stress and def grad to the grid
                     g[k].cauchy1 = Matrix<T, dim, dim>::Zero();
@@ -312,7 +312,7 @@ public:
 
                     //Neighbor Search
                     g[k].mappedParticles.clear();
-                    g[k].padding = Vector<T, (92 * dim) - 152>::Zero();
+                    g[k].padding = Vector<T, (-32 * dim) + 116>::Zero();
                 }
             }
         }

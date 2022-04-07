@@ -452,13 +452,13 @@ public:
     //     });
     // }
 
-    // void trial_energy(Field<T>& t_energy) override
-    // {
-    //     tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
-    //         T energy = m_vol[i] * psi(t_J[i], bulk, gamma);
-    //         t_energy[m_global_index[i]] += energy;
-    //     });
-    // }
+    void trial_energy(Field<T>& t_energy) override  //TODO: eventually this needs to include the energy from the viscous term too!
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            T energy = m_vol[i] * psi(t_J[i], bulk, gamma);
+            t_energy[m_global_index[i]] += energy;
+        });
+    }
 
     // void trial_gradient(Field<Matrix<T, dim, dim>>& t_gradient) override
     // {

@@ -1170,7 +1170,7 @@ public:
 
 /* Compute the J Integral using a rectangular path of grid nodes centered on the closest node to the crack tip */
 template <class T, int dim>
-class ComputeJIntegralOp : public AbstractOp {
+class ComputeJIntegralLineTermOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
@@ -1698,7 +1698,7 @@ public:
             file << "J_II: " << J_II << "\n";
             file << "\n";
         }
-        //SINGLE FIELD MPM - INTERSECTING CASE (J = 0) ==============================================================================
+        // INTERSECTING CASE WITH MATERIAL DISCONTINUITY (with dx gap modeling crack) ==============================================================================
         else if(!useDFG || (useDFG && containsCrackTip)){
             //STEP 1c: Construct our contour list- in this SINGLE FIELD INTERSECTING case, we must make sure we start and end at the right points
             std::vector<Vector<T,dim>> finalContourPoints;
@@ -1737,6 +1737,7 @@ public:
             std::vector<T> Fm_I_NormalX;
             std::vector<T> Fm_I_NormalY;
             std::vector<T> Fm_I_W;
+            std::vector<T> Fm_I_K; //kinetic energy
             std::vector<T> Fm_I_termTwo;
             std::vector<Matrix<T,dim,dim>> m_Fi; //collect reconstructed Fi's
             std::vector<Matrix<T,dim,dim>> m_Pi; //collect computed Piola Kirchhoff Stresses
@@ -1756,10 +1757,17 @@ public:
                 m_Fi.push_back(Fi1);
                 m_Fi.push_back(Fi2);
 
-                std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0);
-                std::vector<T> Fm2_I = computeFm(Fi2, x2 - x1, 0);
-                std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1);
-                std::vector<T> Fm2_II = computeFm(Fi2, x2 - x1, 1);
+                //Compute Kinetic Energy for each endpoint
+                T KE1, KE2;
+                KE1 = 0.5 * g1->m1 * (g1->v1.dot(g1->v1)); //KE = 1/2 * m * (v dot v)
+                KE2 = 0.5 * g2->m1 * (g2->v1.dot(g2->v1));
+                Fm_I_K.push_back(KE1);
+                Fm_I_K.push_back(KE2);
+
+                std::vector<T> Fm1_I = computeFm(Fi1, x2 - x1, 0, KE1);
+                std::vector<T> Fm2_I = computeFm(Fi2, x2 - x1, 0, KE2);
+                std::vector<T> Fm1_II = computeFm(Fi1, x2 - x1, 1, KE1);
+                std::vector<T> Fm2_II = computeFm(Fi2, x2 - x1, 1, KE2);
                 Fsum_I = Fm1_I[0] + Fm2_I[0];
                 Fsum_II = Fm1_II[0] + Fm2_II[0];
 
@@ -1810,9 +1818,9 @@ public:
             }
             for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
                 file << "-----------------<Line Segment " << i << ", Fsum_I: " << Fsum_I_List[i] << ", Delta_I: " << DeltaI_List[i] << ", J_I Contribution: " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ">-----------------\n";
-                file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";
+                file << "idx1: " << i << ", Point: (" << finalContourPoints[i][0] << "," << finalContourPoints[i][1] << "), Fm_I: " << Fm_I_SegmentList[i*2] << ", Normal: [" << Fm_I_NormalX[i*2] << "," << Fm_I_NormalY[i*2] << "], W: " << Fm_I_W[i*2] << ", KE: " << Fm_I_K[i*2] << ", termTwo: " << Fm_I_termTwo[i*2] << "\nFi1: " << m_Fi[i*2] << "\nPi1: " << m_Pi[i*2] << " \n";
                 file << "-----\n"; 
-                file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << "\nPi2: " << m_Pi[(i*2)+1] << " \n";
+                file << "idx2: " << i+1 << ", Point: (" << finalContourPoints[i+1][0] << "," << finalContourPoints[i+1][1] << "), Fm_I: " << Fm_I_SegmentList[(i*2) + 1] << ", Normal: [" << Fm_I_NormalX[(i*2) + 1] << "," << Fm_I_NormalY[(i*2) + 1] << "], W: " << Fm_I_W[(i*2) + 1] << ", KE: " << Fm_I_K[(i*2) + 1] << ", termTwo: " << Fm_I_termTwo[(i*2) + 1] << "\nFi2: " << m_Fi[(i*2)+1] << "\nPi2: " << m_Pi[(i*2)+1] << " \n";
             }
             file << "J_I: " << J_I << "\n"; 
             file << "J_II: " << J_II << "\n";
@@ -1837,8 +1845,8 @@ public:
         return U * Sigma * V.transpose();
     }
 
-    //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y)
-    std::vector<T> computeFm(Matrix<T,dim,dim> Fi, Vector<T, dim> lineSegment, int mode){
+    //Compute Fm based on grid data at node i, the line segment between the nodes, and the mode (0 for x, 1 for y), optional to add Kinetic Energy
+    std::vector<T> computeFm(Matrix<T,dim,dim> Fi, Vector<T, dim> lineSegment, int mode, T KE = 0){
         
         std::vector<T> FmResults;
         
@@ -1904,7 +1912,7 @@ public:
         }
         
         //Add first term -> mode = 0 or 1
-        Fm += W * normal[mode];
+        Fm += (W + KE) * normal[mode];
 
         //Add second term (field 1)
         Fm -= termTwo;
@@ -1945,111 +1953,189 @@ public:
     }
 };
 
-/* Transfer particle stress, nominal stress, and def grad to grid so we can compute J Integral*/
+
+/* Compute the Dynamic J-Integral's area integral term by integrating over all particles enclosed in a rectangular path of grid nodes centered on the closest node to the crack tip */
 template <class T, int dim>
-class CollectJIntegralGridDataOp : public AbstractOp {
+class ComputeJIntegralAreaTermOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
-    Field<Matrix<T, dim, dim>>& m_stress; //holds Vp^0 * PF^T 
-    Field<Matrix<T,dim,dim>>& m_F; //holds particle def grad F
+    Field<Vector<T, dim>>& m_V;
+    Field<Vector<T, dim>>& m_Vprevious;
+    std::vector<T>& m_mass;
+    Field<T> m_initialVolume;
 
-    Bow::Field<std::vector<int>>& particleAF;
+    Field<Matrix<T, dim, dim>>& m_F;
+    Field<Matrix<T, dim, dim>>& m_Fprevious;
 
     DFGMPM::DFGMPMGrid<T, dim>& grid;
     T dx;
     T dt;
 
-    bool useDFG;
-
-    void operator()()
+    T operator()(Vector<T,dim> center, Vector<int,4> contour, std::ofstream& file)
     {
-        BOW_TIMER_FLAG("collectJIntegralGridData");
+        BOW_TIMER_FLAG("computeJIntegralAreaTerm");
+
+        T J_I = 0; //set J integral mode I to 0 for now
+
+        //Calculate contour boundaries, contour defined by (L,D,R,U) each indicating the number of nodes Left, Down, Right, Up from the center point (x,y)
+        T left, down, right, up;
+        left = center[0] - (contour[0] * dx);
+        down = center[1] - (contour[1] * dx);
+        right = center[0] + (contour[2] * dx);
+        up = center[1] + (contour[3] * dx);
         
-        //Now we transfer to the grid!
-        grid.colored_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
-                const Vector<T, dim> pos = m_X[i];
-                //const Matrix<T, dim, dim> stress = m_stress[i];
-                const Matrix<T, dim, dim> F = m_F[i];
-                
-                //We will transfer the deformation gradient through transferring its singular values and rotations (as quaternions) -> three separate intrinsic transfers here: sigma, Uquat, Vquat
-                Matrix<T, dim, dim> U, V;
-                Vector<T, dim> sigma;
-                Vector<T, 4> Uquat, Vquat; //quaternion coefficients for U and V
-                Math::svd(F, U, sigma, V);
-                
-                //Now convert U and V to quaternions
-                Matrix<T, 3,3> Upad = Matrix<T,3,3>::Identity();
-                Matrix<T, 3,3> Vpad = Matrix<T,3,3>::Identity();
-                Upad.topLeftCorner(2,2) = U;
-                Vpad.topLeftCorner(2,2) = V; //pad these to be 3x3 for quaternion
-                Eigen::Quaternion<T> rotU(Upad);
-                Eigen::Quaternion<T> rotV(Vpad);
-                rotU.normalize();
-                rotV.normalize(); //normalize our quaternions!
-                Uquat = rotU.coeffs();
-                Vquat = rotV.coeffs();
+        //Setup lists to save intermediate data to write out
+        std::vector<int> particleIndeces;
+        std::vector<T> contributions;
+        //std::vector<Matrix<T,dim,dim>> m_Fi;
 
-                //Compute spline
-                BSplineWeights<T, dim> spline(pos, dx);
-                
-                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
-                    
-                    ///NOTES
-                    //Storing grid force in fi1 and fi2 (if separable) -> outdated
-                    //We will intrinsically transfer here the singular values and quaternions for U and V rotations from F = UsigmaV^T
-                    //Storing accumulated weights in gridSeparability[0] (field 1 weight sum) and gridSeparability[1] (field 2 weight sum)
 
-                    //Notice we treat single-field and two-field nodes differently
-                    if (g.separable == 0 || !useDFG) {
-                        //Single-field treatment if separable = 0 OR if we are using single field MPM
-                        
-                        //g.fi1 += stress * dw; //transfer stress to grid, fi
-                        g.sigma1 += sigma * w;
-                        g.Uquat1 += Uquat * w;
-                        g.Vquat1 += Vquat * w;
-                        g.gridSeparability[0] += w; //sum up the total weight
-                    }
-                    else if (g.separable != 0 && useDFG) {
-                        //Treat node as having two fields
-                        int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
-                        if (fieldIdx == 0) {
-                            //g.fi1 += stress * dw; //transfer stress to grid, fi
-                            g.sigma1 += sigma * w;
-                            g.Uquat1 += Uquat * w;
-                            g.Vquat1 += Vquat * w;
-                            g.gridSeparability[0] += w; //sum up the total weight
-                        }
-                        else if (fieldIdx == 1) {
-                            //g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
-                            g.sigma2 += sigma * w;
-                            g.Uquat2 += Uquat * w;
-                            g.Vquat2 += Vquat * w;
-                            g.gridSeparability[1] += w; //sum up the total weight (second field)
-                        }
-                    }
-                });
+        //Now iterate over all particles enclosed in the contour and sum up their contributions to the area integral
+        grid.serial_for([&](int i) {
+            const Vector<T, dim> pos = m_X[i];
+            T integrand = 0;
+            if(pos[0] > left && pos[0] < right && pos[1] > down && pos[1] < up){ //only process particles inside contour
+                integrand = 0;
+                
+                Vector<T,dim> a_p = (m_V[i] - m_Vprevious[i]) / dt; // particle acceleration
+                
+                Matrix<T, dim, dim> F = m_F[i];
+                Matrix<T, dim, dim> Fdot = (F - m_Fprevious[i]) / dt;
+                Matrix<T, dim, dim> Finv = F.inverse();
+                Matrix<T, dim, dim> L_p = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
+
+                integrand = m_mass[i] * (a_p.dot(F.col(0)) - m_V[i].dot(L_p.col(0))); // area integral integrand = mp * (ap dot F.col(0) - vp dot L.col(0))
+                T contribution = integrand * m_initialVolume[i];
+
+                J_I += contribution; //sum integrand weighted by initial volume
+
+                particleIndeces.push_back(i);
+                contributions.push_back(contribution);
             }
         });
 
-        /* Iterate grid to divide out the total weight sums for P and F since we transfer these intrinsically */
-        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-            if(g.gridSeparability[0] != 0){
-                g.sigma1 /= g.gridSeparability[0];
-                g.Uquat1 /= g.gridSeparability[0];
-                g.Vquat1 /= g.gridSeparability[0]; //divide by field 1 weight sum
-            }
-            if (g.separable != 0) {
-                if(g.gridSeparability[1] != 0){
-                    g.sigma2 /= g.gridSeparability[1];
-                    g.Uquat2 /= g.gridSeparability[1];
-                    g.Vquat2 /= g.gridSeparability[1]; //divide by field 2 weight sum
-                }
-            }
-        });
+        //Write soem intermediate data to a file
+        file << "====================================================== J-Integral Dynamic Area Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
+        // for(int i = 0; i < (int)particleIndeces.size(); ++i){
+        //     T idx = particleIndeces[i];
+        //     file << "Particle Idx: " << idx << ", Position: (" << m_X[idx][0] << "," << m_X[idx][1] << "), Contribution: " << contributions[idx] << " \n";
+        // }
+        file << "Number of Particles Integrated Over: " << (int)particleIndeces.size() << "\n";
+        file << "Total Area of Region: " << ((T)contour[0]+(T)contour[2])*((T)contour[1]+(T)contour[3])*dx*dx << "\n";
+        file << "J_I: " << J_I << "\n"; 
+        file << "\n";
+
+        return J_I;
     }
 };
+
+
+/* Transfer particle stress, nominal stress, and def grad to grid so we can compute J Integral*/
+// template <class T, int dim>
+// class CollectJIntegralGridDataOp : public AbstractOp {
+// public:
+//     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+//     Field<Vector<T, dim>>& m_X;
+//     Field<Matrix<T, dim, dim>>& m_stress; //holds Vp^0 * PF^T 
+//     Field<Matrix<T,dim,dim>>& m_F; //holds particle def grad F
+
+//     Bow::Field<std::vector<int>>& particleAF;
+
+//     DFGMPM::DFGMPMGrid<T, dim>& grid;
+//     T dx;
+//     T dt;
+
+//     bool useDFG;
+
+//     void operator()()
+//     {
+//         BOW_TIMER_FLAG("collectJIntegralGridData");
+        
+//         //Now we transfer to the grid!
+//         grid.colored_for([&](int i) {
+//             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+//                 const Vector<T, dim> pos = m_X[i];
+//                 //const Matrix<T, dim, dim> stress = m_stress[i];
+//                 const Matrix<T, dim, dim> F = m_F[i];
+                
+//                 //We will transfer the deformation gradient through transferring its singular values and rotations (as quaternions) -> three separate intrinsic transfers here: sigma, Uquat, Vquat
+//                 Matrix<T, dim, dim> U, V;
+//                 Vector<T, dim> sigma;
+//                 Vector<T, 4> Uquat, Vquat; //quaternion coefficients for U and V
+//                 Math::svd(F, U, sigma, V);
+                
+//                 //Now convert U and V to quaternions
+//                 Matrix<T, 3,3> Upad = Matrix<T,3,3>::Identity();
+//                 Matrix<T, 3,3> Vpad = Matrix<T,3,3>::Identity();
+//                 Upad.topLeftCorner(2,2) = U;
+//                 Vpad.topLeftCorner(2,2) = V; //pad these to be 3x3 for quaternion
+//                 Eigen::Quaternion<T> rotU(Upad);
+//                 Eigen::Quaternion<T> rotV(Vpad);
+//                 rotU.normalize();
+//                 rotV.normalize(); //normalize our quaternions!
+//                 Uquat = rotU.coeffs();
+//                 Vquat = rotV.coeffs();
+
+//                 //Compute spline
+//                 BSplineWeights<T, dim> spline(pos, dx);
+                
+//                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    
+//                     ///NOTES
+//                     //Storing grid force in fi1 and fi2 (if separable) -> outdated
+//                     //We will intrinsically transfer here the singular values and quaternions for U and V rotations from F = UsigmaV^T
+//                     //Storing accumulated weights in gridSeparability[0] (field 1 weight sum) and gridSeparability[1] (field 2 weight sum)
+
+//                     //Notice we treat single-field and two-field nodes differently
+//                     if (g.separable == 0 || !useDFG) {
+//                         //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        
+//                         //g.fi1 += stress * dw; //transfer stress to grid, fi
+//                         g.sigma1 += sigma * w;
+//                         g.Uquat1 += Uquat * w;
+//                         g.Vquat1 += Vquat * w;
+//                         g.gridSeparability[0] += w; //sum up the total weight
+//                     }
+//                     else if (g.separable != 0 && useDFG) {
+//                         //Treat node as having two fields
+//                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+//                         if (fieldIdx == 0) {
+//                             //g.fi1 += stress * dw; //transfer stress to grid, fi
+//                             g.sigma1 += sigma * w;
+//                             g.Uquat1 += Uquat * w;
+//                             g.Vquat1 += Vquat * w;
+//                             g.gridSeparability[0] += w; //sum up the total weight
+//                         }
+//                         else if (fieldIdx == 1) {
+//                             //g.fi2 += stress * dw; //transfer stress to grid, fi (second field)
+//                             g.sigma2 += sigma * w;
+//                             g.Uquat2 += Uquat * w;
+//                             g.Vquat2 += Vquat * w;
+//                             g.gridSeparability[1] += w; //sum up the total weight (second field)
+//                         }
+//                     }
+//                 });
+//             }
+//         });
+
+//         /* Iterate grid to divide out the total weight sums for P and F since we transfer these intrinsically */
+//         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+//             if(g.gridSeparability[0] != 0){
+//                 g.sigma1 /= g.gridSeparability[0];
+//                 g.Uquat1 /= g.gridSeparability[0];
+//                 g.Vquat1 /= g.gridSeparability[0]; //divide by field 1 weight sum
+//             }
+//             if (g.separable != 0) {
+//                 if(g.gridSeparability[1] != 0){
+//                     g.sigma2 /= g.gridSeparability[1];
+//                     g.Uquat2 /= g.gridSeparability[1];
+//                     g.Vquat2 /= g.gridSeparability[1]; //divide by field 2 weight sum
+//                 }
+//             }
+//         });
+//     }
+// };
 
 }
 } // namespace Bow::DFGMPM

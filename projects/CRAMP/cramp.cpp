@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
         using T = double;
-        static const int dim = 2;
+        static const int dim = 3;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
         //std::cout << "Padding: " << sizeof(gs.padding) << std::endl;
@@ -135,6 +135,13 @@ int main(int argc, char *argv[])
         //Double2D: 768 B -> add 256 B -> 32 Ts
         //Double3D: 1056 B -> add 992 B -> 124 Ts
         //Vector<T, (92 * dim) - 152> padding; //dim2 = 32 Ts, dim3 = 124 Ts --> y = 92x - 152
+
+        //AFTER REMOVING sigma, Uquat, Vquat 4/7/22
+        //Float2D:  B -> add 128 B -> 32 Ts
+        //Float3D:  B -> add 496 B -> 124 Ts
+        //Double2D: 608 B -> add 416 B -> 52 Ts
+        //Double3D: 864 B -> add 160 B -> 20 Ts
+        //Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
     }
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
@@ -150,7 +157,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral");
 
         //material
         T E = 2.6e6;
@@ -268,6 +275,7 @@ int main(int argc, char *argv[])
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
+        //contourTimes.push_back(sim.frame_dt * 2);
         contourTimes.push_back(sim.frame_dt * 40);
         contourTimes.push_back(sim.frame_dt * 45);
         contourTimes.push_back(sim.frame_dt * 50);
