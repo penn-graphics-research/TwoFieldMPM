@@ -22,7 +22,7 @@ public:
     virtual void initialize(){};
     virtual T calculate_dt() { return this->suggested_dt; };
     virtual void restart_prepare(){};
-    virtual void advance(T dt) = 0;
+    virtual void advance(T dt, int end_frame, T frame_dt) = 0;
     std::function<void(void)> timestep_callback = []() {};
     virtual void dump_output(int frame_num) = 0;
 
@@ -44,19 +44,19 @@ public:
             while (remaining_time) {
                 T dt = std::min(suggested_dt, calculate_dt());
                 if (remaining_time <= dt) {
-                    advance(remaining_time);
+                    advance(remaining_time, end_frame, frame_dt);
                     Logging::info("Advanced with dt = ", remaining_time);
                     time_elapsed += remaining_time;
                     remaining_time = 0;
                 }
                 else if (remaining_time <= dt * 2) {
-                    advance(remaining_time / 2);
+                    advance(remaining_time / 2, end_frame, frame_dt);
                     Logging::info("Advanced with dt = ", remaining_time / 2);
                     time_elapsed += remaining_time / 2;
                     remaining_time /= 2;
                 }
                 else {
-                    advance(dt);
+                    advance(dt, end_frame, frame_dt);
                     Logging::info("Advanced with dt = ", dt);
                     time_elapsed += dt;
                     remaining_time -= dt;

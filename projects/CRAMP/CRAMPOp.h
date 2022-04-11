@@ -63,12 +63,14 @@ public:
                 const Matrix<T, dim, dim> C = m_C[i] * mass; //C * m_p
                 const Vector<T, dim> momentum = mass * v; //m_p * v_p
                 Matrix<T, dim, dim> delta_t_tmp_force = -dt * stress[i]; //stress holds Vp^0 * PF^T
+                Matrix<T, dim, dim> tmp_force = -stress[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 
                 //Compute scaled stress forces (if using elasticity degradation)
                 if(elasticityDegradationType == 1){
                     //Use damage scaled Cauchy stress for grid forces
                     delta_t_tmp_force = -dt * m_currentVolume[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
+                    tmp_force = -m_currentVolume[i] * m_scaledCauchy[i]; 
                 }
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
@@ -100,6 +102,9 @@ public:
                             g.m1 += mass * w;
                         }
 
+                        //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
+                        g.fi1 += tmp_force * dw;
+
                         //Transfer volume so we can add our Mode 1 loading
                         //g.gridViYi1 += vol * w;
                     }
@@ -120,6 +125,9 @@ public:
                                 }
                                 //Compute normal for field 1 (solid) particles
                                 g.n1 += mass * dw; //remember to normalize this later!
+
+                                //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
+                                g.fi1 += tmp_force * dw;
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
                                 g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
@@ -133,6 +141,9 @@ public:
                                 }
                                 //Compute normal for field 2 (fluid) particles
                                 g.n2 += mass * dw; //remember to normalize this later!
+
+                                //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
+                                g.fi2 += tmp_force * dw;
                             }
                         }
                         else{ //regular two field transfer from DFG
@@ -147,6 +158,9 @@ public:
                                 }
                                 //Compute normal for field 1 particles
                                 g.n1 += mass * dw; //remember to normalize this later!
+
+                                //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
+                                g.fi1 += tmp_force * dw;
                             }
                             else if (fieldIdx == 1) {
                                 if (useAPIC) {
@@ -158,6 +172,9 @@ public:
                                 }
                                 //Compute normal for field 2 particles
                                 g.n2 += mass * dw; //remember to normalize this later!
+
+                                //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
+                                g.fi2 += tmp_force * dw;
                             }
                         }
                         
@@ -181,6 +198,7 @@ public:
             g.v1 += gravity_term;
             g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
             g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
+            g.fi1 += mass1 * (gravity_term / dt); //add gravity term to nodal force
             if (g.separable != 0) {
                 T mass2 = g.m2;
                 Vector<T, dim> alpha2;
@@ -188,6 +206,7 @@ public:
                 g.v2 = g.v2.cwiseProduct(alpha2);
                 g.v2 += gravity_term;
                 g.vn2 = g.vn2.cwiseProduct(alpha2); //this is how we get v2^n
+                g.fi2 += mass2 * (gravity_term / dt); //add gravity term to nodal force, field 2
             }
         });
     }
@@ -797,6 +816,8 @@ public:
 
     T ppc;
 
+    T& totalWork;
+
     void operator()()
     {
         BOW_TIMER_FLAG("applyMode1Loading");
@@ -852,24 +873,45 @@ public:
                 T midX2 = x2 - eps; //for middle node loading
                 // T endX1 = x1 - eps;
                 // T endX2 = x2 + eps;
+                Vector<T,dim> ti = Vector<T,dim>::Zero();
                 if(xi[0] > midX1 && xi[0] < midX2){ //only within the x range of the material!
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = stress;
+                        ti[1] = fi;
+                        g.fi1 += ti; //add traction to nodal force
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -1 * stress;
+                        ti[1] = fi;
+                        g.fi1 += ti; //add traction to nodal force
                     }
                 }
                 else if(std::abs(xi[0] - x1) < eps || std::abs(xi[0] - x2) < eps){ //end nodes
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = 0.5 * stress;
+                        ti[1] = fi;
+                        g.fi1 += ti; //add traction to nodal force
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -0.5 * stress;
+                        ti[1] = fi;
+                        g.fi1 += ti; //add traction to nodal force
                     }
+                }
+                else{
+                    //if not inside the traction BC region, zero out these nodal force values
+                    g.fi1 = Vector<T,dim>::Zero();
+                    g.fi2 = Vector<T,dim>::Zero();
                 }
             }
             g.v1[1] += (fi / g.m1) * dt; //update velocity based on our computed forces
+        });
+
+        //Now compute traction BC work done
+        grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.fi1.norm() > 0){
+                totalWork += -g.fi1.dot(dt * g.v1);
+            }
         });
     }
 };
@@ -2027,6 +2069,48 @@ public:
         file << "\n";
 
         return J_I;
+    }
+};
+
+/* Compute system energies by iterating over particles (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs, Time) */
+/*                                                     (   0,         1,        2,        3,        4,         5,          6,        7 ) */
+template <class T, int dim>
+class ComputeSystemEnergyOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<Vector<T, dim>>& m_V;
+    std::vector<T>& m_mass;
+    Field<T> m_energy;
+    Field<int> m_marker;
+    T gravity;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dt;
+    T totalWork;
+
+    void operator()(Vector<T,8>& energies)
+    {
+        BOW_TIMER_FLAG("computeSystemEnergy");
+
+        //Now iterate particles and sum up energy contributions
+        grid.serial_for([&](int i) {
+            if(m_marker[i] == 0){
+                energies[0] += m_energy[i]; //solid PE
+                energies[2] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //solid KE
+                energies[4] += gravity * m_mass[i] * m_X[i][1]; //solid GPE
+            }
+            else if(m_marker[i] == 4){
+                energies[1] += m_energy[i]; //fluid PE
+                energies[3] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //fluid KE
+                energies[5] += gravity * m_mass[i] * m_X[i][1]; //fluid GPE
+            }
+        });
+
+        //Now take a snapshot of the total work at this time!
+        energies[6] = totalWork; 
+
+        return;
     }
 };
 

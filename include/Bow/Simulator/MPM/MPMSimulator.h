@@ -210,7 +210,7 @@ public:
             model->project_strain();
     }
 
-    void advance(T dt) override
+    void advance(T dt, int frame_num, T frame_dt) override
     {
         p2g(dt);
         grid_update(dt);

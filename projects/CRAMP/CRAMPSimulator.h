@@ -90,9 +90,10 @@ public:
     bool trackEnergy = false;
 
     //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
-    std::vector<Vector<T,7>> systemEnergy;
+    std::vector<Vector<T,8>> systemEnergy;
     T energyDt = 0.0;
     Field<T> m_energies; //hold particle PEs
+    T totalWork = 0.0; //track total work over time, when we compute total energy we will also take a snapshot of the current cummulative work done
     
     //Particle Data
     Field<TM> m_cauchy; //for anisoMPM
@@ -209,7 +210,7 @@ public:
         //This routine gets called once by the base class to initialize sim!
 
         Bow::Logging::info("Simulation starts with ", std::is_same<T, double>::value ? "double" : "float", " ", dim);
-
+        
         //Collect mu and lambda
         for (auto& model : Base::elasticity_models){
             m_mu = model->m_mu;
@@ -408,7 +409,7 @@ public:
     }
 
     /* Write our own advance function to override*/
-    void advance(T dt) override
+    void advance(T dt, int end_frame, T frame_dt) override
     {
 
         std::cout << "Begin advance with dt= " << dt << std::endl;
@@ -496,6 +497,7 @@ public:
 
         }
 
+        //=====J-INTEGRAL ROUTINES=====
         //Now compute all J-integral contours for the next time stamp (if it's time) (e.g. t = 0.5s, 0.7s, ...)
         if(computeJIntegral && elapsedTime >= contourTimes[contourIdx]){
 
@@ -571,20 +573,7 @@ public:
             }
         }
 
-        //Energy Tracking Routine
-        if(trackEnergy && (fmod(elapsedTime, energyDt) < dt)){
-            Vector<T,7> energy;
-            systemEnergy.push_back(energy);
-
-            for (auto& model : Base::elasticity_models){
-                model->trial_energy(m_energies); //grab particle PEs
-            }
-
-            //TODO HERE
-
-        }
-
-
+        //=====LOADING ROUTINES=====
         //If Loading this specimen:
         if(loading){
             //If we've not yet marked particles for loading, do so!
@@ -604,10 +593,47 @@ public:
             if(elapsedTime < rampTime && rampTime > 0.0){
                 scaledSigmaA *= (elapsedTime / rampTime);
             }
-            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, nodalLoading, width, y1, y2, x1, x2, Base::dx, dt, grid, m_initialVolume, ppc };
+            Bow::CRAMP::ApplyMode1LoadingOp<T, dim> mode1Loading{ {}, Base::m_X, m_marker, scaledSigmaA, nodalLoading, width, y1, y2, x1, x2, Base::dx, dt, grid, m_initialVolume, ppc, totalWork };
             mode1Loading();
 
             std::cout << "Mode 1 Loading Applied..." << std::endl;
+        }
+
+        //=====ENERGY TRACKING ROUTINES=====
+        if(trackEnergy && (fmod(elapsedTime, energyDt) < dt)){
+            
+            //Grab particle potential energies
+            for (auto& model : Base::elasticity_models){
+                model->strain_energy(m_energies);
+            }
+
+            std::cout << "Grabbed Particle Strain Energies" << std::endl;
+
+            //Compute energy components
+            Bow::CRAMP::ComputeSystemEnergyOp<T,dim> computeSystemEnergy{ {}, Base::m_X, Base::m_V, Base::m_mass, m_energies, m_marker, gravity, grid, dt, totalWork };
+            Vector<T,8> energy = Vector<T,8>::Zero();
+            computeSystemEnergy(energy);
+            energy[7] = elapsedTime; //grab time stamp as well
+            systemEnergy.push_back(energy);
+
+            std::cout << "Computed System Energy" << std::endl;
+        }
+
+        //if we've done the last energy tracking in simulation time
+        if(trackEnergy && ((elapsedTime + energyDt) > (frame_dt * (T)end_frame))){
+            std::string energyPath = outputPath + "/SystemEnergyData.txt";
+            std::ofstream file(energyPath);
+            file << "=====System Energy Data=====\n";
+            file << "Time, PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Current Total Work by BCs, Total Energy \n";
+            for(int i = 0; i < (int)systemEnergy.size(); ++i){
+                file << systemEnergy[i][7] << ", ";
+                for(int j = 0; j < 7; ++j){
+                    file << systemEnergy[i][j] << ", ";
+                }
+                file << (systemEnergy[i][0] + systemEnergy[i][1] + systemEnergy[i][2] + systemEnergy[i][3] + systemEnergy[i][4] + systemEnergy[i][5]) << "\n"; 
+            }
+            file.close();
+            trackEnergy = false;
         }
 
         //Apply Impulse (if user added one) -> apply directly for symplectic, save forces for later if implicit
@@ -884,6 +910,7 @@ public:
         m_marker.push_back(marker);
         m_useDamage.push_back(useDamage);
         m_lamMax.push_back(0.0);
+        m_energies.push_back(0.0);
     }
 
     void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)

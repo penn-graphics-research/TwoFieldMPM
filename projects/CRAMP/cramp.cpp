@@ -3007,7 +3007,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/2001_SENT_withDamageRegion_andElasticityDegradation_SingleFieldMPM_dx0.5mm");
+        MPM::CRAMPSimulator<T, dim> sim("output/2001_SENT_withDamageRegion_andElasticityDegradation_SingleFieldMPM_dx0.5mm_testTrackEnergy");
 
         //material
         T E = 2.6e6;
@@ -3070,6 +3070,9 @@ int main(int argc, char *argv[])
         
         //Add Elasticity Degradation
         sim.elasticityDegradationType = 1;
+
+        T energyDt = sim.frame_dt;
+        sim.addEnergyTracking(energyDt);
 
         sim.run(start_frame);
     }
