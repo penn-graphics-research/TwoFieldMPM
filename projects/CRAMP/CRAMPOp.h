@@ -878,24 +878,24 @@ public:
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = stress;
                         ti[1] = fi;
-                        g.fi1 += ti; //add traction to nodal force
+                        g.fi1 -= ti; //add traction to nodal force
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -1 * stress;
                         ti[1] = fi;
-                        g.fi1 += ti; //add traction to nodal force
+                        g.fi1 -= ti; //add traction to nodal force
                     }
                 }
                 else if(std::abs(xi[0] - x1) < eps || std::abs(xi[0] - x2) < eps){ //end nodes
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = 0.5 * stress;
                         ti[1] = fi;
-                        g.fi1 += ti; //add traction to nodal force
+                        g.fi1 -= ti; //add traction to nodal force
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -0.5 * stress;
                         ti[1] = fi;
-                        g.fi1 += ti; //add traction to nodal force
+                        g.fi1 -= ti; //add traction to nodal force
                     }
                 }
                 else{
@@ -2047,7 +2047,7 @@ public:
                 Matrix<T, dim, dim> Finv = F.inverse();
                 Matrix<T, dim, dim> L_p = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
 
-                integrand = m_mass[i] * (a_p.dot(F.col(0)) - m_V[i].dot(L_p.col(0))); // area integral integrand = mp * (ap dot F.col(0) - vp dot L.col(0))
+                integrand = (m_mass[i] / m_initialVolume[i]) * (a_p.dot(F.col(0)) - m_V[i].dot(L_p.col(0))); // area integral integrand = (mp/vp0) * (ap dot F.col(0) - vp dot L.col(0))
                 T contribution = integrand * m_initialVolume[i];
 
                 J_I += contribution; //sum integrand weighted by initial volume

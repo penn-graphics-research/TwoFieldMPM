@@ -32,7 +32,7 @@ public:
     virtual void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) = 0;
     virtual void trial_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) { BOW_NOT_IMPLEMENTED }
     virtual void trial_energy(Field<T>& t_energy) { BOW_NOT_IMPLEMENTED }
-    virtual void strain_energy(Field<T>& t_energy) { }
+    virtual void strain_energy(Field<T>& m_energy) { }
     virtual void trial_gradient(Field<Matrix<T, dim, dim>>& t_gradient) { BOW_NOT_IMPLEMENTED }
     virtual void trial_differential(const Field<Matrix<T, dim, dim>>& d_F, Field<Matrix<T, dim, dim>>& t_differential, bool project_pd) { BOW_NOT_IMPLEMENTED }
     virtual void trial_hessian(Field<Matrix<T, dim * dim, dim * dim>>& t_hessian, bool project_pd) { BOW_NOT_IMPLEMENTED }
@@ -107,11 +107,11 @@ public:
         });
     }
 
-    void strain_energy(Field<T>& t_energy) override
+    void strain_energy(Field<T>& m_energy) override
     {
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             T energy = m_vol[i] * psi(m_F[i], m_mu[i], m_lambda[i]);
-            t_energy[m_global_index[i]] += energy;
+            m_energy[m_global_index[i]] = energy;
         });
     }
 
@@ -333,11 +333,11 @@ public:
         });
     }
 
-    void strain_energy(Field<T>& t_energy) override
+    void strain_energy(Field<T>& m_energy) override
     {
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T energy = m_vol[i] * psi(m_J[i], bulk, gamma);
-            t_energy[m_global_index[i]] += energy;
+            m_energy[m_global_index[i]] = energy;
         });
     }
 
@@ -469,11 +469,11 @@ public:
     //     });
     // }
 
-    void strain_energy(Field<T>& t_energy) override  //TODO: eventually this needs to include the energy from the viscous term too!
+    void strain_energy(Field<T>& m_energy) override  //TODO: eventually this needs to include the energy from the viscous term too!
     {
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T energy = m_vol[i] * psi(m_J[i], bulk, gamma);
-            t_energy[m_global_index[i]] += energy;
+            m_energy[m_global_index[i]] = energy;
         });
     }
 
