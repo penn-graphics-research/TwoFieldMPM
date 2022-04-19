@@ -29,6 +29,7 @@ class ParticlesToGridOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
+    Field<Vector<T, dim>>& m_Xinitial;
     Field<Vector<T, dim>>& m_V;
     std::vector<T>& m_mass;
     Field<Matrix<T, dim, dim>>& m_C;
@@ -51,6 +52,8 @@ public:
     Field<T> m_currentVolume;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
     Field<int>& m_marker;
+
+    bool computeJIntegral;
 
     void operator()()
     {
@@ -105,6 +108,11 @@ public:
                         //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
                         g.fi1 += tmp_force * dw;
 
+                        //Transfer displacement if we are computing the Jintegral
+                        if(computeJIntegral){
+                            g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                        }
+
                         //Transfer volume so we can add our Mode 1 loading
                         //g.gridViYi1 += vol * w;
                     }
@@ -128,6 +136,11 @@ public:
 
                                 //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
                                 g.fi1 += tmp_force * dw;
+
+                                //Transfer displacement if we are computing the Jintegral
+                                if(computeJIntegral){
+                                    g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                                }
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
                                 g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
@@ -144,6 +157,11 @@ public:
 
                                 //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
                                 g.fi2 += tmp_force * dw;
+
+                                //Transfer displacement if we are computing the Jintegral
+                                if(computeJIntegral){
+                                    g.u2 += (m_Xinitial[i] - pos) * mass * w;
+                                }
                             }
                         }
                         else{ //regular two field transfer from DFG
@@ -161,6 +179,11 @@ public:
 
                                 //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
                                 g.fi1 += tmp_force * dw;
+
+                                //Transfer displacement if we are computing the Jintegral
+                                if(computeJIntegral){
+                                    g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                                }
                             }
                             else if (fieldIdx == 1) {
                                 if (useAPIC) {
@@ -175,6 +198,11 @@ public:
 
                                 //Transfer particle stresses to compute nodal force (for computing Work done by Traction BCs)
                                 g.fi2 += tmp_force * dw;
+
+                                //Transfer displacement if we are computing the Jintegral
+                                if(computeJIntegral){
+                                    g.u2 += (m_Xinitial[i] - pos) * mass * w;
+                                }
                             }
                         }
                         
@@ -195,6 +223,11 @@ public:
             Vector<T, dim> alpha1;
             alpha1 = Vector<T, dim>::Ones() * ((T)1 / mass1);
             g.v1 = g.v1.cwiseProduct(alpha1);
+
+            if(computeJIntegral){
+                g.u1.cwiseProduct(alpha1); //divide out m_i
+            }
+
             g.v1 += gravity_term;
             g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
             g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
@@ -204,6 +237,11 @@ public:
                 Vector<T, dim> alpha2;
                 alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
                 g.v2 = g.v2.cwiseProduct(alpha2);
+
+                if(computeJIntegral){
+                    g.u2.cwiseProduct(alpha2); //divide out m_i
+                }
+
                 g.v2 += gravity_term;
                 g.vn2 = g.vn2.cwiseProduct(alpha2); //this is how we get v2^n
                 g.fi2 += mass2 * (gravity_term / dt); //add gravity term to nodal force, field 2
@@ -1995,6 +2033,80 @@ public:
     }
 };
 
+/* Compute nodal deformation gradients, Fi, using nodal displacements and B-spline interpolation */
+template <class T, int dim>
+class ConstructNodalDeformationGradientsOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+    T dx;
+    T rp;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("computeFiUsingNodalDisplacements");
+
+        //Now iterate over all active grid nodes so we can compute their deformation gradients!
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            Vector<T, dim> pos_i = node.template cast<T>() * dx; //compute current nodal position to center our B-Spline on
+            T Ux = 0.0; //x-displacement field
+            T Uy = 0.0; //y-displacement field
+            T S = 0.0;
+            Vector<T, dim> nablaUx = Vector<T, dim>::Zero();
+            Vector<T, dim> nablaUy = Vector<T, dim>::Zero();
+            Vector<T, dim> nablaS = Vector<T, dim>::Zero();
+            
+            //Now construct displacement fields for x and y dimensions (using B-spline interpolation we used for damage gradients)
+            BSplineWeights<T, dim> spline(pos_i, dx);
+            grid.iterateNeighbors(spline, [&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
+                //Now iterate the neighboring grid nodes to our current node
+                Vector<T, dim> pos_j = node2.template cast<T>() * dx;
+                T dist = (pos_i - pos_j).norm();
+                T rBar = dist / rp;
+                Vector<T, dim> rBarGrad = (pos_i - pos_j) * (1.0 / (rp * dist));
+
+                T omega = 1 - (3 * rBar * rBar) + (2 * rBar * rBar * rBar);
+                T omegaPrime = 6 * ((rBar * rBar) - rBar);
+                if (rBar < 0.0 || rBar > 1.0) {
+                    omega = 0.0;
+                    omegaPrime = 0.0;
+                }
+
+                T u_x = g2.u1[0];
+                T u_y = g2.u1[1];
+
+                Ux += u_x * omega;
+                Uy += u_y * omega;
+                S += omega;
+
+                nablaUx += (u_x * omegaPrime * rBarGrad);
+                nablaUy += (u_y * omegaPrime * rBarGrad);
+                nablaS += (omegaPrime * rBarGrad);
+            });
+
+            //Now construct the displacement gradient
+            Vector<T, dim> nablaUxBar;
+            Vector<T, dim> nablaUyBar;
+            if(S == 0){
+                nablaUxBar = Vector<T, dim>::Zero();
+                nablaUyBar = Vector<T, dim>::Zero();
+            }
+            else{
+                nablaUxBar = (nablaUx * S - Ux * nablaS) / (S * S);
+                nablaUyBar = (nablaUy * S - Uy * nablaS) / (S * S);
+            }
+            Matrix<T, dim, dim> displacementGradient;
+            displacementGradient.col(0) = nablaUxBar.transpose();
+            displacementGradient.col(1) = nablaUyBar.transpose();
+
+            //Finally, compute def grad!
+            g.Fi1 = displacementGradient + Matrix<T,dim,dim>::Identity();
+        });
+
+        return;
+    }
+};
 
 /* Compute the Dynamic J-Integral's area integral term by integrating over all particles enclosed in a rectangular path of grid nodes centered on the closest node to the crack tip */
 template <class T, int dim>

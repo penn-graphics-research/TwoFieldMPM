@@ -33,6 +33,8 @@ public:
     Vector<T, dim> fct1, fct2; //contact force
     Vector<T, dim> fi1, fi2; //impulse force
 
+    Vector<T, dim> u1, u2; //displacement 
+
     //To get grid def grad, F_i, transfer singular values and quaternion coefficients for U and V rotations from SVD!
     // Vector<T, dim> sigma1, sigma2;
     // Vector<T, 4> Uquat1, Uquat2;
@@ -52,7 +54,7 @@ public:
     Vector<T, 4> gridSeparability; //each grid node has a seperability condition for each field and we need to add up the numerator and denominator
     Vector<T, 2> gridMaxDamage; //store max damage from each field mapping to this node
     int separable; //0 = single field, 1 = two field
-
+    
     //Barrier Functions (Implicit Only)
     T gridViYi1, gridViYi2, gridCi;
 
@@ -62,12 +64,10 @@ public:
     //PADDING to ensure GridState is power of 2
     //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
     
-    //AFTER ADDING cauchy and Fi 10/5/21
-    //Float2D: 384 B -> add 128 B -> 32 Ts
-    //Float3D: 528 B -> add 496 B -> 124 Ts
-    //Double2D: 768 B -> add 256 B -> 32 Ts
-    //Double3D: 1056 B -> add 992 B -> 124 Ts
-    Vector<T, (-32 * dim) + 116> padding; //dim2 = 52 Ts, dim3 = 20 Ts --> y = -32x + 116
+    //AFTER adding displacement 4/19/22
+    //Double2D: 640 B -> add 384 B -> 48 Ts
+    //Double3D: 896 B -> add 160 B -> 16 Ts
+    Vector<T, (-32 * dim) + 112> padding; //dim2 = 48 Ts, dim3 = 16 Ts --> y = -32x + 112
 
     GridState()
     {
@@ -85,6 +85,8 @@ public:
         fct2 = Vector<T, dim>::Zero();
         fi1 = Vector<T, dim>::Zero();
         fi2 = Vector<T, dim>::Zero();
+        u1 = Vector<T,dim>::Zero();
+        u2 = Vector<T,dim>::Zero();
         // sigma1 = Vector<T, dim>::Zero();
         // sigma2 = Vector<T, dim>::Zero();
         // Uquat1 = Vector<T, 4>::Zero();
@@ -281,6 +283,8 @@ public:
                     g[k].fct2 = Vector<T, dim>::Zero();
                     g[k].fi1 = Vector<T, dim>::Zero();
                     g[k].fi2 = Vector<T, dim>::Zero();
+                    g[k].u1 = Vector<T, dim>::Zero();
+                    g[k].u2 = Vector<T, dim>::Zero();
                     // g[k].sigma1 = Vector<T, dim>::Zero();
                     // g[k].sigma2 = Vector<T, dim>::Zero();
                     // g[k].Uquat1 = Vector<T, 4>::Zero();
@@ -312,7 +316,7 @@ public:
 
                     //Neighbor Search
                     g[k].mappedParticles.clear();
-                    g[k].padding = Vector<T, (-32 * dim) + 116>::Zero();
+                    g[k].padding = Vector<T, (-32 * dim) + 112>::Zero();
                 }
             }
         }
@@ -610,7 +614,7 @@ public:
     template <typename OP>
     inline void iterateNeighbors(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
     {
-        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data()));
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.closest_node.data())); //Changed from base_node -> closest_node 4/19/22, this seems important though!!!
         uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
         auto grid_array = grid->Get_Array();
         const Vector<int, dim>& base_coord = spline.base_node;

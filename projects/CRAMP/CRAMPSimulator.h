@@ -54,6 +54,7 @@ public:
     T x1, x2;
 
     //Additional Particle Data
+    Field<TV> m_Xinitial;
     Field<T> m_currentVolume;
     Field<T> m_initialVolume;
     Field<T> m_mu, m_la;
@@ -110,6 +111,7 @@ public:
     //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
     bool computeJIntegral = false;
+    bool useDisplacement = false; //set this to determine whether we compute J-Integral based on nodal displacement gradients (true) OR based on smoothed tensor field transfer (false)
     Field<T> m_sigmaYY; //used for stress ahead of crack tip
     Field<T> m_r;
     Field<T> m_posX;
@@ -210,6 +212,11 @@ public:
         //This routine gets called once by the base class to initialize sim!
 
         Bow::Logging::info("Simulation starts with ", std::is_same<T, double>::value ? "double" : "float", " ", dim);
+        
+        //If computing J-Integral, grab initial particle positions
+        if(computeJIntegral){
+            m_Xinitial = Base::m_X;
+        }
         
         //Collect mu and lambda
         for (auto& model : Base::elasticity_models){
@@ -353,7 +360,7 @@ public:
             }
         }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral };
         P2G();
     }
 
@@ -478,6 +485,14 @@ public:
             std::cout << "Tensor P2G Done (Unscaled)..." << std::endl;
         }
         
+        //Now, we can intercept the flow here to construct grid deformation gradients using nodal displacement gradients (transferred in P2G)
+        if(computeJIntegral && useDisplacement){
+            T rpDisplacement = Base::dx * 1.5; //captures corner neighbors which are 1.4*dx away
+            Bow::CRAMP::ConstructNodalDeformationGradientsOp<T, dim>constructFi{ {}, grid, Base::dx, rpDisplacement };
+            constructFi();
+            std::cout << "Constructed Fi using nodal displacements..." << std::endl;
+        }
+
         if((int)m_F.size() > 0){
             Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker };
             tensorG2P();
@@ -819,9 +834,10 @@ public:
         contourTypes.push_back(_containsCrackTip);
     }
     //Add times for these contours to be integrated over, ONLY CALL THIS ONCE WITH FULL LIST OF TIMES!
-    void addJIntegralTiming(std::vector<T>& _times){
+    void addJIntegralTiming(std::vector<T>& _times, bool _useDisplacement = false){
         BOW_ASSERT_INFO(!computeJIntegral, "ERROR: Only call addJIntegralTimes once");
         computeJIntegral = true;
+        useDisplacement = _useDisplacement;
         contourTimes = _times;
         contourIdx = 0;
     }
