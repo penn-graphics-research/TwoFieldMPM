@@ -878,24 +878,24 @@ public:
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = stress;
                         ti[1] = fi;
-                        g.fi1 -= ti; //add traction to nodal force
+                        //g.fi1 -= ti; //add traction to nodal force //ti = potential energy force, don't need to add it again!
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -1 * stress;
                         ti[1] = fi;
-                        g.fi1 -= ti; //add traction to nodal force
+                        //g.fi1 -= ti; //add traction to nodal force
                     }
                 }
                 else if(std::abs(xi[0] - x1) < eps || std::abs(xi[0] - x2) < eps){ //end nodes
                     if(std::abs(xi[1] - y1) < eps){ //top pulls up
                         fi = 0.5 * stress;
                         ti[1] = fi;
-                        g.fi1 -= ti; //add traction to nodal force
+                        //g.fi1 -= ti; //add traction to nodal force
                     }
                     else if(std::abs(xi[1] - y2) < eps){ //bottom pulls down
                         fi = -0.5 * stress;
                         ti[1] = fi;
-                        g.fi1 -= ti; //add traction to nodal force
+                        //g.fi1 -= ti; //add traction to nodal force
                     }
                 }
                 else{

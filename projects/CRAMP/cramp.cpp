@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_EnergyTracking");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_EnergyTracking");
 
         //material
         T E = 2.6e6;
@@ -167,13 +167,13 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 150;
+        sim.end_frame = 200;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
         //Interpolation Scheme
-        sim.useAPIC = false;
+        sim.useAPIC = true;
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
@@ -262,7 +262,22 @@ int main(int argc, char *argv[])
 
         //Add Contours
         
-        //contain crack tip
+        //DX = 0.5mm
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,5,15), true); //centered on crack tip
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,10,15), true); 
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,15,15), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,20,15), true); //centered on crack tip
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,25,15), true); 
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,15,30,15), true);  
+
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,5,25), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,10,25), true); 
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,15,25), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,20,25), true);
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,25,25), true); 
+        // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,30,25), true); 
+
+        //DX = 0.1mm
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,25,75), true); //centered on crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,50,75), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,75,75), true);
@@ -302,7 +317,17 @@ int main(int argc, char *argv[])
         contourTimes.push_back(sim.frame_dt * 135);
         contourTimes.push_back(sim.frame_dt * 140);
         contourTimes.push_back(sim.frame_dt * 145);
-        contourTimes.push_back(sim.frame_dt * 149);
+        contourTimes.push_back(sim.frame_dt * 150);
+        contourTimes.push_back(sim.frame_dt * 155);
+        contourTimes.push_back(sim.frame_dt * 160);
+        contourTimes.push_back(sim.frame_dt * 165);
+        contourTimes.push_back(sim.frame_dt * 170);
+        contourTimes.push_back(sim.frame_dt * 175);
+        contourTimes.push_back(sim.frame_dt * 180);
+        contourTimes.push_back(sim.frame_dt * 185);
+        contourTimes.push_back(sim.frame_dt * 190);
+        contourTimes.push_back(sim.frame_dt * 195);
+        contourTimes.push_back(sim.frame_dt * 199);
         sim.addJIntegralTiming(contourTimes);
 
         sim.run(start_frame);
