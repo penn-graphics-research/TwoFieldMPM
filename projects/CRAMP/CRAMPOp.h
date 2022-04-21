@@ -2048,7 +2048,7 @@ public:
         BOW_TIMER_FLAG("computeFiUsingNodalDisplacements");
 
         //Now iterate over all active grid nodes so we can compute their deformation gradients!
-        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+        grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             Vector<T, dim> pos_i = node.template cast<T>() * dx; //compute current nodal position to center our B-Spline on
             T Ux = 0.0; //x-displacement field
             T Uy = 0.0; //y-displacement field
@@ -2063,27 +2063,34 @@ public:
                 //Now iterate the neighboring grid nodes to our current node
                 Vector<T, dim> pos_j = node2.template cast<T>() * dx;
                 T dist = (pos_i - pos_j).norm();
-                T rBar = dist / rp;
-                Vector<T, dim> rBarGrad = (pos_i - pos_j) * (1.0 / (rp * dist));
+                if(dist > 0){ //exclude the dist = 0 case
+                    T rBar = dist / rp;
+                    Vector<T, dim> rBarGrad = (pos_i - pos_j) * (1.0 / (rp * dist));
 
-                T omega = 1 - (3 * rBar * rBar) + (2 * rBar * rBar * rBar);
-                T omegaPrime = 6 * ((rBar * rBar) - rBar);
-                if (rBar < 0.0 || rBar > 1.0) {
-                    omega = 0.0;
-                    omegaPrime = 0.0;
+                    T omega = 1 - (3 * rBar * rBar) + (2 * rBar * rBar * rBar);
+                    T omegaPrime = 6 * ((rBar * rBar) - rBar);
+                    if (rBar <= 0.0 || rBar > 1.0) {
+                        omega = 0.0;
+                        omegaPrime = 0.0;
+                    }
+
+                    T u_x = g2.u1[0];
+                    T u_y = g2.u1[1];
+
+                    Ux += u_x * omega;
+                    Uy += u_y * omega;
+                    S += omega;
+
+                    nablaUx += (u_x * omegaPrime * rBarGrad);
+                    nablaUy += (u_y * omegaPrime * rBarGrad);
+                    nablaS += (omegaPrime * rBarGrad);
+
+                    //std::cout << "rBar: " << rBar << " rBarGrad: " << rBarGrad << " omegaPrime: " << omegaPrime << std::endl;
                 }
-
-                T u_x = g2.u1[0];
-                T u_y = g2.u1[1];
-
-                Ux += u_x * omega;
-                Uy += u_y * omega;
-                S += omega;
-
-                nablaUx += (u_x * omegaPrime * rBarGrad);
-                nablaUy += (u_y * omegaPrime * rBarGrad);
-                nablaS += (omegaPrime * rBarGrad);
             });
+
+            //std::cout << "Ux: " << Ux << " Uy: " << Uy << " nablaUx: " << nablaUx << " nablaUy: " << nablaUy << std::endl;
+            //std::cout << "S: " << S << " nablaS: " << nablaS << std::endl;
 
             //Now construct the displacement gradient
             Vector<T, dim> nablaUxBar;

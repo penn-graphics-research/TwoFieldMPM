@@ -213,11 +213,6 @@ public:
 
         Bow::Logging::info("Simulation starts with ", std::is_same<T, double>::value ? "double" : "float", " ", dim);
         
-        //If computing J-Integral, grab initial particle positions
-        if(computeJIntegral){
-            m_Xinitial = Base::m_X;
-        }
-        
         //Collect mu and lambda
         for (auto& model : Base::elasticity_models){
             m_mu = model->m_mu;
@@ -911,6 +906,7 @@ public:
 
     void addParticle(TV X, TV V, T mass, T damage, int surface, int marker, bool useDamage){
         Base::m_X.push_back(X);
+        m_Xinitial.push_back(X); //save initial positions
         Base::m_V.push_back(V);
         Base::m_C.push_back(TM::Zero());
         Base::m_mass.push_back(mass);

@@ -614,7 +614,7 @@ public:
     template <typename OP>
     inline void iterateNeighbors(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
     {
-        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.closest_node.data())); //Changed from base_node -> closest_node 4/19/22, this seems important though!!!
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data())); //Changed from base_node -> closest_node 4/19/22, this seemed important but actually made the separable nodes less symmetric?
         uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
         auto grid_array = grid->Get_Array();
         const Vector<int, dim>& base_coord = spline.base_node;
