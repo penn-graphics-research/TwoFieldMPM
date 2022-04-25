@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_usingDisplacement");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_usingDisplacementFix_closestNode");
 
         //material
         T E = 2.6e6;
@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
         bool useDisplacement = true;
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 200;
+        sim.end_frame = 150;
         //sim.frame_dt = 22e-6 / sim.end_frame; //total time = 22e-6 s, want 1000 frames of this
         sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
@@ -287,13 +287,15 @@ int main(int argc, char *argv[])
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,75,75), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,100,75), true); //centered on crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,125,75), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,145,75), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,150,75), true);  
 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,25,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,50,125), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,75,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,100,125), true);
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,125,125), true); 
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,125,125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,145,125), true);  
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,150,125), true); 
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
@@ -321,17 +323,18 @@ int main(int argc, char *argv[])
         contourTimes.push_back(sim.frame_dt * 135);
         contourTimes.push_back(sim.frame_dt * 140);
         contourTimes.push_back(sim.frame_dt * 145);
-        contourTimes.push_back(sim.frame_dt * 150);
-        contourTimes.push_back(sim.frame_dt * 155);
-        contourTimes.push_back(sim.frame_dt * 160);
-        contourTimes.push_back(sim.frame_dt * 165);
-        contourTimes.push_back(sim.frame_dt * 170);
-        contourTimes.push_back(sim.frame_dt * 175);
-        contourTimes.push_back(sim.frame_dt * 180);
-        contourTimes.push_back(sim.frame_dt * 185);
-        contourTimes.push_back(sim.frame_dt * 190);
-        contourTimes.push_back(sim.frame_dt * 195);
-        contourTimes.push_back(sim.frame_dt * 199);
+        contourTimes.push_back(sim.frame_dt * 149);
+        // contourTimes.push_back(sim.frame_dt * 150);
+        // contourTimes.push_back(sim.frame_dt * 155);
+        // contourTimes.push_back(sim.frame_dt * 160);
+        // contourTimes.push_back(sim.frame_dt * 165);
+        // contourTimes.push_back(sim.frame_dt * 170);
+        // contourTimes.push_back(sim.frame_dt * 175);
+        // contourTimes.push_back(sim.frame_dt * 180);
+        // contourTimes.push_back(sim.frame_dt * 185);
+        // contourTimes.push_back(sim.frame_dt * 190);
+        // contourTimes.push_back(sim.frame_dt * 195);
+        // contourTimes.push_back(sim.frame_dt * 199);
         sim.addJIntegralTiming(contourTimes, useDisplacement);
 
         sim.run(start_frame);
@@ -424,7 +427,7 @@ int main(int argc, char *argv[])
     if (testcase == 203) {
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/hangingCube2D_CRAMP");
+        MPM::CRAMPSimulator<T, dim> sim("output/hangingCube2D_CRAMP_closestNode");
 
         //Params
         sim.dx = 0.01;
@@ -459,8 +462,12 @@ int main(int argc, char *argv[])
 
         // Using `new` to avoid redundant copy constructor
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
-        sim.samplePrecutRandomCube(material1, Vector<T, dim>(0.4, 0.4), Vector<T, dim>(0.6, 0.6), Vector<T, dim>(0, 0), rho);
+        sim.samplePrecutRandomCube(material1, Vector<T, dim>(0.4, 0.4), Vector<T, dim>(0.6, 0.6), Vector<T, dim>(0, 0), rho, true);
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0.59), Vector<T, dim>(0, -1)));
+
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
         sim.run(start_frame);
     }
 
@@ -3121,7 +3128,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/2002_SENT_withDamageRegion_andElasticityDegradation_TwoFieldMPM_dx0.5mm_iterateNeighborFix");
+        MPM::CRAMPSimulator<T, dim> sim("output/2002_SENT_withDamageRegion_andElasticityDegradation_TwoFieldMPM_dx0.5mm_baseNode");
 
         //material
         T E = 2.6e6;

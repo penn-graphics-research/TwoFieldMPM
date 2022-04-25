@@ -110,7 +110,7 @@ public:
 
                         //Transfer displacement if we are computing the Jintegral
                         if(computeJIntegral){
-                            g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                            g.u1 += (pos - m_Xinitial[i]) * mass * w;
                         }
 
                         //Transfer volume so we can add our Mode 1 loading
@@ -139,7 +139,7 @@ public:
 
                                 //Transfer displacement if we are computing the Jintegral
                                 if(computeJIntegral){
-                                    g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                                    g.u1 += (pos - m_Xinitial[i]) * mass * w;
                                 }
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
@@ -160,7 +160,7 @@ public:
 
                                 //Transfer displacement if we are computing the Jintegral
                                 if(computeJIntegral){
-                                    g.u2 += (m_Xinitial[i] - pos) * mass * w;
+                                    g.u2 += (pos - m_Xinitial[i]) * mass * w;
                                 }
                             }
                         }
@@ -182,7 +182,7 @@ public:
 
                                 //Transfer displacement if we are computing the Jintegral
                                 if(computeJIntegral){
-                                    g.u1 += (m_Xinitial[i] - pos) * mass * w;
+                                    g.u1 += (pos - m_Xinitial[i]) * mass * w;
                                 }
                             }
                             else if (fieldIdx == 1) {
@@ -201,7 +201,7 @@ public:
 
                                 //Transfer displacement if we are computing the Jintegral
                                 if(computeJIntegral){
-                                    g.u2 += (m_Xinitial[i] - pos) * mass * w;
+                                    g.u2 += (pos - m_Xinitial[i]) * mass * w;
                                 }
                             }
                         }
@@ -2059,7 +2059,7 @@ public:
             
             //Now construct displacement fields for x and y dimensions (using B-spline interpolation we used for damage gradients)
             BSplineWeights<T, dim> spline(pos_i, dx);
-            grid.iterateNeighbors(spline, [&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
+            grid.iterateNeighbors_ClosestNode(spline, [&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
                 //Now iterate the neighboring grid nodes to our current node
                 Vector<T, dim> pos_j = node2.template cast<T>() * dx;
                 T dist = (pos_i - pos_j).norm();

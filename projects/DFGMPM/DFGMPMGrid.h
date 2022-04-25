@@ -612,12 +612,47 @@ public:
     }
 
     template <typename OP>
-    inline void iterateNeighbors(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
+    inline void iterateNeighbors_BaseNode(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
     {
-        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data())); //Changed from base_node -> closest_node 4/19/22, this seemed important but actually made the separable nodes less symmetric?
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data())); //this is outdated now, for both use cases we want to use closest node, not base node
         uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
         auto grid_array = grid->Get_Array();
         const Vector<int, dim>& base_coord = spline.base_node;
+        Vector<int, dim> coord;
+        if constexpr (dim == 2) {
+            for (int i = -1; i < 2; ++i) {
+                coord[0] = base_coord[0] + i;
+                for (int j = -1; j < 2; ++j) {
+                    coord[1] = base_coord[1] + j;
+                    auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j));
+                    GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
+                    target(coord, g);
+                }
+            }
+        }
+        else {
+            for (int i = -1; i < 2; ++i) {
+                coord[0] = base_coord[0] + i;
+                for (int j = -1; j < 2; ++j) {
+                    coord[1] = base_coord[1] + j;
+                    for (int k = -1; k < 2; ++k) {
+                        coord[2] = base_coord[2] + k;
+                        auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j, k));
+                        GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
+                        target(coord, g);
+                    }
+                }
+            }
+        }
+    }
+
+    template <typename OP>
+    inline void iterateNeighbors_ClosestNode(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
+    {
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.closest_node.data())); //Changed from base_node -> closest_node 4/19/22, confirmed as correct 4/23/22
+        uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
+        auto grid_array = grid->Get_Array();
+        const Vector<int, dim>& base_coord = spline.closest_node;
         Vector<int, dim> coord;
         if constexpr (dim == 2) {
             for (int i = -1; i < 2; ++i) {
