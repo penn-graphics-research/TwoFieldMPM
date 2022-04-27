@@ -1271,7 +1271,7 @@ public:
 
     T operator()(Vector<T,dim> center, Vector<int,4> contour, bool containsCrackTip, std::ofstream& file)
     {
-        BOW_TIMER_FLAG("computeJIntegral");
+        BOW_TIMER_FLAG("computeJIntegralLineTerm");
 
         T J_I = 0; //set J integral mode I to 0 for now
         T J_II = 0; //set J integral mode II to 0 for now
