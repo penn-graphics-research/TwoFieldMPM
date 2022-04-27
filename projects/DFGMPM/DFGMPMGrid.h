@@ -647,7 +647,7 @@ public:
     }
 
     template <typename OP>
-    inline void iterateNeighbors_ClosestNode(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
+    inline void iterateNeighbors_ClosestNode(const BSplineWeights<T, dim, interpolation_degree>& spline, int radius, const OP& target)
     {
         uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.closest_node.data())); //Changed from base_node -> closest_node 4/19/22, confirmed as correct 4/23/22
         uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
@@ -655,9 +655,9 @@ public:
         const Vector<int, dim>& base_coord = spline.closest_node;
         Vector<int, dim> coord;
         if constexpr (dim == 2) {
-            for (int i = -1; i < 2; ++i) {
+            for (int i = -radius; i < (radius + 1); ++i) {
                 coord[0] = base_coord[0] + i;
-                for (int j = -1; j < 2; ++j) {
+                for (int j = -radius; j < (radius + 1); ++j) {
                     coord[1] = base_coord[1] + j;
                     auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j));
                     GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
@@ -666,11 +666,11 @@ public:
             }
         }
         else {
-            for (int i = -1; i < 2; ++i) {
+            for (int i = -radius; i < (radius + 1); ++i) {
                 coord[0] = base_coord[0] + i;
-                for (int j = -1; j < 2; ++j) {
+                for (int j = -radius; j < (radius + 1); ++j) {
                     coord[1] = base_coord[1] + j;
-                    for (int k = -1; k < 2; ++k) {
+                    for (int k = -radius; k < (radius + 1); ++k) {
                         coord[2] = base_coord[2] + k;
                         auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j, k));
                         GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));

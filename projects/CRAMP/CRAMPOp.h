@@ -2042,6 +2042,7 @@ public:
     DFGMPM::DFGMPMGrid<T, dim>& grid;
     T dx;
     T rp;
+    int neighborRadius;
 
     void operator()()
     {
@@ -2059,7 +2060,7 @@ public:
             
             //Now construct displacement fields for x and y dimensions (using B-spline interpolation we used for damage gradients)
             BSplineWeights<T, dim> spline(pos_i, dx);
-            grid.iterateNeighbors_ClosestNode(spline, [&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
+            grid.iterateNeighbors_ClosestNode(spline, neighborRadius, [&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
                 //Now iterate the neighboring grid nodes to our current node
                 Vector<T, dim> pos_j = node2.template cast<T>() * dx;
                 T dist = (pos_i - pos_j).norm();

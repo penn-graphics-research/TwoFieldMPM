@@ -82,7 +82,7 @@ public:
                 const Vector<T, dim> pos_i = m_X[p_i];
                 BSplineWeights<T, dim> spline(pos_i, rp);
                 particleNeighbors[p_i].clear(); //empty neighbor list for this particle before we fill it up
-                grid.iterateNeighbors_ClosestNode(spline, [&](const Vector<int, dim>& node, GridState<T, dim>& g) {
+                grid.iterateNeighbors_ClosestNode(spline, 1, [&](const Vector<int, dim>& node, GridState<T, dim>& g) { //note we pass radius = 1 for this operation
                     //Iterate through all particles mapped to this node to see if they neighbor the current particle
                     for (size_t j = 0; j < g.mappedParticles.size(); ++j) {
                         int p_j = g.mappedParticles[j];

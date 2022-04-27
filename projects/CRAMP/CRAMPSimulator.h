@@ -482,10 +482,12 @@ public:
         
         //Now, we can intercept the flow here to construct grid deformation gradients using nodal displacement gradients (transferred in P2G)
         if(computeJIntegral && useDisplacement){
-            T rpDisplacement = Base::dx * 1.5; //captures corner neighbors which are 1.4*dx away
-            Bow::CRAMP::ConstructNodalDeformationGradientsOp<T, dim>constructFi{ {}, grid, Base::dx, rpDisplacement };
+            T rpFactor = 3.0;
+            int neighborRadius = 2;
+            T rpDisplacement = Base::dx * rpFactor; //captures corner neighbors which are 1.4*dx away
+            Bow::CRAMP::ConstructNodalDeformationGradientsOp<T, dim>constructFi{ {}, grid, Base::dx, rpDisplacement, neighborRadius };
             constructFi();
-            std::cout << "Constructed Fi using nodal displacements..." << std::endl;
+            std::cout << "Constructed Fi using nodal displacements with neighborRadius " << neighborRadius << ", and rpFactor " << rpFactor << "..." << std::endl;
         }
 
         if((int)m_F.size() > 0){
