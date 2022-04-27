@@ -2154,25 +2154,27 @@ public:
 
         //Now iterate over all particles enclosed in the contour and sum up their contributions to the area integral
         grid.serial_for([&](int i) {
-            const Vector<T, dim> pos = m_X[i];
-            T integrand = 0;
-            if(pos[0] > left && pos[0] < right && pos[1] > down && pos[1] < up){ //only process particles inside contour
-                integrand = 0;
-                
-                Vector<T,dim> a_p = (m_V[i] - m_Vprevious[i]) / dt; // particle acceleration
-                
-                Matrix<T, dim, dim> F = m_F[i];
-                Matrix<T, dim, dim> Fdot = (F - m_Fprevious[i]) / dt;
-                Matrix<T, dim, dim> Finv = F.inverse();
-                Matrix<T, dim, dim> L_p = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ 
+                const Vector<T, dim> pos = m_X[i];
+                T integrand = 0;
+                if(pos[0] > left && pos[0] < right && pos[1] > down && pos[1] < up){ //only process particles inside contour
+                    integrand = 0;
+                    
+                    Vector<T,dim> a_p = (m_V[i] - m_Vprevious[i]) / dt; // particle acceleration
+                    
+                    Matrix<T, dim, dim> F = m_F[i];
+                    Matrix<T, dim, dim> Fdot = (F - m_Fprevious[i]) / dt;
+                    Matrix<T, dim, dim> Finv = F.inverse();
+                    Matrix<T, dim, dim> L_p = Fdot * Finv; //velocity gradient, nabla v = L = Fdot * Finv
 
-                integrand = (m_mass[i] / m_initialVolume[i]) * (a_p.dot(F.col(0)) - m_V[i].dot(L_p.col(0))); // area integral integrand = (mp/vp0) * (ap dot F.col(0) - vp dot L.col(0))
-                T contribution = integrand * m_initialVolume[i];
+                    integrand = (m_mass[i] / m_initialVolume[i]) * (a_p.dot(F.col(0)) - m_V[i].dot(L_p.col(0))); // area integral integrand = (mp/vp0) * (ap dot F.col(0) - vp dot L.col(0))
+                    T contribution = integrand * m_initialVolume[i];
 
-                J_I += contribution; //sum integrand weighted by initial volume
+                    J_I += contribution; //sum integrand weighted by initial volume
 
-                particleIndeces.push_back(i);
-                contributions.push_back(contribution);
+                    particleIndeces.push_back(i);
+                    contributions.push_back(contribution);
+                }
             }
         });
 
@@ -2214,15 +2216,17 @@ public:
 
         //Now iterate particles and sum up energy contributions
         grid.serial_for([&](int i) {
-            if(m_marker[i] == 0){
-                energies[0] += m_energy[i]; //solid PE
-                energies[2] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //solid KE
-                energies[4] += gravity * m_mass[i] * m_X[i][1]; //solid GPE
-            }
-            else if(m_marker[i] == 4){
-                energies[1] += m_energy[i]; //fluid PE
-                energies[3] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //fluid KE
-                energies[5] += gravity * m_mass[i] * m_X[i][1]; //fluid GPE
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ 
+                if(m_marker[i] == 0){
+                    energies[0] += m_energy[i]; //solid PE
+                    energies[2] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //solid KE
+                    energies[4] += gravity * m_mass[i] * m_X[i][1]; //solid GPE
+                }
+                else if(m_marker[i] == 4){
+                    energies[1] += m_energy[i]; //fluid PE
+                    energies[3] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //fluid KE
+                    energies[5] += gravity * m_mass[i] * m_X[i][1]; //fluid GPE
+                }
             }
         });
 

@@ -1502,6 +1502,18 @@ public:
         }
     }
 
+    void addRectangularDamageRegion(const TV& minPoint, const TV& maxPoint)
+    {
+        //Now we need to mark particles in this region as fully damaged
+        for(int i = 0; i < (int)Base::m_X.size(); i++){ //iter normal material particles
+            TV p = Base::m_X[i];
+            
+            if(p[0] >= minPoint[0] && p[0] <= maxPoint[0] && p[1] >= minPoint[1] && p[1] <= maxPoint[1]){
+                Dp[i] = 1.0;
+            }
+        }
+    }
+
 
 };
 
