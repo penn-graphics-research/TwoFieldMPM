@@ -52,6 +52,8 @@ int main(int argc, char *argv[])
     2005 .. [PYTHON] Plate with Constant Radius Hole and Variable Dx -> Single Field
     2006 .. [PYTHON] Plate with Constant Radius Hole and Variable Dx -> Two-Field
     2007 .. SENT with 2*dx Wide Crack and Single Field (compare against equatorial stress results from two field 201 and single field 207)
+    2008 .. SENT with Damage Region and Elasticity Degradation -> Two-Field --> Computing Dynamic J-Integral
+    2009 .. SENT with Damage Region and Elasticity Degradation -> Two-Field --> Computing Dynamic J-Integral LOW-RES
     */
 
     //USED FOR TESTING GRID STATE SIZE
@@ -160,7 +162,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_usingDisplacementFix_closestNode_neighborRadius2");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_tensorTransfer_withJ0Contours");
 
         //material
         T E = 2.6e6;
@@ -168,7 +170,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        bool useDisplacement = true;
+        bool useDisplacement = false;
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 150;
@@ -288,7 +290,7 @@ int main(int argc, char *argv[])
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,100,75), true); //centered on crack tip
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,125,75), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,145,75), true);
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,150,75), true);  
+        //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,150,75), true);  
 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,25,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,50,125), true); 
@@ -296,11 +298,32 @@ int main(int argc, char *argv[])
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,100,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,125,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,145,125), true);  
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,150,125), true); 
+        //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,150,125), true); 
+
+        //Add contours that define the inverse intersections between each pair of contours (A and 1, B and 2, etc.) -> each pair has an upper and lower contour, each not containing the crack and should have J = 0
+        Vector<T, dim> upperCenter(0.045, 0.06);
+        Vector<T, dim> lowerCenter(0.045, 0.04);
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 25, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 25, 25), false);
+
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 50, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 50, 25), false);
+
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 75, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 75, 25), false);
+
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 100, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 100, 25), false);
+
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 125, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 125, 25), false);
+
+        sim.addJIntegralContour(upperCenter, Vector<int,4>(25, 25, 145, 25), false);
+        sim.addJIntegralContour(lowerCenter, Vector<int,4>(25, 25, 145, 25), false);
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        contourTimes.push_back(sim.frame_dt * 2);
+        contourTimes.push_back(sim.frame_dt * 1);
         contourTimes.push_back(sim.frame_dt * 40);
         contourTimes.push_back(sim.frame_dt * 45);
         contourTimes.push_back(sim.frame_dt * 50);
@@ -3927,7 +3950,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/2009_SENT_damageRegionWithElastDeg_dx0.5mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_usingTensorTransfer_halfDxDown");
+        MPM::CRAMPSimulator<T, dim> sim("output/2009_SENT_damageRegionWithElastDeg_dx0.5mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_usingTensorTransfer_halfDxDown_computeJ");
 
         //material
         T E = 2.6e6;
@@ -3987,6 +4010,10 @@ int main(int argc, char *argv[])
         Vector<T, dim> damageRegionMax(crackX + crackLength, crackY + damageRadius);
         sim.addRectangularDamageRegion(damageRegionMin, damageRegionMax);
 
+        //ADd crack segments for sharp J-integral
+        T crackSegmentLength = sim.dx / 5.0;
+        sim.addHorizontalCrack(Vector<T,dim>(crackX, crackY), Vector<T,dim>(crackX + crackLength, crackY), crackSegmentLength, 0.0);
+
         //Add Boundary Condition
         T sigmaA = 2600; //1000 times smaller than E
         T rampTime = sim.frame_dt * 40; // ramp up 4 seconds
@@ -4023,7 +4050,7 @@ int main(int argc, char *argv[])
         
         //Add timing for contours (NOTE: without this we wont calculate anything!)
         std::vector<T> contourTimes;
-        contourTimes.push_back(sim.frame_dt * 2);
+        contourTimes.push_back(sim.frame_dt * 1);
         contourTimes.push_back(sim.frame_dt * 40);
         contourTimes.push_back(sim.frame_dt * 45);
         contourTimes.push_back(sim.frame_dt * 50);

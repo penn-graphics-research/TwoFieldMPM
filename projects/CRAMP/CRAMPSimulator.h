@@ -481,7 +481,7 @@ public:
         }
         
         //Now, we can intercept the flow here to construct grid deformation gradients using nodal displacement gradients (transferred in P2G)
-        if(computeJIntegral && useDisplacement){
+        if(computeJIntegral && useDisplacement && elapsedTime >= contourTimes[contourIdx]){
             T rpFactor = 3.0;
             int neighborRadius = 2;
             T rpDisplacement = Base::dx * rpFactor; //captures corner neighbors which are 1.4*dx away
@@ -549,40 +549,52 @@ public:
 
             std::cout << "J-Integral Computed At t = " << elapsedTime << std::endl;
 
-            //Now write a data file with all contour values across all times if we are done computing them
-            if(!computeJIntegral){
-                std::string jIntFilePath = outputPath + "/JIntegralData_COMPLETE.txt";
-                std::ofstream file(jIntFilePath);
-                file << "=====Complete Computed J-Integral Data=====\n";
-                file << "=====Dynamic Line Integral Data=====\n";
-                file << "Time, ";
-                for(int i = 0; i < (int)contourRadii.size(); ++i){
-                    file << "Contour " << (i+1) << ", ";
-                }
-                file << "\n";
-                for(int i = 0; i < (int)contourTimes.size(); ++i){
-                    file << contourTimes[i] << ", ";
-                    for(int j = 0; j < (int)contourValues.size(); ++j){
-                        file << contourData[i][j] << ", ";
-                    }
-                    file << "\n";
-                }
-
-                file << "=====Dynamic Area Integral Data=====\n";
-                file << "Time, ";
-                for(int i = 0; i < (int)contourRadii.size(); ++i){
-                    file << "Contour " << (i+1) << ", ";
-                }
-                file << "\n";
-                for(int i = 0; i < (int)contourTimes.size(); ++i){
-                    file << contourTimes[i] << ", ";
-                    for(int j = 0; j < (int)areaValues.size(); ++j){
-                        file << areaData[i][j] << ", ";
-                    }
-                    file << "\n";
-                }
-                file.close();
+            //Now write a data file with all contour values for the times we've computed so far! (we do this each time we compute a new time)
+            std::string jIntFilePath2 = outputPath + "/JIntegral_CompleteData" + std::to_string(elapsedTime) + ".txt";
+            std::ofstream file(jIntFilePath2);
+            file << "=====Complete Computed J-Integral Data=====\n";
+            file << "=====Dynamic Line Integral Data=====\n";
+            file << "Time, ";
+            for(int i = 0; i < (int)contourRadii.size(); ++i){
+                file << "Contour " << (i+1) << ", ";
             }
+            file << "\n";
+            for(int i = 0; i < contourIdx; ++i){
+                file << contourTimes[i] << ", ";
+                for(int j = 0; j < (int)contourValues.size(); ++j){
+                    file << contourData[i][j] << ", ";
+                }
+                file << "\n";
+            }
+
+            file << "=====Dynamic Area Integral Data=====\n";
+            file << "Time, ";
+            for(int i = 0; i < (int)contourRadii.size(); ++i){
+                file << "Contour " << (i+1) << ", ";
+            }
+            file << "\n";
+            for(int i = 0; i < contourIdx; ++i){
+                file << contourTimes[i] << ", ";
+                for(int j = 0; j < (int)areaValues.size(); ++j){
+                    file << areaData[i][j] << ", ";
+                }
+                file << "\n";
+            }
+
+            file << "=====Full Dynamic Integral Data=====\n";
+            file << "Time, ";
+            for(int i = 0; i < (int)contourRadii.size(); ++i){
+                file << "Contour " << (i+1) << ", ";
+            }
+            file << "\n";
+            for(int i = 0; i < contourIdx; ++i){
+                file << contourTimes[i] << ", ";
+                for(int j = 0; j < (int)areaValues.size(); ++j){
+                    file << contourData[i][j] + areaData[i][j] << ", ";
+                }
+                file << "\n";
+            }
+            file.close();
         }
 
         //=====LOADING ROUTINES=====
