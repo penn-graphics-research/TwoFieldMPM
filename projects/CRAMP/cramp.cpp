@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_tensorTransfer_withJ0Contours");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_APIC_FullDynamicJIntegral_tensorTransfer_withJ0Contours");
 
         //material
         T E = 2.6e6;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
         sim.gravity = 0;
 
         //Interpolation Scheme
-        sim.useAPIC = false;
+        sim.useAPIC = true;
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
