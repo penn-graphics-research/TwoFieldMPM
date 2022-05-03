@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_tensorTransfer_withJ0Contours");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_displacementGradients_withJ0Contours_neighborRad3");
 
         //material
         T E = 2.6e6;
@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        bool useDisplacement = false;
+        bool useDisplacement = true;
         sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 150;
