@@ -1269,7 +1269,7 @@ public:
 
     bool useDFG;
 
-    T operator()(Vector<T,dim> center, Vector<int,4> contour, bool containsCrackTip, std::ofstream& file)
+    T operator()(Vector<T,dim> center, Vector<int,4> contour, bool containsCrackTip, bool trackContributions, std::ofstream& file, std::ofstream& file2)
     {
         BOW_TIMER_FLAG("computeJIntegralLineTerm");
 
@@ -1679,6 +1679,15 @@ public:
             file << "K_II (plane stress): " << K_II_planeStress << "\n"; 
             file << "K_II (plane strain): " << K_II_planeStrain << "\n";
             file << "\n";
+
+            //Write second file with all J_I Contributions
+            if(trackContributions){
+                file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                }
+            }
         }
         //NON-INTERSECTING CASE (J = 0) ==============================================================================
         else if(useDFG && !foundIntersection && !containsCrackTip){
@@ -1777,6 +1786,15 @@ public:
             file << "J_I: " << J_I << "\n"; 
             file << "J_II: " << J_II << "\n";
             file << "\n";
+
+            //Write second file with all J_I Contributions
+            if(trackContributions){
+                file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                }
+            }
         }
         // INTERSECTING CASE WITH MATERIAL DISCONTINUITY (with dx gap modeling crack) ==============================================================================
         else if(!useDFG || (useDFG && containsCrackTip)){
@@ -1905,6 +1923,15 @@ public:
             file << "J_I: " << J_I << "\n"; 
             file << "J_II: " << J_II << "\n";
             file << "\n";
+
+            //Write second file with all J_I Contributions
+            if(trackContributions){
+                file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                }
+            }
         }
 
         return J_I;
@@ -2075,8 +2102,21 @@ public:
                         omegaPrime = 0.0;
                     }
 
-                    T u_x = g2.u1[0];
-                    T u_y = g2.u1[1];
+                    //Now we need to figure out what displacements to use in constructing the displacement field
+                    T u_x = 0.0;
+                    T u_y = 0.0;
+                    if(g.gridDG.dot(g2.gridDG) >= 0){
+                        //DGs in same direction, always use field 1 (even if separable, field 1 is correct since DGs same direction)
+                        u_x = g2.u1[0];
+                        u_y = g2.u1[1];
+                    }
+                    else{
+                        //DGs opposite directions, use field 2 if separable, otherwise use 0!
+                        if(g2.separable == 1){
+                            u_x = g2.u2[0];
+                            u_y = g2.u2[1];
+                        }
+                    }
 
                     Ux += u_x * omega;
                     Uy += u_y * omega;

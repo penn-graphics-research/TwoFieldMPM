@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_displacementGradients_withJ0Contours_neighborRad3");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_displacementGradientsAfterFix_withJ0Contours_neighborRad2");
 
         //material
         T E = 2.6e6;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
         sim.gravity = 0;
 
         //Interpolation Scheme
-        sim.useAPIC = true;
+        sim.useAPIC = false;
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
@@ -284,21 +284,27 @@ int main(int argc, char *argv[])
         // sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(5,25,30,25), true); 
 
         //DX = 0.1mm
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,25,75), true); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,25,75), true, true); //second true is to mark this contour for additional tracking of data (J_I contributions)
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,50,75), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,75,75), true);
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,100,75), true); //centered on crack tip
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,100,75), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,125,75), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,145,75), true);
         //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,75,150,75), true);  
 
-        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,25,125), true);
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,25,125), true, true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,50,125), true); 
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,75,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,100,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,125,125), true);
         sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,145,125), true);  
         //sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(25,125,150,125), true); 
+
+        //These have different L values than the other families!
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(30,75,25,75), true, true);    //compare to Contour A
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(30,75,100,75), true);         //to Contour D
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(30,125,25,125), true, true);  //to Contour 1
+        sim.addJIntegralContour(Vector<T,dim>(0.045, 0.05), Vector<int,4>(30,125,100,125), true);       //to Contour 4
 
         //Add contours that define the inverse intersections between each pair of contours (A and 1, B and 2, etc.) -> each pair has an upper and lower contour, each not containing the crack and should have J = 0
         Vector<T, dim> upperCenter(0.045, 0.06);

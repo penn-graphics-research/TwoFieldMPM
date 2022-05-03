@@ -121,6 +121,7 @@ public:
     std::vector<Vector<int,4>> contourRadii; //holds contours defined by 4 integers: L, M, N, O (L left of center, D down from center, R right of center, U up from center)
     std::vector<Vector<T,dim>> contourCenters; //center points of the contours
     std::vector<bool> contourTypes; //contains true if contour contains the crack tip, false if not
+    std::vector<bool> contourTracking; //contains true if contour should dump its line integral contribution data
     std::vector<T> contourTimes; //hold the times to take the contours
     int contourIdx = 0;
     std::vector<std::vector<T>> contourData; //holds a vector of vectors, each vector is the set of computed contour values for a given time
@@ -482,8 +483,8 @@ public:
         
         //Now, we can intercept the flow here to construct grid deformation gradients using nodal displacement gradients (transferred in P2G)
         if(computeJIntegral && useDisplacement && elapsedTime >= contourTimes[contourIdx]){
-            T rpFactor = 4.3; //3.0 for rad2
-            int neighborRadius = 3;
+            T rpFactor = 3.0; //3.0 for rad2, 4.3 for rad3
+            int neighborRadius = 2;
             T rpDisplacement = Base::dx * rpFactor; //captures corner neighbors which are 1.4*dx away
             Bow::CRAMP::ConstructNodalDeformationGradientsOp<T, dim>constructFi{ {}, grid, Base::dx, rpDisplacement, neighborRadius };
             constructFi();
@@ -525,13 +526,16 @@ public:
             std::vector<T> contourValues; //empty vector to hold a value for each line integral at this time
             std::string jIntFilePath = outputPath + "/JIntegral_LineIntegralData" + std::to_string(elapsedTime) + ".txt";
             std::ofstream jIntFile(jIntFilePath);
+            std::string jIntContributionsFilePath = outputPath + "/JIntegral_LineIntegralContributions" + std::to_string(elapsedTime) + ".txt";
+            std::ofstream jIntContributionsFile(jIntContributionsFilePath);
             Bow::CRAMP::ComputeJIntegralLineTermOp<T,dim>computeJIntegralLineTermOp{ {}, Base::m_X, topPlane_startIdx, bottomPlane_startIdx, m_cauchy, grid, Base::dx, dt, m_mu[0], m_la[0], useDFG };
             for(int i = 0; i < (int)contourRadii.size(); ++i){
                 T J_I = 0;
-                J_I = computeJIntegralLineTermOp(contourCenters[i], contourRadii[i], contourTypes[i], jIntFile);
+                J_I = computeJIntegralLineTermOp(contourCenters[i], contourRadii[i], contourTypes[i], contourTracking[i], jIntFile, jIntContributionsFile);
                 contourValues.push_back(J_I);
             }
             jIntFile.close();
+            jIntContributionsFile.close();
             contourData.push_back(contourValues);
 
             //AREA INTEGRAL
@@ -837,10 +841,11 @@ public:
 
     //Add a contour for us to take the J-integral over
     //NOTE: for ALL times we will calculate ALL contours (for more elegant design)
-    void addJIntegralContour(Vector<T,dim> _center, Vector<int,4> _contour, bool _containsCrackTip){
+    void addJIntegralContour(Vector<T,dim> _center, Vector<int,4> _contour, bool _containsCrackTip, bool _trackContributions = false){
         contourRadii.push_back(_contour);
         contourCenters.push_back(_center);
         contourTypes.push_back(_containsCrackTip);
+        contourTracking.push_back(_trackContributions);
     }
     //Add times for these contours to be integrated over, ONLY CALL THIS ONCE WITH FULL LIST OF TIMES!
     void addJIntegralTiming(std::vector<T>& _times, bool _useDisplacement = false){
