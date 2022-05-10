@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 
         using T = double;
         static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_2600_FCR_ramp4s_PIC_FullDynamicJIntegral_displacementGradientsAfterFix_withJ0Contours_neighborRad2");
+        MPM::CRAMPSimulator<T, dim> sim("output/201_SENT_2dxWideCrack_dx0.1mm_sigmaA_1300_FCR_ramp4s_PIC_JIntegral_nodalDispGrads_radius3");
 
         //material
         T E = 2.6e6;
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
         //     sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, yBottom), Vector<T, dim>(0, 1), Vector<T, dim>(0, -speed), pullTime)); //bottom puller (pull down u2/2)
         // }
         
-        T sigmaA = 2600; //1000 times smaller than E
+        T sigmaA = 1300; //1000 times smaller than E
         T rampTime = sim.frame_dt * 40; // ramp up 4 seconds
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
 

@@ -1683,10 +1683,12 @@ public:
             //Write second file with all J_I Contributions
             if(trackContributions){
                 file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
-                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi_11, Fi_12, Fi_21, Fi_22, Pi_22, W \n";
                 for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
-                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](0,0) << ", " << m_Fi[i*2](0,1) << ", " << m_Fi[i*2](1,0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << Fm_I_W[i*2] << "\n";
                 }
+                int i = (int)finalContourPoints.size() - 2;
+                file2 << i+1 << ", " << 0.0 << ", " << m_Fi[(i*2)+1](0,0) << ", " << m_Fi[(i*2)+1](0,1) << ", " << m_Fi[(i*2)+1](1,0) << ", " << m_Fi[(i*2)+1](1,1) << ", " <<  m_Pi[(i*2)+1](1,1) << ", " << Fm_I_W[(i*2)+1] << "\n";
             }
         }
         //NON-INTERSECTING CASE (J = 0) ==============================================================================
@@ -1790,10 +1792,12 @@ public:
             //Write second file with all J_I Contributions
             if(trackContributions){
                 file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
-                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi_11, Fi_12, Fi_21, Fi_22, Pi_22, W \n";
                 for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
-                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](0,0) << ", " << m_Fi[i*2](0,1) << ", " << m_Fi[i*2](1,0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << Fm_I_W[i*2] << "\n";
                 }
+                int i = (int)finalContourPoints.size() - 2;
+                file2 << i+1 << ", " << 0.0 << ", " << m_Fi[(i*2)+1](0,0) << ", " << m_Fi[(i*2)+1](0,1) << ", " << m_Fi[(i*2)+1](1,0) << ", " << m_Fi[(i*2)+1](1,1) << ", " <<  m_Pi[(i*2)+1](1,1) << ", " << Fm_I_W[(i*2)+1] << "\n";
             }
         }
         // INTERSECTING CASE WITH MATERIAL DISCONTINUITY (with dx gap modeling crack) ==============================================================================
@@ -1927,10 +1931,12 @@ public:
             //Write second file with all J_I Contributions
             if(trackContributions){
                 file2 << "====================================================== J-Integral Computation using LxDxRxU = " << contour[0] << "x" << contour[1] << "x" << contour[2] << "x" << contour[3] << "Contour Centered at (" << center[0] <<  "," << center[1] << ") ======================\n";
-                file2 << "Line Segment Index, J_I Contribution, Fi1_22, Pi1_22, Fi2_22, Pi2_22\n";
+                file2 << "Line Segment Index, J_I Contribution, Fi_11, Fi_12, Fi_21, Fi_22, Pi_22, W \n";
                 for(int i = 0; i < (int)finalContourPoints.size() - 1; ++i){
-                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << m_Fi[(i*2) + 1](1,1) << ", " << m_Pi[(i*2)+1](1,1) << "\n";
+                    file2 << i << ", " << Fsum_I_List[i] * (DeltaI_List[i] / 2.0) << ", " << m_Fi[i*2](0,0) << ", " << m_Fi[i*2](0,1) << ", " << m_Fi[i*2](1,0) << ", " << m_Fi[i*2](1,1) << ", " <<  m_Pi[i*2](1,1) << ", " << Fm_I_W[i*2] << "\n";
                 }
+                int i = (int)finalContourPoints.size() - 2;
+                file2 << i+1 << ", " << 0.0 << ", " << m_Fi[(i*2)+1](0,0) << ", " << m_Fi[(i*2)+1](0,1) << ", " << m_Fi[(i*2)+1](1,0) << ", " << m_Fi[(i*2)+1](1,1) << ", " <<  m_Pi[(i*2)+1](1,1) << ", " << Fm_I_W[(i*2)+1] << "\n";
             }
         }
 

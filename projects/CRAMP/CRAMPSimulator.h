@@ -483,8 +483,8 @@ public:
         
         //Now, we can intercept the flow here to construct grid deformation gradients using nodal displacement gradients (transferred in P2G)
         if(computeJIntegral && useDisplacement && elapsedTime >= contourTimes[contourIdx]){
-            T rpFactor = 3.0; //3.0 for rad2, 4.3 for rad3
-            int neighborRadius = 2;
+            T rpFactor = 4.3; //3.0 for rad2, 4.3 for rad3
+            int neighborRadius = 3;
             T rpDisplacement = Base::dx * rpFactor; //captures corner neighbors which are 1.4*dx away
             Bow::CRAMP::ConstructNodalDeformationGradientsOp<T, dim>constructFi{ {}, grid, Base::dx, rpDisplacement, neighborRadius };
             constructFi();
