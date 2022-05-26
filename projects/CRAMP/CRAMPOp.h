@@ -1807,14 +1807,18 @@ public:
             std::vector<DFGMPM::GridState<T,dim>*> finalContourGridStates;
             //Crack intersection
             int U = contour[3];
-            if(!useDFG){ //for 4*dx wide cracks using single field MPM
-                topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
-                bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
-            }
-            else if(useDFG){ //for the 2*dx wide crack that DFG can handle!
-                topIntersectionIdx = U - 1; 
-                bottomIntersectionIdx = U + 1;
-            }
+            // if(!useDFG){ //for 4*dx wide cracks using single field MPM
+            //     topIntersectionIdx = U - 2; //this excludes the non-material grid point that still has mass
+            //     bottomIntersectionIdx = U + 2; //again exludes the non-material grd point that has mass, ALSO NOTE this requires the crack width to be exactly 4*dx
+            // }
+            // else if(useDFG){ //for the 2*dx wide crack that DFG can handle!
+            //     topIntersectionIdx = U - 1; 
+            //     bottomIntersectionIdx = U + 1;
+            // }
+
+            //This will take a contour with a 2*dx wide gap at the crack
+            topIntersectionIdx = U - 1; 
+            bottomIntersectionIdx = U + 1;
             
             //bottom intersect
             finalContourPoints.push_back(contourPoints[bottomIntersectionIdx]);
