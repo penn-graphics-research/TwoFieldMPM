@@ -366,19 +366,20 @@ if sectorE[0]:
             print(runCommand)
             subprocess.call([runCommand], shell=True)
     if paper1Tests[2]:
-        #dxArray = [0.001, 0.0005, 0.0004, 0.00025]
-        dxArray = [0.00025]
+        #dxArray = [0.001, 0.0005, 0.0004, 0.00025, 0.0001]
+        dxArray = [0.0001]
         for dx in dxArray:
             runCommand = './cramp 2005 ' + str(dx)
             print(runCommand)
             subprocess.call([runCommand], shell=True)
     if paper1Tests[3]:
-        #dxArray = [0.001, 0.0005, 0.0004, 0.00025]
-        #stArray = [0, 0, 0, 0]
-        dxArray = [0.0008]
+        a = 0.001
+        # dxArray = [1.0, 0.9, 0.8, 0.7]
+        # stArray = [0, 0, 0, 0]
+        dxArray = [1.0]
         stArray = [0]
         for i in range(len(dxArray)):
-            runCommand = './cramp 2006 ' + str(dxArray[i]) + ' ' + str(stArray[i])
+            runCommand = './cramp 2006 ' + str(dxArray[i] * a) + ' ' + str(stArray[i])
             print(runCommand)
             subprocess.call([runCommand], shell=True)
 

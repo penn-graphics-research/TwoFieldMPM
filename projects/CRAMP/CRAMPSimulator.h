@@ -89,6 +89,7 @@ public:
     int damageType = 0; //0 = none, 1 = Rankine, 2 = AnisoMPM, 3 = tanh
     int elasticityDegradationType = 0; //0 = none, 1 = simpleLinearTension
     bool trackEnergy = false;
+    bool smoothParticleStressField = false;
 
     //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
     std::vector<Vector<T,8>> systemEnergy;
@@ -714,11 +715,16 @@ public:
         elapsedTime += dt;
         currSubstep++;
 
+        //Make sure we capture the stress field even if we don't scale stress! (we always write based on what's in scaledCauchy)
+        if(!useDFG || elasticityDegradationType != 1){
+            m_scaledCauchy = m_cauchy;
+        }
+
         //Now dump substep data if verbose is active (verbose = write every substep)
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F);
 
             std::cout << "Substep Written..." << std::endl;
 
@@ -881,7 +887,7 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F);
 
             std::cout << "Frame Written (p)..." << std::endl;
 
