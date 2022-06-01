@@ -3227,7 +3227,7 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
-    //[PYTHON] SENT with Constant Width Crack & Variable Dx -> Single-Field
+    //[PYTHON] SENT with Constant Dx & Variable Crack Thickness -> Single-Field
     if (testcase == 2003) {
 
         using T = double;
@@ -3235,11 +3235,11 @@ int main(int argc, char *argv[])
 
         if (argc < 3) {
             puts("ERROR: please add parameters");
-            puts("TEST 2003 USAGE: ./cramp testcase dx");
+            puts("TEST 2003 USAGE: ./cramp testcase crackThickness");
             exit(0);
         }
 
-        T userDx = std::atof(argv[2]);
+        T crackThickness = std::atof(argv[2]);
         std::vector<std::string> cleanedStrings;
         for(int i = 2; i < 3; ++i){
             std::string cleanString = argv[i];
@@ -3248,7 +3248,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/2003_noHolder_SENT_withWiderCrack_SingleFieldMPM_dx" + cleanedStrings[0];
+        std::string path = "output/2003_withHolder_SENT_dx0.1mm_SingleFieldMPM_crackThickness" + cleanedStrings[0];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -3257,9 +3257,9 @@ int main(int argc, char *argv[])
         T rho = 1395000;
 
         //Params
-        sim.dx = userDx; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 150; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.end_frame = 80; //need to simulate around 9 to 12 seconds to remove oscillations
         sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
@@ -3293,7 +3293,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2);
         T crackLength = 5e-3;
-        T crackRadius = 0.6e-3; //crack width = 3.75% of specimen height 1.2/32
+        T crackRadius = crackThickness / 2.0; //0.6e-3 crack width = 3.75% of specimen height 1.2/32
         T crackHeight = y1 + (height/2.0);
         sim.sampleGridAlignedBoxWithNotch(material1, minPoint, maxPoint, crackLength, crackRadius, crackHeight, false, Vector<T, dim>(0, 0), ppc, rho);
 
@@ -3303,8 +3303,8 @@ int main(int argc, char *argv[])
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
         
         //Add Holder at the bottom (variable dx makes nodal loading imbalanced, so hold the bottom of the specimen)
-        //T heldMaterial = sim.dx;
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
+        T heldMaterial = sim.dx;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
 
         //Add Contours
         
@@ -3375,7 +3375,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/2004_noHolder_SENT_withWiderCrack_TwoFieldMPM_dx" + cleanedStrings[0] + "_st" + cleanedStrings[1];
+        std::string path = "output/2004_withHolder_SENT_withWiderCrack_TwoFieldMPM_dx" + cleanedStrings[0] + "_st" + cleanedStrings[1];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //material
@@ -3386,7 +3386,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = userDx; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 150; //need to simulate around 9 to 12 seconds to remove oscillations
+        sim.end_frame = 100; //need to simulate around 9 to 12 seconds to remove oscillations
         sim.frame_dt = 1e-1; //1e-6 -> 1000 micro seconds total duration, 1e-3 -> 1 second duration
         sim.gravity = 0;
 
@@ -3436,8 +3436,8 @@ int main(int argc, char *argv[])
         sim.elasticityDegradationType = 1;
 
         //Add Holder at the bottom (variable dx makes nodal loading imbalanced, so hold the bottom of the specimen)
-        //T heldMaterial = sim.dx;
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
+        T heldMaterial = sim.dx;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, y1 + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom holder
 
         //Add Contours
         
