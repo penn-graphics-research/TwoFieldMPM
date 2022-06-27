@@ -885,7 +885,7 @@ int main(int argc, char *argv[])
 
         //Add Traction Boundary Condition        
         T sigmaA = 2600; //1000 times smaller than E
-        T rampTime = sim.frame_dt * 400; //ramp up to full sigmaA over 500 frames
+        T rampTime = sim.frame_dt * 40; //ramp up to full sigmaA over 500 frames
         sim.addMode1Loading(y2, y1, sigmaA, rampTime, true, width, x1, x2); //if doing nodal loading, pass y1, y2, x1, x2 as the exact min and max of the material!
         
         //Add Elasticity Degradation
@@ -2868,7 +2868,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/Duration_4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/225_massRatio5_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2928,7 +2928,7 @@ int main(int argc, char *argv[])
         //Add solid arterial walls
         T wallWidth = sim.dx * 4.0;
         T heldMaterial = sim.dx * 2.0;
-        T pipeLength = 150e-3;
+        T pipeLength = 300e-3;
         T pipeWidth = sim.dx * 10;
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) + (0.5*pipeWidth)), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) + (0.5*pipeWidth) + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall

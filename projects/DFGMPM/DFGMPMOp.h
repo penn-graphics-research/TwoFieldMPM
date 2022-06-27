@@ -358,6 +358,41 @@ public:
             }
         });
 
+        //Now accumulate solid and fluid mass for separable = 3 case to detect whether massRatio is low enough
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                const T mass = m_mass[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
+                    if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
+                        int materialIdx = m_marker[i];
+                        if(materialIdx == 0){
+                            g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                        }
+                        else if(materialIdx == 4){ //transfer fluid particles to field 2
+                            g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                        }
+                    }
+                });
+            }
+        });
+        //check massRatio, if good stay sep = 3, otherwise switch to sep = 0
+        grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
+            //Now check massRatio to determine whether it should model solid fluid coupling or not
+            T maxMass, minMass, massRatio;
+            if(g.separable == 3){
+                maxMass = std::max(g.m1, g.m2);
+                minMass = std::min(g.m1, g.m2);
+                massRatio = maxMass / minMass;
+                if(massRatio > 5.0){ //TODO: massRatio can be user defined!!
+                    g.separable = 0;
+                    g.m1 += g.m2;
+                    g.m2 = 0.0;
+                }
+            }
+        });
+
         grid.countSeparableNodes();
     }
 };

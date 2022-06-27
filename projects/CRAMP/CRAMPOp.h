@@ -122,7 +122,7 @@ public:
                         if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
                             int materialIdx = m_marker[i];
                             if(materialIdx == 0){
-                                g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                //g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
                                 
                                 if (useAPIC) {
                                     g.v1 += delta_APIC;
@@ -143,7 +143,7 @@ public:
                                 }
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
-                                g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                //g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
                                 
                                 if (useAPIC) {
                                     g.v2 += delta_APIC;
