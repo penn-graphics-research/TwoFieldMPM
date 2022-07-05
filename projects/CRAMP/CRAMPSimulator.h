@@ -397,8 +397,12 @@ public:
     void g2p(T dt){
         m_Vprevious = Base::m_V; //make a copy of the particle velocities before we update them in G2P
         
+        std::cout << "G2P Starting..." << std::endl;
+
         Bow::DFGMPM::GridToParticlesOp<T, dim> G2P{ {}, Base::m_X, Base::m_V, Base::m_C, particleAF, grid, Base::dx, dt, flipPicRatio, useDFG, m_marker };
         G2P(useAPIC); //P2G
+
+        std::cout << "G2P Done, starting Evolve Strain" << std::endl;
 
         m_Fprevious = m_F; //make a copy of the deformation gradients before we update them
 
@@ -406,6 +410,8 @@ public:
         for (auto& model : Base::elasticity_models){
             model->evolve_strain(G2P.m_gradXp);
         }
+
+        std::cout << "Finished Evolve Strain" << std::endl;
 
         //Now project strain (plasticity)
         for (auto& model : Base::plasticity_models)
@@ -694,7 +700,7 @@ public:
 
         g2p(dt); //transfer, updateF, and plastic projection
 
-        std::cout << "G2P done..." << std::endl;
+        std::cout << "G2P routine done..." << std::endl;
 
         //Now damp particle velocities if we want damping
         if(useSimpleDamping && (elapsedTime < simpleDampingEndTime) && (elapsedTime > simpleDampingStartTime)){

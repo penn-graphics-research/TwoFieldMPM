@@ -2977,7 +2977,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/ClotInclusion_Duration_2s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/226_ClotInclusion_Duration_4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2988,7 +2988,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 240;
+        sim.end_frame = 360;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
         sim.gravity = 0.0;
 
@@ -3024,7 +3024,7 @@ int main(int argc, char *argv[])
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
-        auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E2, nu2));
+        //auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E2, nu2));
         
         //-----PARTICLE SAMPLING-----
 
@@ -3045,16 +3045,16 @@ int main(int argc, char *argv[])
         //Add solid arterial walls
         T wallWidth = sim.dx * 4.0;
         T heldMaterial = sim.dx * 2.0;
-        T pipeLength = 150e-3;
+        T pipeLength = 300e-3;
         T pipeWidth = sim.dx * 10;
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) + (0.5*pipeWidth)), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) + (0.5*pipeWidth) + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
 
         //Add fibrin clot
-        T radius = pipeWidth * 0.5;
-        T x_s = pipeWidth * 10.0; //dist into pipe
-        Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
-        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true);
+        // T radius = pipeWidth * 0.5;
+        // T x_s = pipeWidth * 10.0; //dist into pipe
+        // Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
+        // sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
 
         //Add elastodamage coupling
         sim.elasticityDegradationType = 1;
@@ -3068,7 +3068,7 @@ int main(int argc, char *argv[])
         
         //Piston Wall
         T dist = width_f + (2.*sim.dx); //distance to compress in one second
-        T duration = 2;
+        T duration = 4;
         T speed = dist / duration;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(speed, 0), duration)); //left side piston wall
 
