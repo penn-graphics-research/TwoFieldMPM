@@ -37,8 +37,11 @@ public:
     virtual void trial_differential(const Field<Matrix<T, dim, dim>>& d_F, Field<Matrix<T, dim, dim>>& t_differential, bool project_pd) { BOW_NOT_IMPLEMENTED }
     virtual void trial_hessian(Field<Matrix<T, dim * dim, dim * dim>>& t_hessian, bool project_pd) { BOW_NOT_IMPLEMENTED }
     virtual T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) { return 1.0; }
-    virtual void collect_strain(Field<Matrix<T, dim, dim>>& m_Fs) { BOW_NOT_IMPLEMENTED }
     virtual void set_dt(T _dt) { BOW_NOT_IMPLEMENTED }
+    virtual void collect_mu(Field<T>& _m_mu) {}
+    virtual void collect_la(Field<T>& _m_la) {}
+    virtual void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) {}
+    virtual void collect_initialVolume(Field<T>& m_initialVolume) {}
 };
 
 template <class T, int dim, class Model, bool inversion_free>
@@ -156,7 +159,7 @@ public:
 
     void compute_cauchy(Field<Matrix<T, dim, dim>>& cauchy)
     {
-        BOW_TIMER_FLAG("compute cauchy");
+        BOW_TIMER_FLAG("compute cauchy (FBased)");
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
@@ -167,7 +170,7 @@ public:
     }
 
     void compute_volume(Field<T>& volume){
-        BOW_TIMER_FLAG("compute current volume");
+        BOW_TIMER_FLAG("compute current volume (Fbased)");
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             Matrix<T, dim, dim> F = m_F[i];
             T J = F.determinant();
@@ -220,20 +223,13 @@ public:
     //this will have to be written for each elasticity model we want to use with MPM damage
     void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy)
     {
-        BOW_TIMER_FLAG("compute sigmaC");
-        tbb::parallel_for(size_t(0), stretchedCauchy.size(), [&](size_t i) {
+        BOW_TIMER_FLAG("compute sigmaC (FBased)");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             TM F = TM::Identity() * (1.0 + percent); //stretched F
             T J = F.determinant();
             Matrix<T, dim, dim> P;
             first_piola(F, m_mu[i], m_lambda[i], P);
-            stretchedCauchy[i] = (1.0 / J) * P * F.transpose();
-        });
-    }
-
-    void collect_strain(Field<Matrix<T, dim, dim>>& m_Fs) override
-    {
-        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            m_Fs[m_global_index[i]] = m_F[i];
+            stretchedCauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
         });
     }
 
@@ -267,6 +263,34 @@ public:
     void set_dt(T _dt) override
     {
         return;
+    }
+
+    void collect_mu(Field<T>& _m_mu) override
+    {
+        tbb::parallel_for(size_t(0), m_mu.size(), [&](size_t i) {
+            _m_mu[m_global_index[i]] = m_mu[i];
+        });
+    }
+
+    void collect_la(Field<T>& _m_la) override
+    {
+        tbb::parallel_for(size_t(0), m_lambda.size(), [&](size_t i) {
+            _m_la[m_global_index[i]] = m_lambda[i];
+        });
+    }
+
+    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_F[m_global_index[i]] = m_F[i];
+        });
+    }
+
+    void collect_initialVolume(Field<T>& m_initialVolume) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
     }
 };
 
@@ -378,7 +402,7 @@ public:
 
     void compute_volume(Field<T>& volume)
     {
-        BOW_TIMER_FLAG("compute current volume");
+        BOW_TIMER_FLAG("compute current volume (EOS)");
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T J = m_J[i];
             volume[m_global_index[i]] = m_vol[i] * J;
@@ -413,6 +437,42 @@ public:
     void set_dt(T _dt) override
     {
         return;
+    }
+
+    void collect_mu(Field<T>& _m_mu) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_mu[m_global_index[i]] = 0.0; //fluid has no mu
+        });
+    }
+
+    void collect_la(Field<T>& _m_la) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_la[m_global_index[i]] = 0.0; //fluid has no la
+        });
+    }
+
+    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_F[m_global_index[i]] = Matrix<T,dim,dim>::Identity();
+        });
+    }
+
+    void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy)
+    {
+        BOW_TIMER_FLAG("compute sigmaC (EOS)");
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            stretchedCauchy[m_global_index[i]] = Matrix<T, dim, dim>::Zero();
+        });
+    }
+
+    void collect_initialVolume(Field<T>& m_initialVolume) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
     }
 };
 
@@ -504,7 +564,7 @@ public:
 
     void compute_volume(Field<T>& volume)
     {
-        BOW_TIMER_FLAG("Compute Current Volume (V_p^n)");
+        BOW_TIMER_FLAG("Compute Current Volume (V_p^n), (ViscousEOS)");
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T J = m_J[i];
             volume[m_global_index[i]] = m_vol[i] * J;
@@ -551,6 +611,42 @@ public:
     void set_dt(T _dt){
         dt = _dt;
         return;
+    }
+
+    void collect_mu(Field<T>& _m_mu) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_mu[m_global_index[i]] = 0.0; //fluid has no mu
+        });
+    }
+
+    void collect_la(Field<T>& _m_la) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_la[m_global_index[i]] = 0.0; //fluid has no la
+        });
+    }
+
+    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_F[m_global_index[i]] = m_F[i];
+        });
+    }
+
+    void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy)
+    {
+        BOW_TIMER_FLAG("compute sigmaC (ViscousEOS)");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            stretchedCauchy[m_global_index[i]] = Matrix<T, dim, dim>::Zero();
+        });
+    }
+
+    void collect_initialVolume(Field<T>& m_initialVolume) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
     }
 
     // T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) override

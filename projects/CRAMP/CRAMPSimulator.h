@@ -159,7 +159,7 @@ public:
 
     //Rankine Damage Params
     T Gf = 0.0;
-    std::vector<T> Hs;
+    Field<T> Hs;
     Field<TM> m_scaledCauchy; //scaled cauchy stresses
 
     //Elasticity Degradation Params
@@ -217,15 +217,15 @@ public:
         
         //Collect mu and lambda
         for (auto& model : Base::elasticity_models){
-            m_mu = model->m_mu;
-            m_la = model->m_lambda;
-            
-            //grab F and use this to set the size of some particle vectors
-            m_F = model->m_F;
-            m_FSmoothed = m_F; //dummy values to set up the right size
-            m_cauchySmoothed = m_F; //dummy vals
-            m_scaledCauchy = m_F; //dummy vals
+            model->collect_mu(m_mu);
+            model->collect_la(m_la);
+            model->collect_strain(m_F);
         }
+
+        //copy m_F for size
+        m_FSmoothed = m_F; //dummy values to set up the right size
+        m_cauchySmoothed = m_F; //dummy vals
+        m_scaledCauchy = m_F; //dummy vals
 
         if(damageType == 2){
             l0 = 0.5 * Base::dx;
@@ -275,14 +275,16 @@ public:
 
         if(damageType == 1){ //for Rankine damage only
             for(int i = 0; i < (int)Base::m_mass.size(); ++i){
-                T mu = m_mu[i];
-                T la = m_la[i];
-                T E = (mu*(3*la + 2*mu)) / (la + mu); //recompute E for this particle
-                T HsBar = (sigmaC[i] * sigmaC[i]) / (2 * E * Gf);
-                T HsRegularized = (HsBar * l0) / (1 - (HsBar*l0));
-                Hs.push_back(HsRegularized);
+                if(m_marker[i] == 0 && m_useDamage[i]){
+                    T mu = m_mu[i];
+                    T la = m_la[i];
+                    T E = (mu*(3*la + 2*mu)) / (la + mu); //recompute E for this particle
+                    T HsBar = (sigmaC[i] * sigmaC[i]) / (2 * E * Gf);
+                    T HsRegularized = (HsBar * l0) / (1 - (HsBar*l0));
+                    Hs[i] = HsRegularized;
+                }
             }
-            Bow::Logging::info("[Rankine Damage] Computed Hs: ", Hs[0]);
+            Bow::Logging::info("[Rankine Damage] Computed Hs");
         }
     }
 
@@ -314,11 +316,11 @@ public:
         //Damage Routines (Rankine or Tanh)
         if (damageType == 1) { //Rankine
             //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we update this BEFORE computing DGs!
-            Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage};
+            Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage, m_marker};
             update_rankine();
         }
         else if(damageType == 3){ //tanh damage
-            Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax };
+            Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax, m_marker };
             update_tanh();
         }
 
@@ -428,12 +430,12 @@ public:
         for (auto& model : Base::elasticity_models){
             model->set_dt(dt); //pass dt into elastic model for viscous fluids! all others this is just a quick return
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
-            m_F = model->m_F;
+            model->collect_strain(m_F);
         }
 
-        if((int)m_F.size() > 0 && damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
+        if(damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
             //Now let's compute the maximum stretch for each particle
-            Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_lamMax };
+            Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_useDamage, m_lamMax, m_marker };
             computeLamMax();
             std::cout << "Finished collecting lamMax..." << std::endl;
         }
@@ -456,11 +458,11 @@ public:
         else{ 
             //Damage Routines (Rankine or Tanh)
             if (damageType == 1) { //Rankine
-                Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage};
+                Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage, m_marker};
                 update_rankine();
             }
             else if(damageType == 3){ //tanh damage
-                Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax };
+                Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax, m_marker };
                 update_tanh();
             }
         }
@@ -477,12 +479,12 @@ public:
         std::cout << "P2G Done..." << std::endl;
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
-        if(elasticityDegradationType == 1 && ((int)m_F.size() > 0)){
+        if(elasticityDegradationType != 0){
             Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use scaledCauchy if we are using RankineDamage
             tensorP2G();
             std::cout << "Tensor P2G Done (Scaled)..." << std::endl;
         }
-        else if((int)m_F.size() > 0){
+        else{
             Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use regular Cauchy stress otherwise
             tensorP2G();
             std::cout << "Tensor P2G Done (Unscaled)..." << std::endl;
@@ -498,11 +500,10 @@ public:
             std::cout << "Constructed Fi using nodal displacements with neighborRadius " << neighborRadius << ", and rpFactor " << rpFactor << "..." << std::endl;
         }
 
-        if((int)m_F.size() > 0){
-            Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker };
-            tensorG2P();
-            std::cout << "Tensor G2P Done..." << std::endl;
-        }
+        //Transfer grid stress and F back to particles for smooth F and sigma
+        Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker };
+        tensorG2P();
+        std::cout << "Tensor G2P Done..." << std::endl;
         
         //Now take our stress snapshot (if we have one, and it's the right time)
         if(takeStressSnapshot && elapsedTime >= stressSnapshotTime){
@@ -620,7 +621,7 @@ public:
             
             //Grab initial volume
             for (auto& model : Base::elasticity_models){
-                m_initialVolume = model->m_vol;
+                model->collect_initialVolume(m_initialVolume);
             }
 
             //Pass the right portion of sigmaA to the loading (based on the user defined rampTime)
@@ -943,6 +944,7 @@ public:
         Base::m_mass.push_back(mass);
         Base::stress.push_back(TM::Zero());
         m_currentVolume.push_back(0.0);
+        m_initialVolume.push_back(0.0);
         m_cauchy.push_back(TM::Zero());
         Dp.push_back(damage);
         damageLaplacians.push_back(0.0);
@@ -950,10 +952,14 @@ public:
         particleDG.push_back(TV::Zero());
         dTildeH.push_back(0.0);
         sigmaC.push_back(0.0);
+        Hs.push_back(0.0);
         m_marker.push_back(marker);
         m_useDamage.push_back(useDamage);
         m_lamMax.push_back(0.0);
         m_energies.push_back(0.0);
+        m_mu.push_back(0.0);
+        m_la.push_back(0.0);
+        m_F.push_back(TM::Identity());
     }
 
     void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)

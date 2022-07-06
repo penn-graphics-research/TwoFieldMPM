@@ -304,15 +304,16 @@ public:
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
     std::vector<T>& m_sigmaC; //particle sigmaC
-    std::vector<T>& Hs;
+    Field<T>& Hs;
 
     Field<bool> m_useDamage;
+    Field<int>& m_marker;
 
     void operator()()
     {
         BOW_TIMER_FLAG("updateRankineDamage");
         grid.parallel_for([&](int i) {
-            if(m_useDamage[i]){
+            if(m_marker[i] == 0 && m_useDamage[i]){
                 //Compute updated damage
                 Vector<T, dim> eigenVec;
                 T eigenVal = 0.0;
@@ -349,6 +350,7 @@ public:
 
     Field<bool> m_useDamage;
     Field<T> m_lamMax;
+    Field<int>& m_marker;
 
     void operator()()
     {
@@ -356,7 +358,7 @@ public:
         
         //Compute updated damage using d = 0.5 + 0.5tanh((lamMax - lamC) / tanhWidth)
         grid.parallel_for([&](int i) {
-            if(m_useDamage[i]){            
+            if(m_marker[i] == 0 && m_useDamage[i]){            
                 //Update damage values
                 T newD = 0.5 + (0.5 * tanh((m_lamMax[i] - lamC)/tanhWidth));
                 m_Dp[i] = std::max(m_Dp[i], newD); //function will always be between 0 and 1, so we just have to make sure it's monotonically increasing
@@ -372,31 +374,37 @@ public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
     Field<Matrix<T, dim, dim>>& m_F;
-    Field<T>& m_lamMax;
+    
+    Field<bool> m_useDamage;
+    Field<T> m_lamMax;
+    Field<int>& m_marker;
 
     void operator()()
     {
         BOW_TIMER_FLAG("comuteLamMax");
         
         grid.serial_for([&](int i) {
-            //Compute polar decomposition so we can compute maximum stretch, lamMax
-            // Matrix<T, dim, dim> R, S;
-            // Math::polar_decomposition(m_F[i], R, S);
-            // m_lamMax[i] = S(0,0); //NOTE: this assumes SVs were sorted in SVD
             
-            Matrix<T,dim, dim> C;
-            C = m_F[i].transpose() * m_F[i];
-            T eigenVal = 0.0;
-            T maxEigVal = -10000000.0;
-            Eigen::EigenSolver<Matrix<T, dim, dim>> es(C);
-            
-            //compute maxEigVal of C
-            for (int j = 0; j < dim; j++) {
-                eigenVal = es.eigenvalues()(j).real();
-                maxEigVal = (maxEigVal > eigenVal) ? maxEigVal : eigenVal;
+            if(m_marker[i] == 0 && m_useDamage[i]){
+                //Compute polar decomposition so we can compute maximum stretch, lamMax
+                // Matrix<T, dim, dim> R, S;
+                // Math::polar_decomposition(m_F[i], R, S);
+                // m_lamMax[i] = S(0,0); //NOTE: this assumes SVs were sorted in SVD
+                
+                Matrix<T,dim, dim> C;
+                C = m_F[i].transpose() * m_F[i];
+                T eigenVal = 0.0;
+                T maxEigVal = -10000000.0;
+                Eigen::EigenSolver<Matrix<T, dim, dim>> es(C);
+                
+                //compute maxEigVal of C
+                for (int j = 0; j < dim; j++) {
+                    eigenVal = es.eigenvalues()(j).real();
+                    maxEigVal = (maxEigVal > eigenVal) ? maxEigVal : eigenVal;
+                }
+                m_lamMax[i] = sqrt(maxEigVal);
+                //std::cout << "S(0,0): " << S(0,0) << ", S(1,1): " << S(1,1) << ", sqrt(maxEigVal of C): " << sqrt(maxEigVal) << std::endl;
             }
-            m_lamMax[i] = sqrt(maxEigVal);
-            //std::cout << "S(0,0): " << S(0,0) << ", S(1,1): " << S(1,1) << ", sqrt(maxEigVal of C): " << sqrt(maxEigVal) << std::endl;
         });
     }
 };
