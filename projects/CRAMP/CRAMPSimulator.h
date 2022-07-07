@@ -90,6 +90,7 @@ public:
     int elasticityDegradationType = 0; //0 = none, 1 = simpleLinearTension
     bool trackEnergy = false;
     bool smoothParticleStressField = false;
+    bool computeLamMaxFlag = false; //override to compute this even without tanh damage model
 
     //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
     std::vector<Vector<T,8>> systemEnergy;
@@ -433,7 +434,7 @@ public:
             model->collect_strain(m_F);
         }
 
-        if(damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
+        if(computeLamMaxFlag || damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
             //Now let's compute the maximum stretch for each particle
             Bow::CRAMP::ComputeLamMaxOp<T,dim>computeLamMax{ {}, grid, m_F, m_useDamage, m_lamMax, m_marker };
             computeLamMax();
@@ -723,7 +724,7 @@ public:
         currSubstep++;
 
         //Make sure we capture the stress field even if we don't scale stress! (we always write based on what's in scaledCauchy)
-        if(!useDFG || elasticityDegradationType != 1){
+        if(!useDFG || elasticityDegradationType == 0){
             m_scaledCauchy = m_cauchy;
         }
 

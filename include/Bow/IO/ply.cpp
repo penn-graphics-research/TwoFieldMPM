@@ -385,7 +385,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         d[i] = damage[i];
         sp[i] = _sp[i];
         markers[i] = _markers[i];
-        if(markers[i] == 0){ //only write the rest if these are actual particles (rather than crack particles)
+        if(_markers[i] == 0){ //only write the rest if these are actual particles (rather than crack particles)
             if(_m_F.size() > 0){
                 F11[i] = _m_F[i](0,0);
                 F22[i] = _m_F[i](1,1);
@@ -419,6 +419,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
                 smooth_sigma22[i] = 0.0;
                 smooth_sigma12[i] = 0.0;
             }
+            
             lamMax[i] = m_lamMax[i];
         }
     });

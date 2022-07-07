@@ -3058,6 +3058,7 @@ int main(int argc, char *argv[])
 
         //Add elastodamage coupling
         sim.elasticityDegradationType = 1;
+        sim.computeLamMaxFlag = true;
 
         //-----BOUNDARY CONDITIONS-----
 

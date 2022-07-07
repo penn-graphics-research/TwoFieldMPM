@@ -49,7 +49,7 @@ public:
     bool useImplicitContact;
     int elasticityDegradationType;
 
-    Field<T> m_currentVolume;
+    Field<T>& m_currentVolume;
     Field<Matrix<T, dim, dim>>& m_scaledCauchy;
     Field<int>& m_marker;
 
@@ -306,7 +306,7 @@ public:
     std::vector<T>& m_sigmaC; //particle sigmaC
     Field<T>& Hs;
 
-    Field<bool> m_useDamage;
+    Field<bool>& m_useDamage;
     Field<int>& m_marker;
 
     void operator()()
@@ -348,8 +348,8 @@ public:
     T lamC;
     T tanhWidth;
 
-    Field<bool> m_useDamage;
-    Field<T> m_lamMax;
+    Field<bool>& m_useDamage;
+    Field<T>& m_lamMax;
     Field<int>& m_marker;
 
     void operator()()
@@ -375,8 +375,8 @@ public:
     DFGMPM::DFGMPMGrid<T, dim>& grid;
     Field<Matrix<T, dim, dim>>& m_F;
     
-    Field<bool> m_useDamage;
-    Field<T> m_lamMax;
+    Field<bool>& m_useDamage;
+    Field<T>& m_lamMax;
     Field<int>& m_marker;
 
     void operator()()
@@ -386,6 +386,7 @@ public:
         grid.serial_for([&](int i) {
             
             if(m_marker[i] == 0 && m_useDamage[i]){
+                
                 //Compute polar decomposition so we can compute maximum stretch, lamMax
                 // Matrix<T, dim, dim> R, S;
                 // Math::polar_decomposition(m_F[i], R, S);
@@ -403,6 +404,8 @@ public:
                     maxEigVal = (maxEigVal > eigenVal) ? maxEigVal : eigenVal;
                 }
                 m_lamMax[i] = sqrt(maxEigVal);
+
+                //std::cout << "computed lamMax for particle " << i << ", lamMax = " << sqrt(maxEigVal) << std::endl;
                 //std::cout << "S(0,0): " << S(0,0) << ", S(1,1): " << S(1,1) << ", sqrt(maxEigVal of C): " << sqrt(maxEigVal) << std::endl;
             }
         });
@@ -840,7 +843,7 @@ class ApplyMode1LoadingOp : public AbstractOp {
 public:
     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
     Field<Vector<T, dim>>& m_X;
-    Field<int> m_marker;
+    Field<int>& m_marker;
     T scaledSigmaA;
 
     bool nodalLoading;
@@ -858,7 +861,7 @@ public:
 
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
-    Field<T> m_vol;
+    Field<T>& m_vol;
 
     T ppc;
 
