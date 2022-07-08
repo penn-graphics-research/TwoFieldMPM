@@ -42,7 +42,7 @@ public:
         
         //Now we can do backGrid sorting!
         grid.serial_for([&](int i) {   
-            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0 && m_useDamage[i]){ //skip crack particles, fluid particles, or non-damaging solid particles     
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles, fluid particles, or non-damaging solid particles     
                 const Vector<T, dim> pos = m_X[i];
 
                 //convert particle position to gridIdx
@@ -78,7 +78,7 @@ public:
     {
         BOW_TIMER_FLAG("particleNeighborSorting");
         grid.parallel_for([&](int p_i) {
-            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0 && m_useDamage[p_i]){ //skip crack particles, fluid particles, or non-damaging solid particles    
+            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0){ //skip crack particles, fluid particles, or non-damaging solid particles    
                 const Vector<T, dim> pos_i = m_X[p_i];
                 BSplineWeights<T, dim> spline(pos_i, rp);
                 particleNeighbors[p_i].clear(); //empty neighbor list for this particle before we fill it up
@@ -386,9 +386,10 @@ public:
                 minMass = std::min(g.m1, g.m2);
                 massRatio = maxMass / minMass;
                 if(massRatio > 5.0){ //TODO: massRatio can be user defined!!
-                    g.separable = 0;
-                    g.m1 += g.m2;
-                    g.m2 = 0.0;
+                    g.separable = 6; //like sep = 2 case but for solid fluid coupling
+                    // g.separable = 0;
+                    // g.m1 += g.m2;
+                    // g.m2 = 0.0;
                 }
             }
         });
@@ -900,7 +901,7 @@ public:
                             f_c2 = (fNormal2 * n_cm2) + (tanMin2 * fTanSign2 * tanDirection2);
                         }
                     } 
-                    else if(g.separable == 2){ //non separable two field nodes
+                    else if(g.separable == 2 || g.separable == 6){ //non separable two field nodes (sep6 is the non separable (based on mass ratio) solid fluid two field case)
                         //treat two-field non-separable as "single field" --> correct each to v_cm I think
                         f_c1 = (fNormal1 * n_cm1) + fTanComp1;
                         f_c2 = (fNormal2 * n_cm2) + fTanComp2;
@@ -1042,7 +1043,7 @@ public:
                             gradXp.noalias() += (g.x2 - xn) * dw.transpose();
                         }
                     }
-                    else if (g.separable == 3) { //solid-fluid coupling case
+                    else if (g.separable == 3 || g.separable == 6) { //solid-fluid coupling case
                         //treat as two-field node
                         int materialIdx = m_marker[i]; //solid in field 1, fluid in field 2
                         if (materialIdx == 0) {
@@ -1078,7 +1079,7 @@ public:
                                 Bp += 0.5 * w * (g_v2_new * (xn - m_X[i] + g.x2 - picX).transpose() + (xn - m_X[i] - g.x2 + picX) * g_v2_new.transpose());
                             }
                         }
-                        else if (g.separable == 3){ //solid-fluid coupling case
+                        else if (g.separable == 3 || g.separable == 6){ //solid-fluid coupling cases
                             int materialIdx = m_marker[i]; //grab materialIdx, solid in field 1, fluid in field 2
                             if (materialIdx == 0) {
                                 Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());

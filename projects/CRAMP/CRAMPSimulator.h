@@ -1313,7 +1313,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
+    void sampleGridAlignedBoxWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1321,8 +1321,21 @@ public:
         Field<TV> new_samples;
         Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
         poisson_disk.sample(new_samples);
+        T minX, minY, maxX, maxY;
+        minX = min_corner(0) + (Base::dx*0.5);
+        minY = min_corner(1) + (Base::dx*0.5);
+        maxX = max_corner(0) - (Base::dx*0.5);
+        maxY = max_corner(1) - (Base::dx*0.5);
         for(auto position : new_samples){
-            addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            if(position(0) > minX && position(0) < maxX && position(1) > minY && position(1) < maxY){
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
+            else if(surfaced){
+                addParticle(position, velocity, density*vol, 0.0, 1, marker, useDamage);
+            }
+            else{
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
         }
         int end = Base::m_X.size();
         model->append(start, end, vol);
@@ -1391,7 +1404,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleHemispherePoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
+    void sampleHemispherePoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1408,6 +1421,37 @@ public:
             T dist = (position - center).norm();
             if(dist < radius && position[1] > center[1]){
                 addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
+    void sampleHemispherePoissonDisk_WithNotch(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, T radius, TV notchMin, TV notchMax, bool damageRegion, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        TV min_corner, max_corner;
+        for(int d = 0; d < dim; ++d){
+            min_corner[d] = center[d] - radius;
+            max_corner[d] = center[d] + radius;
+        }
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            T dist = (position - center).norm();
+            if(dist < radius && position[1] > center[1]){
+                if(position[0] > notchMin[0] && position[0] < notchMax[0] && position[1] > notchMin[1] && position[1] < notchMax[1]){
+                    if(damageRegion){
+                        addParticle(position, velocity, density*vol, 1.0, 0, marker, useDamage);
+                    }
+                }
+                else{
+                    addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+                }
+                
             }
         }
         int end = Base::m_X.size();

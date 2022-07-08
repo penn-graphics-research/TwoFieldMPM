@@ -2868,7 +2868,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/225_massRatio5_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/225_massRatio5_withSep6Case_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2960,24 +2960,29 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        if (argc < 5) {
+        if (argc < 10) {
             puts("ERROR: please add parameters");
-            puts("TEST 226 USAGE: ./cramp testcase bulk gamma viscosity");
+            puts("TEST 226 USAGE: ./cramp testcase bulk gamma viscosity lamC tanhWidth alpha dMin minDp");
             exit(0);
         }
 
         T bulk = std::atof(argv[2]);
         T gamma = std::atof(argv[3]);
         T viscosity = std::atof(argv[4]);
+        T lamC = std::atof(argv[5]);
+        T tanhWidth = std::atof(argv[6]);
+        T alpha = std::atof(argv[7]);
+        T dMin = std::atof(argv[8]);
+        T minDp = std::atof(argv[9]);
         std::vector<std::string> cleanedStrings;
-        for(int i = 2; i < 5; ++i){
+        for(int i = 2; i < 10; ++i){
             std::string cleanString = argv[i];
-            if(i == 4){
+            if(i == 4 || i == 6 || i == 8 || i == 9){
                 cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/226_multiMaterialFix_ClotInclusion_Duration_4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/226_withDamageRegion_andTanhDamage_Duration_4s_ConstantPressureFlowWithClot_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2997,7 +3002,7 @@ int main(int argc, char *argv[])
         sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
-        sim.st = 0; //5.5 good for dx = 0.2, 
+        sim.st = 4.7; //5.5 good for dx = 0.2, 
         sim.useDFG = true;
         sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
@@ -3054,7 +3059,10 @@ int main(int argc, char *argv[])
         T radius = pipeWidth * 0.5;
         T x_s = pipeWidth * 10.0; //dist into pipe
         Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
-        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
+        Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx*0.5);
+        Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*1.5);
+        bool damageRegion = true;
+        sim.sampleHemispherePoissonDisk_WithNotch(material3, center, radius, notchMin, notchMax, damageRegion, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
 
         //Add elastodamage coupling
         sim.elasticityDegradationType = 1;
@@ -3077,6 +3085,16 @@ int main(int argc, char *argv[])
         T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial), Vector<T, dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx,minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial + boxHeight), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
         sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial - boxHeight), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL         
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
 
         sim.run(start_frame);
     }

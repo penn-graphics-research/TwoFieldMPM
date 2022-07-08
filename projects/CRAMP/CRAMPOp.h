@@ -119,7 +119,7 @@ public:
                     else if (g.separable != 0 && useDFG) {
                         //Treat node as having two fields
 
-                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
+                        if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2
                             int materialIdx = m_marker[i];
                             if(materialIdx == 0){
                                 //g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
