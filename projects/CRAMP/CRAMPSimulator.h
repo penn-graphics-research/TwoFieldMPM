@@ -183,6 +183,9 @@ public:
     T impulseStartTime = 0;
     T impulseDuration = 0;
 
+    //Solid-Fluid Coupling Parameters
+    T massRatio = 0.0; //the minimal massRatio required to be considered sep3 (two field separable), otherwise sep6 (two field nonseparable)
+
     //Grid Data to Save and Vis
     Field<TV> activeNodesX;
     Field<TM> activeNodesCauchy1;
@@ -331,7 +334,7 @@ public:
             Bow::Logging::info("Damage Gradients Computed...");
         }
 
-        Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker };
+        Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker, massRatio };
         partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
     }
 
@@ -360,7 +363,7 @@ public:
             }
         }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral, massRatio };
         P2G();
     }
 

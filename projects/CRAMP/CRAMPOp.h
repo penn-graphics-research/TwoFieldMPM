@@ -55,6 +55,8 @@ public:
 
     bool computeJIntegral;
 
+    T massRatio;
+
     void operator()()
     {
         BOW_TIMER_FLAG("P2G");
@@ -122,7 +124,9 @@ public:
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2
                             int materialIdx = m_marker[i];
                             if(materialIdx == 0){
-                                //g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                if(massRatio == 0){
+                                    g.m1 += mass * w; //have to do this here if we don't use massRatio
+                                }
                                 
                                 if (useAPIC) {
                                     g.v1 += delta_APIC;
@@ -143,7 +147,9 @@ public:
                                 }
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
-                                //g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+                                if(massRatio == 0){
+                                    g.m2 += mass * w; //have to do this here if we didn't use massRatio
+                                }
                                 
                                 if (useAPIC) {
                                     g.v2 += delta_APIC;
@@ -448,6 +454,7 @@ public:
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         g.cauchy1 += cauchyXmass * w;
                         g.Fi1 += defGradXmass * w;
+
                     }
                     else if (g.separable != 0 && useDFG) {
 
@@ -466,6 +473,41 @@ public:
                                 g.Fi2 += defGradXmass * w;
                             }
                         }
+                    }
+                });
+            }
+            else if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //pressure and J transfer for fluid particles!
+                const Vector<T, dim> pos = m_X[i];
+                const T mass = m_mass[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    //Notice we treat single-field and two-field nodes differently
+                    if (g.separable == 0 || !useDFG) {
+                        //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        g.Fi1(0,0) += m_F[i](0,0) * mass * w; //fluid J
+                        g.Fi1(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
+                    }
+                    else if (g.separable != 0 && useDFG) {
+
+                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 -- here we already know it's FLUID (field2)
+                            g.Fi2(0,0) += m_F[i](0,0) * mass * w; //fluid J
+                            g.Fi2(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
+                        }
+
+                        //TODO maybe: what to do in this else case? we don't want to combine fluid and solid style transfers since fluid only uses 11 and 22
+
+                        // else{ //regular two field transfer from DFG
+                        //     int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                        //     if (fieldIdx == 0) {
+                        //         g.Fi1(0,0) += m_F[i](0,0) * mass * w; //fluid J
+                        //         g.Fi1(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
+                        //     }
+                        //     else if (fieldIdx == 1) {
+                        //         g.Fi2(0,0) += m_F[i](0,0) * mass * w; //fluid J
+                        //         g.Fi2(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
+                        //     }
+                        // }
                     }
                 });
             }
@@ -543,6 +585,45 @@ public:
                 m_cauchySmoothed[i] = cauchySmooth;
                 m_FSmoothed[i] = FSmooth;
                 //std::cout << "Finished tensorG2P for index: " << i << std::endl;
+            }
+            else if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //skip crack particles if we have them and only process SOLID particles!
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+
+                Matrix<T, dim, dim> FSmooth = Matrix<T, dim, dim>::Zero();
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    //Notice we treat single-field and two-field nodes differently
+                    if (g.separable == 0 || !useDFG) {
+                        //Single-field treatment if separable = 0 OR if we are using single field MPM
+                        FSmooth(0,0) += g.Fi1(0,0) * w;
+                        FSmooth(1,1) += g.Fi1(1,1) * w;
+                    }
+                    else if (g.separable != 0 && useDFG) {
+
+                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's FLUID)
+                            FSmooth(0,0) += g.Fi2(0,0) * w;
+                            FSmooth(1,1) += g.Fi2(1,1) * w;
+                        }
+                        
+                        //TODO maybe: not sure wat to do in the else case
+                        
+                        // else{
+                        //     //Treat node as having two fields
+                        //     int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
+                        //     if (fieldIdx == 0) {
+                        //         cauchySmooth += g.cauchy1 * w;
+                        //         FSmooth += g.Fi1 * w;
+                        //     }
+                        //     else if (fieldIdx == 1) {
+                        //         cauchySmooth += g.cauchy2 * w;
+                        //         FSmooth += g.Fi2 * w;
+                        //     }
+                        // }
+                    }
+                });
+
+                m_FSmoothed[i] = FSmooth;
             }
         });
     }

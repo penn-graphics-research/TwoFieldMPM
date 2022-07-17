@@ -2851,24 +2851,25 @@ int main(int argc, char *argv[])
         using T = double;
         static const int dim = 2;
 
-        if (argc < 5) {
+        if (argc < 6) {
             puts("ERROR: please add parameters");
-            puts("TEST 225 USAGE: ./cramp testcase bulk gamma viscosity");
+            puts("TEST 225 USAGE: ./cramp testcase bulk gamma viscosity massRatio");
             exit(0);
         }
 
         T bulk = std::atof(argv[2]);
         T gamma = std::atof(argv[3]);
         T viscosity = std::atof(argv[4]);
+        T massRatio = std::atof(argv[5]);
         std::vector<std::string> cleanedStrings;
-        for(int i = 2; i < 5; ++i){
+        for(int i = 2; i < 6; ++i){
             std::string cleanString = argv[i];
             if(i == 4){
                 cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/225_massRatio5_withSep6Case_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        std::string path = "output/225_DFGsep6_pressureDrop_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_massRatio" + cleanedStrings[3];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2892,6 +2893,7 @@ int main(int argc, char *argv[])
         sim.useDFG = true;
         sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
+        sim.massRatio = massRatio; //set massRatio using user param
         
         //Debug mode
         sim.verbose = false;

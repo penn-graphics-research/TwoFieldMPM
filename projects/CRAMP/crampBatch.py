@@ -328,9 +328,11 @@ if sectorD[0]:
         #no gravity, constant pressure, horizontal with deformable pipe walls
         bulk = 10000
         gamma = 7
-        viscosityArray = [4, 0.4, 0.04, 0.004, 0] #0.004 before
+        #viscosityArray = [4, 0.4, 0.04, 0.004, 0] #0.004 before
+        viscosityArray = [0.004]
+        massRatio = 0.0
         for viscosity in viscosityArray:
-            runCommand = './cramp 225 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity)
+            runCommand = './cramp 225 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity) + ' ' + str(massRatio)
             print(runCommand)
             subprocess.call([runCommand], shell=True)
     if pipeFlowTests[4]:

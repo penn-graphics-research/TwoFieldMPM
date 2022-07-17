@@ -345,6 +345,10 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
     Field<T> smooth_F22(_vertices.size());
     Field<T> smooth_F12(_vertices.size());
     Field<T> lamMax(_vertices.size());
+    Field<T> J(_vertices.size());
+    Field<T> pressure(_vertices.size());
+    Field<T> smoothJ(_vertices.size());
+    Field<T> smoothPressure(_vertices.size());
 
     //Logging::info("Fields Initialized");
 
@@ -386,41 +390,34 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         sp[i] = _sp[i];
         markers[i] = _markers[i];
         if(_markers[i] == 0){ //only write the rest if these are actual particles (rather than crack particles)
-            if(_m_F.size() > 0){
-                F11[i] = _m_F[i](0,0);
-                F22[i] = _m_F[i](1,1);
-                F12[i] = _m_F[i](0,1);
-                smooth_F11[i] = _m_FSmooth[i](0,0);
-                smooth_F22[i] = _m_FSmooth[i](1,1);
-                smooth_F12[i] = _m_FSmooth[i](0,1);
-            }
-            else{
-                F11[i] = 1.0;
-                F22[i] = 1.0;
-                F12[i] = 0.0;
-                smooth_F11[i] = 1.0;
-                smooth_F22[i] = 1.0;
-                smooth_F12[i] = 0.0;
-            }
 
-            if(_m_cauchy.size() > 0){
-                sigma11[i] = _m_cauchy[i](0,0);
-                sigma22[i] = _m_cauchy[i](1,1);
-                sigma12[i] = _m_cauchy[i](0,1);
-                smooth_sigma11[i] = _m_cauchySmooth[i](0,0);
-                smooth_sigma22[i] = _m_cauchySmooth[i](1,1);
-                smooth_sigma12[i] = _m_cauchySmooth[i](0,1);
-            }
-            else{
-                sigma11[i] = 0.0;
-                sigma22[i] = 0.0;
-                sigma12[i] = 0.0;
-                smooth_sigma11[i] = 0.0;
-                smooth_sigma22[i] = 0.0;
-                smooth_sigma12[i] = 0.0;
-            }
-            
+            F11[i] = _m_F[i](0,0);
+            F22[i] = _m_F[i](1,1);
+            F12[i] = _m_F[i](0,1);
+            smooth_F11[i] = _m_FSmooth[i](0,0);
+            smooth_F22[i] = _m_FSmooth[i](1,1);
+            smooth_F12[i] = _m_FSmooth[i](0,1);
+
+            sigma11[i] = _m_cauchy[i](0,0);
+            sigma22[i] = _m_cauchy[i](1,1);
+            sigma12[i] = _m_cauchy[i](0,1);
+            smooth_sigma11[i] = _m_cauchySmooth[i](0,0);
+            smooth_sigma22[i] = _m_cauchySmooth[i](1,1);
+            smooth_sigma12[i] = _m_cauchySmooth[i](0,1);
+
             lamMax[i] = m_lamMax[i];
+        }
+        else if(_markers[i] == 4){ //collect J and pressure for fluid particles (stored in F11 and F22 respectively)
+            
+            sigma11[i] = _m_cauchy[i](0,0);
+            sigma22[i] = _m_cauchy[i](1,1);
+            sigma12[i] = _m_cauchy[i](0,1);
+            
+            J[i] = _m_F[i](0,0);
+            pressure[i] = _m_F[i](1,1);
+
+            smoothJ[i] = _m_FSmooth[i](0,0);
+            smoothPressure[i] = _m_FSmooth[i](1,1);
         }
     });
 
@@ -457,6 +454,10 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         file.add_properties_to_element("vertex", { "smoothF22" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smooth_F22.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothF12" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smooth_F12.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "lamMax" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(lamMax.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "J" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(J.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "pressure" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(pressure.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "smoothJ" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smoothJ.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "smoothPressure" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smoothPressure.data()), tinyply::Type::INVALID, 0);
     }
     else {
         file.add_properties_to_element("vertex", { "x", "y", "z" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<uint8_t*>(vertices.data()), tinyply::Type::INVALID, 0);
@@ -483,6 +484,10 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         file.add_properties_to_element("vertex", { "smoothF22" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smooth_F22.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothF12" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smooth_F12.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "lamMax" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(lamMax.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "J" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(J.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "pressure" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(pressure.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "smoothJ" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smoothJ.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "smoothPressure" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smoothPressure.data()), tinyply::Type::INVALID, 0);
     }
 
     //Logging::info("Properties Added");

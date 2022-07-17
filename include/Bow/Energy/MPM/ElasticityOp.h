@@ -627,10 +627,13 @@ public:
         });
     }
 
-    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    //for viscous Equation of State, collect J here and store it in F_11, pressure in F_22
+    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override 
     {
-        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            _m_F[m_global_index[i]] = m_F[i];
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            T J = m_J[i];
+            _m_F[m_global_index[i]](0,0) = J;
+            _m_F[m_global_index[i]](1,1) = first_piola(J, bulk, gamma);
         });
     }
 
