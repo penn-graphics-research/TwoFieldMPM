@@ -2869,7 +2869,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/225_DFGsep6_pressureDrop_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_massRatio" + cleanedStrings[3];
+        std::string path = "output/225_DFGfriction0.9_pressureDrop_Duration4s_ConstantPressureHorizontalPipeFlow_DeformablePipeWalls_ViscousFluid_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_massRatio" + cleanedStrings[3];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2891,7 +2891,7 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 0; //5.5 good for dx = 0.2, 
         sim.useDFG = true;
-        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.fricCoeff = 0.9;
         sim.useExplicitContact = true;
         sim.massRatio = massRatio; //set massRatio using user param
         
@@ -2984,7 +2984,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/226_withDamageRegion_andTanhDamage_Duration_4s_ConstantPressureFlowWithClot_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
+        std::string path = "output/226_with2dxCrack_andTanhDamage_Duration_4s_ConstantPressureFlowWithClot_wDFG_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2993,7 +2993,7 @@ int main(int argc, char *argv[])
         T rhoFluid = 1000; //density of water
 
         //Params
-        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 360;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
@@ -3053,7 +3053,7 @@ int main(int argc, char *argv[])
         T wallWidth = sim.dx * 4.0;
         T heldMaterial = sim.dx * 2.0;
         T pipeLength = 300e-3;
-        T pipeWidth = sim.dx * 10;
+        T pipeWidth = 0.01; //keep this part constant despite dx
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) + (0.5*pipeWidth)), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) + (0.5*pipeWidth) + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
 
@@ -3061,9 +3061,9 @@ int main(int argc, char *argv[])
         T radius = pipeWidth * 0.5;
         T x_s = pipeWidth * 10.0; //dist into pipe
         Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
-        Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx*0.5);
-        Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*1.5);
-        bool damageRegion = true;
+        Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
+        Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
+        bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
         sim.sampleHemispherePoissonDisk_WithNotch(material3, center, radius, notchMin, notchMax, damageRegion, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
 
         //Add elastodamage coupling

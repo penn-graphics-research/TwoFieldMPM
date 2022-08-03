@@ -458,7 +458,7 @@ public:
                     }
                     else if (g.separable != 0 && useDFG) {
 
-                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
+                        if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             g.cauchy1 += cauchyXmass * w;
                             g.Fi1 += defGradXmass * w;
                         }
@@ -490,7 +490,7 @@ public:
                     }
                     else if (g.separable != 0 && useDFG) {
 
-                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 -- here we already know it's FLUID (field2)
+                        if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 -- here we already know it's FLUID (field2)
                             g.Fi2(0,0) += m_F[i](0,0) * mass * w; //fluid J
                             g.Fi2(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
                         }
@@ -517,7 +517,7 @@ public:
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             g.cauchy1 /= g.m1;
             g.Fi1 /= g.m1;
-            if (g.separable != 0 && g.separable != 3) { //don't treat field 2 if coupling case (solid-fluid is sep = 3)
+            if (g.separable != 0) { //don't treat field 2 if coupling case (solid-fluid is sep = 3)
                 g.cauchy2 /= g.m2;
                 g.Fi2 /= g.m2;
             }
@@ -562,7 +562,7 @@ public:
                     }
                     else if (g.separable != 0 && useDFG) {
 
-                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
+                        if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             cauchySmooth += g.cauchy1 * w;
                             FSmooth += g.Fi1 * w;
                         }
@@ -601,7 +601,7 @@ public:
                     }
                     else if (g.separable != 0 && useDFG) {
 
-                        if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's FLUID)
+                        if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's FLUID)
                             FSmooth(0,0) += g.Fi2(0,0) * w;
                             FSmooth(1,1) += g.Fi2(1,1) * w;
                         }

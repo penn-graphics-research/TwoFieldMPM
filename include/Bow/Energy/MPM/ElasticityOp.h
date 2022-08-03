@@ -632,8 +632,8 @@ public:
     {
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             T J = m_J[i];
-            _m_F[m_global_index[i]](0,0) = J;
-            _m_F[m_global_index[i]](1,1) = first_piola(J, bulk, gamma);
+            _m_F[m_global_index[i]](0,0) = J; //J (volumetric def grad)
+            _m_F[m_global_index[i]](1,1) = -1 * first_piola(J, bulk, gamma); //pressure
         });
     }
 
