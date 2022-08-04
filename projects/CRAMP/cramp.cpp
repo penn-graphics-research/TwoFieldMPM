@@ -43,6 +43,7 @@ int main(int argc, char *argv[])
     224 ... [PYTHON] Horizontal Pipe Flow with Elastic Pipe Walls -- Test for Parabolic Velocity under Viscous Fluid Model
     225 ... [PYTHON] Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
     226 ... [PYTHON] With Clot Inclusion - Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
+    227 ... 2D Fluid Generator Test
 
     TGC Presentation Sims
     2001 .. SENT with Damage Region and Elasticity Degradation -> Single Field
@@ -3101,6 +3102,115 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
     
+    // [PYTHON] 2D Fluid Generator Test
+    if(testcase == 227){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 5) {
+            puts("ERROR: please add parameters");
+            puts("TEST 227 USAGE: ./cramp testcase bulk gamma viscosity");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 5; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/227_withDFG_FluidGeneratorTest" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        T rhoFluid = 1000; //density of water
+
+        //solid mats
+        T E = 1e4;
+        T nu = 0.25;
+        T rhoSolid = 700;
+
+        //Params
+        sim.dx = 0.5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 180;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.8;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 0; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //time step for symplectic
+        sim.cfl = 0.4;
+        T t1 = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl);
+        T tFluid = 1e-5; //works well
+        sim.suggested_dt = std::min(t1, tFluid); 
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto materialSolid = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+
+        //Box Dimensions
+        T minX = 0.05;
+        T minY = 0.05;
+        T length = 100 * sim.dx;
+        T height = 100 * sim.dx;
+        
+        //Fluid Generator
+        Vector<T,dim> center(minX + (length/2.0), minY + (height/2.0));
+        T radius = sim.dx * 10;
+        Vector<T, dim> velocity(0.3, 0.0);
+        int ppc = 9;
+        T source_dt = 1/60.0;
+        bool parabolic = false;
+        sim.addFluidSource(material, center, radius, velocity, rhoFluid, ppc, source_dt, parabolic);
+
+        Vector<T,2> timing(0.0, 0.3); //run fluid source from t = 0 to t = 2s
+        std::vector<Vector<T,2>> timings;
+        timings.push_back(timing);
+        sim.addFluidSourceTiming(timings);
+
+        //Solid Box
+        T solidLength = 10 * sim.dx;
+        T solidHeight = solidLength;
+        T centerX = center[0];
+        T centerY = center[1] - 25*sim.dx;
+        Vector<T, dim> minCorner(centerX - (solidLength/2.0), centerY - (solidHeight/2.0));
+        Vector<T, dim> maxCorner(centerX + (solidLength/2.0), centerY + (solidHeight/2.0));
+        sim.sampleGridAlignedBox(materialSolid, minCorner, maxCorner, Vector<T, dim>(0, 0), ppc, rhoSolid, true, 0);
+
+        //Add elastodamage coupling
+        sim.elasticityDegradationType = 1;
+        sim.computeLamMaxFlag = true;
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + length, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+
+        sim.run(start_frame);
+    }
+
     //---------------------------------------------------------------------
     //---------------------------------------------------------------------
     //----------------------  FINAL TESTING SIMS  -------------------------

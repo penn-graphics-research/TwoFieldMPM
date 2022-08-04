@@ -129,6 +129,19 @@ public:
     std::vector<std::vector<T>> contourData; //holds a vector of vectors, each vector is the set of computed contour values for a given time
     std::vector<std::vector<T>> areaData; //same as contourData but for the area integral component of each contour at each time!
 
+    //Fluid Source Generator Data
+    std::vector<std::shared_ptr<ElasticityOp<T, dim>>> fluidSourceModels;
+    std::vector<Vector<T,dim>> fluidSourceCenters;
+    std::vector<T> fluidSourceRadii;
+    std::vector<Vector<T,dim>> fluidSourceVelocities;
+    std::vector<T> fluidSourceDensities;
+    std::vector<int> fluidSourcePPCs;
+    bool useFluidSources = false;
+    std::vector<Vector<T,2>> fluidSourceTiming;
+    std::vector<T> fluidTimingCounters;
+    std::vector<T> fluidSourceDTs;
+    std::vector<bool> fluidSourceParabolic;
+
     //Data for Simple Damping
     bool useSimpleDamping = true;
     T simpleDampingFactor = 0.5;
@@ -226,11 +239,6 @@ public:
             model->collect_strain(m_F);
         }
 
-        //copy m_F for size
-        m_FSmoothed = m_F; //dummy values to set up the right size
-        m_cauchySmoothed = m_F; //dummy vals
-        m_scaledCauchy = m_F; //dummy vals
-
         if(damageType == 2){
             l0 = 0.5 * Base::dx;
         }
@@ -241,15 +249,7 @@ public:
             }
             else if constexpr (dim == 3) {
                 rp = sqrt(3.0 * Base::dx * Base::dx);
-            }
-
-            //Initialize particle neighbor lists
-            for (size_t i = 0; i < Base::m_X.size(); ++i) {
-                std::vector<int> placeholder, placeholder2, placeholder3;
-                particleNeighbors.push_back(placeholder);
-                particleAF.push_back(placeholder2);
-                p_cached_idx.push_back(placeholder3);
-            }     
+            }   
         }   
 
         //Initialize sigmaC if we are using damage
@@ -429,6 +429,20 @@ public:
     {
 
         std::cout << "Begin advance with dt= " << dt << std::endl;
+
+        //Fluid Source Generators - if we have them
+        if(useFluidSources){
+            for(int i = 0; i < (int)fluidSourceTiming.size(); ++i){ //for each source
+                if(elapsedTime >= fluidSourceTiming[i][0] && elapsedTime < fluidSourceTiming[i][1]){ //if this source is running
+                    //sample and prune particles for this source
+                    fluidTimingCounters[i] += dt;
+                    if(fluidTimingCounters[i] >= frame_dt){
+                        sampleAndPruneParticles(i, currSubstep); //pass source index
+                        fluidTimingCounters[i] = 0.0; //reset counter
+                    }
+                }
+            }
+        }
 
         //Always collect cauchy and F for each particle for analysis
         for (auto& model : Base::elasticity_models){
@@ -873,6 +887,24 @@ public:
         contourIdx = 0;
     }
 
+    //Fluid Generators
+    void addFluidSource(std::shared_ptr<ElasticityOp<T, dim>> model, Vector<T, dim> center, T radius, Vector<T, dim> velocity, T density, int ppc, T source_dt, bool parabolic){
+        fluidSourceModels.push_back(model);
+        fluidSourceCenters.push_back(center);
+        fluidSourceRadii.push_back(radius);
+        fluidSourceVelocities.push_back(velocity);
+        fluidSourceDensities.push_back(density);
+        fluidSourcePPCs.push_back(ppc);
+        fluidTimingCounters.push_back(0.0);
+        fluidSourceDTs.push_back(source_dt);
+        fluidSourceParabolic.push_back(parabolic);
+    }
+    void addFluidSourceTiming(std::vector<Vector<T,2>>& timings){
+        BOW_ASSERT_INFO(!useFluidSources, "ERROR: Only call addFluidSourceTiming ONCE with all sources and timings defined");
+        useFluidSources = true;
+        fluidSourceTiming = timings;
+    }
+
     //------------TIME STEP--------------
 
     //Allows a user to set dt based on symplectic CFL limit
@@ -964,8 +996,74 @@ public:
         m_mu.push_back(0.0);
         m_la.push_back(0.0);
         m_F.push_back(TM::Identity());
+        m_FSmoothed.push_back(TM::Identity());
+        m_cauchySmoothed.push_back(TM::Identity()); 
+        m_scaledCauchy.push_back(TM::Identity());
+        
+        //DFG Neighbor Structures
+        std::vector<int> placeholder, placeholder2, placeholder3;
+        particleNeighbors.push_back(placeholder);
+        particleAF.push_back(placeholder2);
+        p_cached_idx.push_back(placeholder3);
     }
 
+    //Fluid Source Generator
+    void sampleAndPruneParticles(int idx, int currSubstep){
+        // sample particles
+        T source_ppc = fluidSourcePPCs[idx];
+        T source_dt = fluidSourceDTs[idx];
+        T vol = std::pow(Base::dx, dim) / source_ppc;
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+
+        TV center = fluidSourceCenters[idx];
+        T radius = fluidSourceRadii[idx];
+        TV velocity = fluidSourceVelocities[idx];
+        T density = fluidSourceDensities[idx];
+
+        unsigned int seed = (unsigned int)currSubstep;
+
+        TV minCorner(center[0] - radius, center[1] - radius);
+        TV maxCorner(center[0] + radius, center[1] + radius);
+        Geometry::PoissonDisk<T, dim> poisson_disk(minCorner, maxCorner, Base::dx, T(source_ppc), seed);
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            //Now check to make sure this is outside the desired hole
+            T dist = 0.0; //(position - center).norm();
+            if(dist <= radius){ //inside circlular source
+                //Now we will do a simple advection with this dt to see if we're STILL inside the circle after advecting (throw these out)
+                T mass = density * vol;
+                TV gravity_term = TV::Zero();
+                TV updatedVel = velocity;
+                TV updatedPos = position;
+
+                //gravity_term[1] = gravity * source_dt;
+                //updatedVel += gravity_term;
+
+                if(fluidSourceParabolic[idx]){
+                    //u(y) = A( y * (y-2r)) -> A = vmax / (-r*r)
+                    T A = 0.0;
+                    T velMax = velocity[0];
+                    T r = (maxCorner[1] - minCorner[1])/2.0;
+                    T y = position[1] - minCorner[1];
+                    A = velMax / (-r*r);
+                    velocity[0] = A * ((y*y) - (2*r*y));
+                    updatedVel = velocity + gravity_term;
+                }
+
+                updatedPos += updatedVel * source_dt;
+                
+                //addParticle(position, velocity, mass, 0.0, 0, 4, false);
+                if(!(updatedPos[0] < maxCorner[0] && updatedPos[0] > minCorner[0] && updatedPos[1] < maxCorner[1] && updatedPos[1] > minCorner[1])){ //only add if this sample is projected to leave the source in the next time step
+                    addParticle(position, velocity, mass, 0.0, 0, 4, false);
+                }
+            }
+        }
+        int end = Base::m_X.size();
+        fluidSourceModels[idx]->append(start, end, vol);
+    }
+
+    //Random Cube
     void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
@@ -984,6 +1082,7 @@ public:
         model->append(start, end, vol);
     }
 
+    //Random Cube With Damaged Regions
     void samplePrecutRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
@@ -1021,6 +1120,7 @@ public:
         model->append(start, end, vol);
     }
 
+    //Random Sphere
     void sampleRandomSphere(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const T radius, const TV& velocity = TV::Zero(), T density = 1000., bool useDamage = false, int marker = 0)
     {
         // sample particles
@@ -1046,6 +1146,7 @@ public:
         model->append(start, end, vol);
     }
 
+    //OBJ Reader
     void sampleFromObj(std::shared_ptr<ElasticityOp<T, dim>> model, const std::string filepath, const TV& velocity, T volume, T density, bool useDamage = false, int marker = 0)
     {
         // sample particles from OBJ file
@@ -1080,6 +1181,7 @@ public:
         fs.close();
     }
 
+    //2D Box
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
     void sampleGridAlignedBox(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
@@ -1125,6 +1227,8 @@ public:
         model->append(start, end, vol);
     }
 
+
+    //2D Box With Hole
     //NOTE: This routine works best if the dimensions of the box are even multiples of the grid resolution (width = c1 * dx, height = c2 * dx)
     void sampleGridAlignedBoxWithHole(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {
