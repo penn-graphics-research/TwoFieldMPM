@@ -1448,6 +1448,24 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T& radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            T dist = (position - center).norm();
+            if(dist > (radius + Base::dx)){
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     void sampleGridAlignedBoxWithHole_PoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
         // sample particles
         ppc = (T)_ppc;

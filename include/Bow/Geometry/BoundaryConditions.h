@@ -123,6 +123,29 @@ public:
 };
 
 template <class T, int dim>
+class MovingBoxLevelSet : public AnalyticalLevelSet<T, dim> {
+    using TV = Vector<T, dim>;
+    using TM = Matrix<T, dim, dim>;
+    TV center;
+    TV half_edges;
+    TM R;
+    Eigen::Quaternion<T> rotation;
+    TV v;
+    T move_time;
+
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    MovingBoxLevelSet(Type type, const TV& min_corner, const TV& max_corner, const Bow::Vector<T, 4>& rot, TV _v = TV::Zero(), T _moveTime = 0.0);
+    T signed_distance(const TV& X) override;
+    TV normal(const TV& X) override;
+    TV closest_point(const TV& X) override;
+    TV velocity(const TV& X) override;
+    T moveTime() override;
+    void setVelocity(const TV& newV) override;
+    virtual void update(const T& dt) override;
+};
+
+template <class T, int dim>
 class ScriptedLevelSet : public AnalyticalLevelSet<T, dim> {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

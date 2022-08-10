@@ -44,6 +44,8 @@ int main(int argc, char *argv[])
     225 ... [PYTHON] Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
     226 ... [PYTHON] With Clot Inclusion - Constant Pressure Horizontal Pipe Flow with Elastic Pipe Walls and no Gravity -- Test for Parabolic Velocity under Viscous Fluid Model
     227 ... 2D Fluid Generator Test
+    228 ... [PYTHON] Fluid Generator With Clot Inclusion - Constant Velocity Source with Elastic Pipe Walls and no Gravity
+    229 ... [PYTHON] 40 Diameter Pipe With Clot Inclusion - 40 diameters long pipe with fluid Starting in pipe -- push piston from 0 to 20 diameters over some time frame
 
     TGC Presentation Sims
     2001 .. SENT with Damage Region and Elasticity Degradation -> Single Field
@@ -3207,6 +3209,308 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + length, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] Fluid Generator With Clot Inclusion - Constant Velocity Source with Elastic Pipe Walls and no Gravity
+    if(testcase == 228){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 10) {
+            puts("ERROR: please add parameters");
+            puts("TEST 228 USAGE: ./cramp testcase bulk gamma viscosity lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        T lamC = std::atof(argv[5]);
+        T tanhWidth = std::atof(argv[6]);
+        T alpha = std::atof(argv[7]);
+        T dMin = std::atof(argv[8]);
+        T minDp = std::atof(argv[9]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 10; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4 || i == 6 || i == 8 || i == 9){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/228_FluidGeneratorPipeWithClot_SolidClot_noDamage_Duration_4s_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        T rhoFluid = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 360;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0.0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.7; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Solid Material properties (soft artery walls)
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoSolid = 1300;
+        
+        //solid material (fibrin clot)
+        T E2 = 2.6e6;
+        T nu2 = 0.25;
+        T rhoSolid2 = 1200; //make it float
+
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T t1 = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl);
+        T t2 = sim.suggestedDt(E2, nu2, rhoSolid2, sim.dx, sim.cfl);
+        sim.suggested_dt = std::min(t1, t2); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E2, nu2));
+        
+        //-----PARTICLE SAMPLING-----
+
+        //Sample Fluid Particles
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+        T height_f = 90e-3; //32mm
+        T width_f = 90e-3; //20mm
+        // T x1 = minX + sim.dx;
+        // T y1 = minY + sim.dx;
+        // T x2 = x1 + width_f;
+        // T y2 = y1 + height_f;
+        // Vector<T,dim> minPoint(x1, y1);
+        // Vector<T,dim> maxPoint(x2, y2); 
+        // sim.sampleGridAlignedBoxWithPoissonDisk(material, minPoint, maxPoint, Vector<T, dim>(0, 0), ppc, rhoFluid, false, 4); //marker = 4 for fluids, helps with analysis under the hood               
+
+        //Add solid arterial walls
+        T wallWidth = sim.dx * 4.0;
+        T heldMaterial = sim.dx * 2.0;
+        T pipeLength = 300e-3;
+        T pipeWidth = 0.01; //keep this part constant despite dx
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) + (0.5*pipeWidth)), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) + (0.5*pipeWidth) + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX + width_f + (2.0*sim.dx), minY + (0.5*height_f) - (0.5*pipeWidth) - wallWidth), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength, minY + (0.5*height_f) - (0.5*pipeWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
+
+        //Blood Generator
+        T sourceRadius = (pipeWidth / 2.0) - sim.dx;
+        Vector<T,dim> sourceCenter(minX + width_f - sourceRadius, minY + (0.5 * height_f));
+        Vector<T, dim> velocity(0.24, 0.0);
+        T source_dt = sim.frame_dt;
+        bool parabolic = false;
+        sim.addFluidSource(material, sourceCenter, sourceRadius, velocity, rhoFluid, ppc, source_dt, parabolic);
+
+        Vector<T,2> timing(0.0, 6.0); //run fluid source from t = 0 to t = 2s
+        std::vector<Vector<T,2>> timings;
+        timings.push_back(timing);
+        sim.addFluidSourceTiming(timings); 
+
+        //Add fibrin clot
+        T radius = pipeWidth * 0.5;
+        T x_s = pipeWidth * 10.0; //dist into pipe
+        Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
+        Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
+        Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
+        bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
+        //sim.sampleHemispherePoissonDisk_WithNotch(material3, center, radius, notchMin, notchMax, damageRegion, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
+        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
+
+        //Add elastodamage coupling
+        sim.elasticityDegradationType = 1;
+        sim.computeLamMaxFlag = true;
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height_f + (2.0*sim.dx)), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength + width_f + (4.0*sim.dx), 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left side wall
+
+        //Add boxes to hold the free ends of the arterial walls
+        T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial), Vector<T, dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx,minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial + boxHeight), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial - boxHeight), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL         
+
+        //Add Tanh Damage Model
+        //int degType = 1;
+        //sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
+
+        sim.run(start_frame);
+    }
+
+    //[PYTHON] With Clot Inclusion - 40 diameters long pipe with fluid Starting in pipe -- push piston from 0 to 20 diameters over some time frame
+    if(testcase == 229){
+        
+        using T = double;
+        static const int dim = 2;
+
+        if (argc < 10) {
+            puts("ERROR: please add parameters");
+            puts("TEST 229 USAGE: ./cramp testcase bulk gamma viscosity lamC tanhWidth alpha dMin minDp");
+            exit(0);
+        }
+
+        T bulk = std::atof(argv[2]);
+        T gamma = std::atof(argv[3]);
+        T viscosity = std::atof(argv[4]);
+        T lamC = std::atof(argv[5]);
+        T tanhWidth = std::atof(argv[6]);
+        T alpha = std::atof(argv[7]);
+        T dMin = std::atof(argv[8]);
+        T minDp = std::atof(argv[9]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 10; ++i){
+            std::string cleanString = argv[i];
+            if(i == 4 || i == 6 || i == 8 || i == 9){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/229_40DiameterPipe_wClot_d10cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //water material
+        T rhoFluid = 1000; //density of water
+
+        //Params
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 360;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0.0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.7; //5.5 good for dx = 0.2, 
+        sim.useDFG = true;
+        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //Solid Material properties (soft artery walls)
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoSolid = 1300;
+        
+        //solid material (fibrin clot)
+        T E2 = 2.6e6;
+        T nu2 = 0.25;
+        T rhoSolid2 = 1200; //make it float
+
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T t1 = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl);
+        T t2 = sim.suggestedDt(E2, nu2, rhoSolid2, sim.dx, sim.cfl);
+        sim.suggested_dt = std::min(t1, t2); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E2, nu2));
+        
+        //-----PARTICLE SAMPLING-----
+
+        //Sampling Constants
+        int ppc = 4;
+        T minX = 0.05;
+        T minY = 0.05;
+
+        //Add solid arterial walls
+        T wallWidth = sim.dx * 4.0;
+        T heldMaterial = sim.dx * 2.0;
+        T pipeWidth = sim.dx * 10; //d = 0.01m for dx = 1e-3
+        T pipeLength = pipeWidth * 40.0;
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX, minY), Vector<T,dim>(minX + pipeLength, minY + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
+        sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX, minY + pipeWidth + wallWidth), Vector<T,dim>(minX + pipeLength, minY + pipeWidth + (2.0*wallWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
+
+        //Add fibrin clot
+        T radius = pipeWidth * 0.5;
+        T x_s = pipeWidth * 30.0; //dist into pipe
+        Vector<T,dim> center(minX + x_s, minY + wallWidth);
+        //Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
+        //Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
+        //bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
+        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
+
+        //Add blood particles inside artery
+        T height_f = pipeWidth - (sim.dx * 2.0); //32mm
+        T width_f = pipeLength;
+        T x1 = minX;
+        T y1 = minY + wallWidth + sim.dx;
+        T x2 = x1 + width_f;
+        T y2 = y1 + height_f;
+        Vector<T,dim> minPoint(x1, y1);
+        Vector<T,dim> maxPoint(x2, y2); 
+        sim.sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(material, minPoint, maxPoint, center, radius, Vector<T, dim>(0, 0), ppc, rhoFluid, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+
+        //Add elastodamage coupling
+        sim.elasticityDegradationType = 1;
+        sim.computeLamMaxFlag = true;
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + wallWidth + pipeWidth + heldMaterial), Vector<T, dim>(0, -1), Vector<T, dim>(0, 0), 0)); //top wall -- holds artery in place as well
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength + width_f + (4.0*sim.dx), 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall - hold artery in place
+        
+        //Piston Wall
+        T dist = pipeWidth * 20.0; //total distance to push
+        T duration = 4;
+        T speed = dist / duration;
+        T boxRadius = height_f / 2.0;
+        Vector<T,dim> boxMin(minX - (2.0 * boxRadius), minY + wallWidth + sim.dx);
+        Vector<T,dim> boxMax(minX, minY + wallWidth + sim.dx + height_f);
+        Vector<T,4> rot(0.0, 0.0, 0.0, 1.0);
+        Vector<T,dim> vel(speed, 0.0);
+        sim.add_boundary_condition(new Geometry::MovingBoxLevelSet<T, dim>(Geometry::STICKY, boxMin, boxMax, rot, vel, duration)); //left side piston wall
+
+        //Add boxes to hold the free ends of the arterial walls
+        //T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid
+        //sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T,dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial), Vector<T, dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx,minY + (0.5*height_f) + (0.5*pipeWidth) + heldMaterial + boxHeight), Vector<T, 4>(0, 0, 0, 1.0))); //TOP BOX - HOLDING TOP ARTERY WALL
+        //sim.add_boundary_condition(new Geometry::BoxLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + (2.0*sim.dx) - sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial - boxHeight), Vector<T,dim>(minX + width_f + (2.0*sim.dx) + pipeLength + sim.dx, minY + (0.5*height_f) - (0.5*pipeWidth) - heldMaterial), Vector<T, 4>(0, 0, 0, 1.0))); //BOTTOM BOX, HOLDING BTTOM ARTERY WALL         
+
+        //Add Tanh Damage Model
+        //int degType = 1;
+        //sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+        
+        //Set degradation alpha
+        sim.degAlpha = alpha;
+
+        //set minDp
+        sim.minDp = minDp;
 
         sim.run(start_frame);
     }
