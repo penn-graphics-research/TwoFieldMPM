@@ -3393,7 +3393,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/229_40DiameterPipe_wClot_d10cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
+        std::string path = "output/229_duration2s_0.95Friction_55DiameterPipe_wClot_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -3402,7 +3402,7 @@ int main(int argc, char *argv[])
         //Params
         sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
-        sim.end_frame = 360;
+        sim.end_frame = 125;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
         sim.gravity = 0.0;
 
@@ -3413,7 +3413,7 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 4.7; //5.5 good for dx = 0.2, 
         sim.useDFG = true;
-        sim.fricCoeff = 0.3; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.fricCoeff = 0.95; //for no slip condition between solid and fluid
         sim.useExplicitContact = true;
         
         //Debug mode
@@ -3451,13 +3451,13 @@ int main(int argc, char *argv[])
         T wallWidth = sim.dx * 4.0;
         T heldMaterial = sim.dx * 2.0;
         T pipeWidth = sim.dx * 10; //d = 0.01m for dx = 1e-3
-        T pipeLength = pipeWidth * 40.0;
+        T pipeLength = pipeWidth * 55.0;
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX, minY), Vector<T,dim>(minX + pipeLength, minY + wallWidth), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Bottom Arterial Wall
         sim.sampleGridAlignedBoxWithPoissonDisk(material2, Vector<T,dim>(minX, minY + pipeWidth + wallWidth), Vector<T,dim>(minX + pipeLength, minY + pipeWidth + (2.0*wallWidth)), Vector<T, dim>(0, 0), ppc, rhoSolid, false, 0); //Top Arterial Wall
 
         //Add fibrin clot
         T radius = pipeWidth * 0.5;
-        T x_s = pipeWidth * 30.0; //dist into pipe
+        T x_s = pipeWidth * 40.0; //dist into pipe
         Vector<T,dim> center(minX + x_s, minY + wallWidth);
         //Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
         //Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
@@ -3473,7 +3473,9 @@ int main(int argc, char *argv[])
         T y2 = y1 + height_f;
         Vector<T,dim> minPoint(x1, y1);
         Vector<T,dim> maxPoint(x2, y2); 
-        sim.sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(material, minPoint, maxPoint, center, radius, Vector<T, dim>(0, 0), ppc, rhoFluid, false, 4); //marker = 4 for fluids, helps with analysis under the hood
+        T maxVelocity = 0.0;
+        bool parabolicVelocity = false;
+        sim.sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(material, minPoint, maxPoint, center, radius, Vector<T, dim>(maxVelocity, 0), ppc, rhoFluid, false, 4, false, parabolicVelocity); //marker = 4 for fluids, helps with analysis under the hood
 
         //Add elastodamage coupling
         sim.elasticityDegradationType = 1;
@@ -3486,16 +3488,16 @@ int main(int argc, char *argv[])
         //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width_f + pipeLength + width_f + (4.0*sim.dx), 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + heldMaterial), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall - hold artery in place
         
-        //Piston Wall
+        //Piston Box
         T dist = pipeWidth * 20.0; //total distance to push
-        T duration = 4;
+        T duration = 2;
         T speed = dist / duration;
         T boxRadius = height_f / 2.0;
-        Vector<T,dim> boxMin(minX - (2.0 * boxRadius), minY + wallWidth + sim.dx);
-        Vector<T,dim> boxMax(minX, minY + wallWidth + sim.dx + height_f);
+        Vector<T,dim> boxMin(minX - (2.0 * boxRadius), minY + wallWidth);
+        Vector<T,dim> boxMax(minX, minY + wallWidth + pipeWidth);
         Vector<T,4> rot(0.0, 0.0, 0.0, 1.0);
         Vector<T,dim> vel(speed, 0.0);
-        sim.add_boundary_condition(new Geometry::MovingBoxLevelSet<T, dim>(Geometry::STICKY, boxMin, boxMax, rot, vel, duration)); //left side piston wall
+        sim.add_boundary_condition(new Geometry::MovingBoxLevelSet<T, dim>(Geometry::STICKY, boxMin, boxMax, rot, vel, duration)); //left side piston wall -- THIS NEEDS TO BE STICKY!! All moving BCs should be implemented as STICKY
 
         //Add boxes to hold the free ends of the arterial walls
         //T boxHeight = height_f * 1.5; //just make sure this overshoots so we fully contain the fluid

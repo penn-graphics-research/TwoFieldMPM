@@ -371,8 +371,8 @@ public:
     void gridUpdate(T dt){
         if(Base::symplectic){
             //Timing Updates to Boundary Conditions
+            Base::BC.timingUpdates(elapsedTime); //update to new velocity before we time step the BC
             Base::BC.update(dt);
-            Base::BC.timingUpdates(elapsedTime);
 
             //Boundary Collisions
             Bow::DFGMPM::BoundaryConditionUpdateOp<T, dim> bc_update{ {}, grid, Base::BC, Base::dx, dt };
@@ -1448,7 +1448,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T& radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+    void sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T& radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false, bool parabolicVelocity = false){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1458,8 +1458,18 @@ public:
         poisson_disk.sample(new_samples);
         for(auto position : new_samples){
             T dist = (position - center).norm();
+            TV newVel = velocity;
             if(dist > (radius + Base::dx)){
-                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+                if(parabolicVelocity){
+                    //u(y) = A( y * (y-2r)) -> A = vmax / (-r*r)
+                    T A = 0.0;
+                    T velMax = velocity[0];
+                    T r = (max_corner[1] - min_corner[1])/2.0;
+                    T y = position[1] - min_corner[1];
+                    A = velMax / (-r*r);
+                    newVel[0] = A * ((y*y) - (2*r*y));
+                }
+                addParticle(position, newVel, density*vol, 0.0, 0, marker, useDamage);
             }
         }
         int end = Base::m_X.size();

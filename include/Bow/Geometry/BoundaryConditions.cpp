@@ -208,7 +208,7 @@ Vector<T, dim> BoxLevelSet<T, dim>::closest_point(const TV& X)
 }
 
 //MOVING BOX LEVEL SET
-
+//USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
 template <class T, int dim>
 MovingBoxLevelSet<T, dim>::MovingBoxLevelSet(Type type, const TV& min_corner, const TV& max_corner, const Bow::Vector<T, 4>& rot, TV _v, T _moveTime)
     : AnalyticalLevelSet<T, dim>(type)
@@ -287,6 +287,7 @@ template <class T, int dim>
 void MovingBoxLevelSet<T, dim>::update(const T& dt)
 {
     center += v * dt;
+    //USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
     //std::cout << "updating BoxLevelSets, velocity:" << v << std::endl;
 }
 

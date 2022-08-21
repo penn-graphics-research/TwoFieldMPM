@@ -31,6 +31,7 @@ public:
     virtual void setVelocity(const TV& newV) { return; }
 };
 
+//USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
 template <class T, int dim>
 class HalfSpaceLevelSet : public AnalyticalLevelSet<T, dim> {
 public:
@@ -122,6 +123,7 @@ public:
     TV closest_point(const TV& X) override;
 };
 
+//USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
 template <class T, int dim>
 class MovingBoxLevelSet : public AnalyticalLevelSet<T, dim> {
     using TV = Vector<T, dim>;
