@@ -53,6 +53,13 @@ public:
     T width;
     T x1, x2;
 
+    //Pressure Gradient Region Parameters
+    TV pressureGradientMin;
+    TV pressureGradientMax;
+    T pressureStart;
+    T pressureGradient;
+    bool usingPressureGradient = false;
+
     //Additional Particle Data
     Field<TV> m_Xinitial;
     Field<T> m_currentVolume;
@@ -631,7 +638,7 @@ public:
         //If Loading this specimen:
         if(loading){
             //If we've not yet marked particles for loading, do so!
-            if(!particlesMarkedForLoading){
+            if(!particlesMarkedForLoading && !nodalLoading){
                 Bow::CRAMP::MarkParticlesForLoadingOp<T, dim> markParticles{ {}, Base::m_X, m_marker, y1, y2, grid };
                 markParticles();
                 particlesMarkedForLoading = true;
@@ -651,6 +658,12 @@ public:
             mode1Loading();
 
             std::cout << "Mode 1 Loading Applied..." << std::endl;
+        }
+
+        //Apply Forces from Pressure Gradient Region
+        if(usingPressureGradient){
+            Bow::CRAMP::ApplyPressureGradientForcesOp<T, dim> applyPressureGradientForces{ {}, Base::m_X, m_marker, m_currentVolume, Base::dx, dt, grid, pressureGradientMin, pressureGradientMax, pressureStart, pressureGradient};
+            applyPressureGradientForces();
         }
 
         //=====ENERGY TRACKING ROUTINES=====
@@ -861,6 +874,15 @@ public:
         width = _width;
         x1 = _x1;
         x2 = _x2;
+    }
+
+    //Setup a region that varies in pressure in x-direction (negative pressure gradient)
+    void addPressureGradient(TV _min, TV _max, T _pStart, T _pGrad){
+        pressureGradientMin = _min;
+        pressureGradientMax = _max;
+        pressureStart = _pStart;
+        pressureGradient = _pGrad;
+        usingPressureGradient = true;
     }
 
     //Setup taking a snapshot of stress at a given time

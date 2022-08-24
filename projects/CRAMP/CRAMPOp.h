@@ -952,6 +952,8 @@ public:
     {
         BOW_TIMER_FLAG("applyMode1Loading");
 
+        //NOTE: using nodalLoading = TRUE is what we always use!!! false is outdated
+
         T stress = scaledSigmaA;
         if(!nodalLoading){
             //Using particle volume, compute per particle forces using the scaledSigmaA passed in, then transfer this force to the grid and apply it
@@ -1042,6 +1044,68 @@ public:
             if(g.fi1.norm() > 0){
                 totalWork += -g.fi1.dot(dt * g.v1);
             }
+        });
+    }
+};
+
+/*Compute Pressure Gradient Forces and Apply Them to Fluid*/
+template <class T, int dim>
+class ApplyPressureGradientForcesOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<int>& m_marker;
+    Field<T>& m_currentVolume;
+    T dx;
+    T dt;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    //Pressure Gradient Defining Variables
+    Vector<T, dim> minCorner;
+    Vector<T, dim> maxCorner;
+    T pStart;
+    T pGrad;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("applyPressureGradientForces");
+
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                const int marker = m_marker[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    
+                    Vector<T,dim> xi = node.template cast<T>() * dx;
+                    //Check if we have a fluid particle, we only want to allow these to influence the pressure gradient forces
+                    if(marker == 4){
+                        //p is a fluid particle, so check if current node is inside the pressureGradient region
+                        if(xi[0] > minCorner[0] && xi[0] < maxCorner[0] && xi[1] > minCorner[1] && xi[1] < maxCorner[1]){
+                            //node is inside pressure gradient
+                            Matrix<T, dim, dim> hydrostaticStress = Matrix<T, dim, dim>::Zero();
+                            T pressure = pStart + (pGrad * (xi[0] - minCorner[0])); //pressure should change based on pressureGrad and the distance through the pressureGrad region
+                            for(int d = 0; d < dim; ++d){
+                                hydrostaticStress(d,d) = -pressure / (T)dim; //cauchy_hydro = diagonal of -p/dim
+                            }
+                            //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
+                            g.u1 += -m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
+                        }
+                    }
+                });
+            }
+        });
+        
+        /* Iterate grid to apply pressure gradient forces to the relevant velocity fields! */
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.separable == 0){
+                //either all solid or all fluid; however, if all solid, fi = 0!
+                g.v1 += (g.u1 / g.m1) * dt;
+            }
+            else if(g.separable == 3 || g.separable == 6){ //two separable cases where fluid is in SECOND field
+                g.v2 += (g.u1 / g.m2) * dt; //recall that f_i is always stored in u1
+            }            
         });
     }
 };

@@ -360,7 +360,7 @@ if sectorD[0]:
             subprocess.call([runCommand], shell=True)
     if pipeFlowTests[6]:
         #CLOT INCLUSION with Fluid Filled Pipe - no gravity, horizontal with deformable pipe walls
-        bulk = 500000 #1000000 seg fault at frame 35
+        bulk = 1000000 #1 million seg fault at frame 35, 500k worked using cfl dts, trying 1 million at 1e-6 now
         gamma = 7
         viscosityArray = [0.004] #0.004 before
         lamC = 1.11

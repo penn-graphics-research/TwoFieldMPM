@@ -3393,7 +3393,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/229_duration2s_0.95Friction_55DiameterPipe_wClot_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
+        std::string path = "output/229_1e-6_duration2s_0.95Friction_55DiameterPipe_wClot_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_lamC" + cleanedStrings[3] + "_tanhWidth" + cleanedStrings[4] + "_Alpha" + cleanedStrings[5] + "_dMin" + cleanedStrings[6] + "_minDp" + cleanedStrings[7];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -3435,6 +3435,7 @@ int main(int argc, char *argv[])
         T t1 = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl);
         T t2 = sim.suggestedDt(E2, nu2, rhoSolid2, sim.dx, sim.cfl);
         sim.suggested_dt = std::min(t1, t2); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
+        sim.suggested_dt = 1e-6;
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
