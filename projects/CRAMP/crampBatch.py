@@ -383,7 +383,7 @@ if sectorD[0]:
         bulk = 100000 #1 million seg fault at frame 35, 500k worked using cfl dts, trying 1 million at 1e-6 now
         gamma = 7
         viscosityArray = [0.004] #0.004 before
-        pStart = 40000.0
+        pStart = 30000.0
         pGrad = -48.0
         # lamC = 1.11
         # tanhWidth = 0.025

@@ -1094,7 +1094,7 @@ public:
                         //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
                         
                         //TODO: this equation usually has a negative in front but since the flow is backwards we are trying the other direction...????
-                        g.u1 += m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
+                        g.u1 += -m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
                     }
                     
                 });

@@ -3651,7 +3651,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> pgMax = maxPoint;
         pgMin[1] -= (sim.dx + heldMaterial);
         pgMax[1] += (sim.dx + heldMaterial);
-        pgMin[0] -= (sim.dx * 10); //add some additional padding in front
+        //pgMin[0] -= (sim.dx * 10); //add some additional padding in front
         pgMax[0] += pipeLength; //make sure fluid will keep moving!
         //dp/dx = -u_max * (2mu / b^2)
         //want u_max = 0.15 -> dp/dx = -48 (b = 0.005, mu = 0.004)
