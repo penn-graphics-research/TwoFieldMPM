@@ -1071,28 +1071,32 @@ public:
         BOW_TIMER_FLAG("applyPressureGradientForces");
 
         grid.colored_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
-                const int marker = m_marker[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     
                     Vector<T,dim> xi = node.template cast<T>() * dx;
                     //Check if we have a fluid particle, we only want to allow these to influence the pressure gradient forces
-                    if(marker == 4){
-                        //p is a fluid particle, so check if current node is inside the pressureGradient region
-                        if(xi[0] > minCorner[0] && xi[0] < maxCorner[0] && xi[1] > minCorner[1] && xi[1] < maxCorner[1]){
-                            //node is inside pressure gradient
-                            Matrix<T, dim, dim> hydrostaticStress = Matrix<T, dim, dim>::Zero();
-                            T pressure = pStart + (pGrad * (xi[0] - minCorner[0])); //pressure should change based on pressureGrad and the distance through the pressureGrad region
-                            for(int d = 0; d < dim; ++d){
-                                hydrostaticStress(d,d) = -pressure / (T)dim; //cauchy_hydro = diagonal of -p/dim
-                            }
-                            //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
-                            g.u1 += -m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
+                    
+                    //p is a fluid particle, so check if current node is inside the pressureGradient region
+                    if(xi[0] > minCorner[0] && xi[0] < maxCorner[0] && xi[1] > minCorner[1] && xi[1] < maxCorner[1]){
+                        //node is inside pressure gradient
+                        Matrix<T, dim, dim> hydrostaticStress = Matrix<T, dim, dim>::Zero();
+                        T pressure = pStart + (pGrad * (xi[0] - minCorner[0])); //pressure should change based on pressureGrad and the distance through the pressureGrad region
+                        for(int d = 0; d < dim; ++d){
+                            hydrostaticStress(d,d) = -pressure; // / (T)dim; //cauchy_hydro = diagonal of -p/dim
                         }
+                        // if(xi[0] == 0.124){
+                        //     std::cout << "xi = (" << xi[0] << "," << xi[1] << ") -> hydrostaticStress: " << hydrostaticStress << std::endl;
+                        // }
+                        //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
+                        
+                        //TODO: this equation usually has a negative in front but since the flow is backwards we are trying the other direction...????
+                        g.u1 += m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
                     }
+                    
                 });
             }
         });
