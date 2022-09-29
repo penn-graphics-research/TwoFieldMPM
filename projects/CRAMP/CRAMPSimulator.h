@@ -59,6 +59,9 @@ public:
     T pressureStart;
     T pressureGradient;
     bool usingPressureGradient = false;
+    TV toroidMin;
+    TV toroidMax;
+    bool toroidal = false;
 
     //Additional Particle Data
     Field<TV> m_Xinitial;
@@ -749,6 +752,12 @@ public:
             std::cout << "Evolved cracks..." << std::endl;
         }
 
+        //TOROIDAL FLUID - loop particles leaving pressure gradient back to the start!
+        if(usingPressureGradient && toroidal){
+            Bow::CRAMP::LoopFluidParticlesOp<T, dim> loopFluidParticles{ {}, Base::m_X, m_marker, toroidMin, toroidMax, grid };
+            loopFluidParticles();
+        }
+
         //Helpful timers and counters
         elapsedTime += dt;
         currSubstep++;
@@ -877,12 +886,15 @@ public:
     }
 
     //Setup a region that varies in pressure in x-direction (negative pressure gradient)
-    void addPressureGradient(TV _min, TV _max, T _pStart, T _pGrad){
+    void addPressureGradient(TV _min, TV _max, T _pStart, T _pGrad, TV _toroidMin = TV::Zero(), TV _toroidMax = TV::Zero(), bool _toroidal = false){
         pressureGradientMin = _min;
         pressureGradientMax = _max;
         pressureStart = _pStart;
         pressureGradient = _pGrad;
         usingPressureGradient = true;
+        toroidMin = _toroidMin;
+        toroidMax = _toroidMax;
+        toroidal = _toroidal;
     }
 
     //Setup taking a snapshot of stress at a given time

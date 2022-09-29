@@ -1093,7 +1093,6 @@ public:
                         // }
                         //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
                         
-                        //TODO: this equation usually has a negative in front but since the flow is backwards we are trying the other direction...????
                         g.u1 += -m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
                     }
                     
@@ -1110,6 +1109,38 @@ public:
             else if(g.separable == 3 || g.separable == 6){ //two separable cases where fluid is in SECOND field
                 g.v2 += (g.u1 / g.m2) * dt; //recall that f_i is always stored in u1
             }            
+        });
+    }
+};
+
+/*Loop Fluid Particles Around Toroidal Pressure Gradient*/
+template <class T, int dim>
+class LoopFluidParticlesOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    Field<int>& m_marker;
+
+    //Toroid endpoints
+    Vector<T, dim> minCorner;
+    Vector<T, dim> maxCorner;
+
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("loopFluidParticles (toroidal pressure gradient");
+
+        grid.parallel_for([&](int i) {
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                if(pos[0] > maxCorner[0]){
+                    //went past max x-direction
+                    T newX;
+                    newX = minCorner[0] + (pos[0] - maxCorner[0]);
+                    m_X[i][0] = newX;
+                }
+            }
         });
     }
 };

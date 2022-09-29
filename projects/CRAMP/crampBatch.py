@@ -17,7 +17,7 @@ test4 = [1, 1, 1, 1]                    #Damage Test Suite FCR [SENT FCR stress,
 test5 = [0, 0, 0, 0, 0, 1]              #Damage Test Suite NH [SENT NH stress, SENT NH stretch, shear NH stress, shear NH stretch, LARGER shear stretch with NH, LARGER SENT stretchDamage with NH]
 test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Variable PPC]
 pipeFlowTests = [0, 0, 0, 0, 0, 0, 0]   #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls, Horizontal with Elastic Walls and Constant Pressure, Clot Inclusion with Const Pressure, Fluid Generator Test, Fluid Gen + Clot]
-pressureGradients = [1]                 #Pressure Gradient Tests [30 Diameter Pipe, ]
+pressureGradients = [1, 0]              #Pressure Gradient Tests [30 Diameter Pipe, 30 Diameter Pipe with Clot]
 paper1Tests = [0, 1, 0, 0]              #[SENT with const width crack and variable dx for 1F MPM, then with 2F MPM, Hole in Plate with SF, Hole in Plate with TF]
 
 ################################
@@ -383,17 +383,38 @@ if sectorD[0]:
         bulk = 100000 #1 million seg fault at frame 35, 500k worked using cfl dts, trying 1 million at 1e-6 now
         gamma = 7
         viscosityArray = [0.004] #0.004 before
-        pStart = 30000.0
+        pStartArray = [10000.0]
         pGrad = -48.0
+        couplingFrictionArray = [0.99]
         # lamC = 1.11
         # tanhWidth = 0.025
         # alpha = 1.0
         # dMin = 0.25
         # minDp = 1.0
-        for viscosity in viscosityArray:
-            runCommand = './cramp 230 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosity) + ' ' + str(pStart) + ' ' + str(pGrad)
-            print(runCommand)
-            subprocess.call([runCommand], shell=True)
+        for pStart in pStartArray:
+            for friction in couplingFrictionArray:
+                runCommand = './cramp 230 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosityArray[0]) + ' ' + str(pStart) + ' ' + str(pGrad) + ' ' + str(friction)
+                print(runCommand)
+                subprocess.call([runCommand], shell=True)
+
+    if pressureGradients[1]:
+        #30 Diameter Pipe with Pressure Gradient AND CLOT
+        bulk = 100000 #1 million seg fault at frame 35, 500k worked using cfl dts, trying 1 million at 1e-6 now
+        gamma = 7
+        viscosityArray = [0.004] #0.004 before
+        pStartArray = [9400.0]
+        pGrad = -48.0
+        couplingFrictionArray = [0.99]
+        # lamC = 1.11
+        # tanhWidth = 0.025
+        # alpha = 1.0
+        # dMin = 0.25
+        # minDp = 1.0
+        for pStart in pStartArray:
+            for friction in couplingFrictionArray:
+                runCommand = './cramp 231 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosityArray[0]) + ' ' + str(pStart) + ' ' + str(pGrad) + ' ' + str(friction)
+                print(runCommand)
+                subprocess.call([runCommand], shell=True)
 
 
 ################################

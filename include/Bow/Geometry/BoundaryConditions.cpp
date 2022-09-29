@@ -2,6 +2,7 @@
 
 namespace Bow::Geometry {
 
+//USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
 template <class T, int dim>
 HalfSpaceLevelSet<T, dim>::HalfSpaceLevelSet(Type type, const TV& origin, const TV& outward_normal, TV v, T moveTime)
     : AnalyticalLevelSet<T, dim>(type), origin(origin), outward_normal(outward_normal.normalized()), v(v), move_time(moveTime)
@@ -49,6 +50,7 @@ template <class T, int dim>
 void HalfSpaceLevelSet<T, dim>::update(const T& dt)
 {
     origin += v * dt;
+    //USE MOVING BOUNDARIES WITH STICKY BC ONLY!!!!
     //std::cout << "updating HalfSpaceLevelSets, velocity:" << v << std::endl;
 }
 
