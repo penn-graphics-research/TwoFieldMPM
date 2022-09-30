@@ -3230,10 +3230,10 @@ int main(int argc, char *argv[])
         T bulk = std::atof(argv[2]);
         T gamma = std::atof(argv[3]);
         T viscosity = std::atof(argv[4]);
-        T lamC = std::atof(argv[5]);
-        T tanhWidth = std::atof(argv[6]);
+        //T lamC = std::atof(argv[5]);
+        //T tanhWidth = std::atof(argv[6]);
         T alpha = std::atof(argv[7]);
-        T dMin = std::atof(argv[8]);
+        //T dMin = std::atof(argv[8]);
         T minDp = std::atof(argv[9]);
         std::vector<std::string> cleanedStrings;
         for(int i = 2; i < 10; ++i){
@@ -3333,7 +3333,7 @@ int main(int argc, char *argv[])
         Vector<T,dim> center(minX + width_f + (sim.dx*2.0) + x_s, minY + (height_f * 0.5) - (pipeWidth*0.5));
         Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
         Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
-        bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
+        //bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
         //sim.sampleHemispherePoissonDisk_WithNotch(material3, center, radius, notchMin, notchMax, damageRegion, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
         sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
 
@@ -3382,10 +3382,10 @@ int main(int argc, char *argv[])
         T bulk = std::atof(argv[2]);
         T gamma = std::atof(argv[3]);
         T viscosity = std::atof(argv[4]);
-        T lamC = std::atof(argv[5]);
-        T tanhWidth = std::atof(argv[6]);
+        //T lamC = std::atof(argv[5]);
+        //T tanhWidth = std::atof(argv[6]);
         T alpha = std::atof(argv[7]);
-        T dMin = std::atof(argv[8]);
+        //T dMin = std::atof(argv[8]);
         T minDp = std::atof(argv[9]);
         std::vector<std::string> cleanedStrings;
         for(int i = 2; i < 10; ++i){
@@ -3711,7 +3711,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/231_ToroidalPressureGradientWithClot_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
+        std::string path = "output/231_ToroidalPressureGradientWithPoroelasticClot_c1_300k_c2_1.1_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -3745,20 +3745,22 @@ int main(int argc, char *argv[])
         T rhoSolid = 1300;
         
         //solid material (fibrin clot)
-        T E2 = 2.6e6;
-        T nu2 = 0.25;
+        T c1 = 300000;
+        T c2 = 1.1;
+        T phi_s0 = 0.01;
+        T pi_0 = 1000.0;
+        T beta_1 = 1.02;
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
         sim.cfl = 0.4;
-        T t1 = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl);
-        T t2 = sim.suggestedDt(E2, nu2, rhoSolid2, sim.dx, sim.cfl);
-        sim.suggested_dt = std::min(t1, t2); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
+        sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
         //sim.suggested_dt = 1e-6;
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
-        auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E2, nu2));
+        //auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
         
         //-----PARTICLE SAMPLING-----
 

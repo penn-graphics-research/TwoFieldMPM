@@ -306,6 +306,197 @@ using StvkWithHenckyOp = FBasedElastiticityOp<T, dim, ConstitutiveModel::StvkWit
 template <class T, int dim>
 using LinearElasticityOp = FBasedElastiticityOp<T, dim, ConstitutiveModel::LinearElasticity<T, dim>, false>;
 
+
+template <class T, int dim, class Model, bool inversion_free>
+class FBasedPoroelasticityOp : public ElasticityOp<T, dim>, public Model {
+public:
+    using TV = Vector<T, dim>;
+    using TM = Matrix<T, dim, dim>;
+    using ElasticityOp<T, dim>::m_F;
+    using ElasticityOp<T, dim>::m_global_index;
+    using ElasticityOp<T, dim>::m_vol;
+    using ElasticityOp<T, dim>::m_mu;
+    using ElasticityOp<T, dim>::m_lambda;
+
+    T mu, lambda; // TODO: passed by append
+    T c1, c2;
+    T phi_s0;
+    T pi_0;
+    //T mu_0;
+    T beta_1;
+    //T r_f;
+
+    Field<Matrix<T, dim, dim>> t_F; // only used in implicit
+
+    SERIALIZATION_REGISTER(m_global_index)
+    SERIALIZATION_REGISTER(m_F)
+    SERIALIZATION_REGISTER(m_vol)
+    SERIALIZATION_REGISTER(m_mu)
+    SERIALIZATION_REGISTER(m_lambda)
+
+    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1)
+    {
+        mu = 0;
+        lambda = 0;
+        c1 = _c1;
+        c2 = _c2;
+        phi_s0 = _phi_s0;
+        pi_0 = _pi_0;
+        //mu_0 = _mu_0;
+        beta_1 = _beta_1;
+    }
+    void append(int start, int end, T vol) override
+    {
+        for (int i = start; i < end; ++i) {
+            m_F.push_back(Matrix<T, dim, dim>::Identity());
+            m_vol.push_back(vol);
+            m_global_index.push_back(i);
+            m_mu.push_back(mu);
+            m_lambda.push_back(lambda);
+        }
+    }
+
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            m_F[i] = (m_gradXp[m_global_index[i]]) * m_F[i];
+        });
+    }
+
+    void strain_energy(Field<T>& m_energy) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            T mu = 0.0; // TODO: grab actual chemical potential, mu
+            T energy = m_vol[i] * psi_poro(m_F[i], mu, c1, c2, phi_s0, pi_0, beta_1);
+            m_energy[m_global_index[i]] = energy;
+        });
+    }
+
+    void compute_cauchy(Field<Matrix<T, dim, dim>>& cauchy)
+    {
+        BOW_TIMER_FLAG("compute cauchy (FBased)");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            Matrix<T, dim, dim> P;
+            T J = F.determinant();
+            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            cauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
+        });
+    }
+
+    void compute_volume(Field<T>& volume){
+        BOW_TIMER_FLAG("compute current volume (Fbased)");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            T J = F.determinant();
+            volume[m_global_index[i]] = J * m_vol[i]; //current volume VpN = J * Vp0
+        });
+    }
+
+    void compute_stress(Field<Matrix<T, dim, dim>>& stress) override
+    {
+        BOW_TIMER_FLAG("compute elasticity");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            Matrix<T, dim, dim> P;
+            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            stress[m_global_index[i]] = m_vol[i] * P * F.transpose();
+        });
+    }
+
+    void compute_piola(Field<Matrix<T, dim, dim>>& piola) override
+    {
+        BOW_TIMER_FLAG("compute piola");
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            Matrix<T, dim, dim> F = m_F[i];
+            Matrix<T, dim, dim> P;
+            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            piola[m_global_index[i]] = P;
+        });
+    }
+
+    //this will have to be written for each elasticity model we want to use with MPM damage
+    // void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy)
+    // {
+    //     BOW_TIMER_FLAG("compute sigmaC (FBased)");
+    //     tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+    //         TM F = TM::Identity() * (1.0 + percent); //stretched F
+    //         T J = F.determinant();
+    //         Matrix<T, dim, dim> P;
+    //         T mu = 0.0; //TODO: grab actual chemical potential, mu
+    //         first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+    //         stretchedCauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
+    //     });
+    // }
+
+    void set_dt(T _dt) override
+    {
+        return;
+    }
+
+    void collect_mu(Field<T>& _m_mu) override
+    {
+        tbb::parallel_for(size_t(0), m_mu.size(), [&](size_t i) {
+            _m_mu[m_global_index[i]] = m_mu[i];
+        });
+    }
+
+    void collect_la(Field<T>& _m_la) override
+    {
+        tbb::parallel_for(size_t(0), m_lambda.size(), [&](size_t i) {
+            _m_la[m_global_index[i]] = m_lambda[i];
+        });
+    }
+
+    void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_F[m_global_index[i]] = m_F[i];
+        });
+    }
+
+    void collect_initialVolume(Field<T>& m_initialVolume) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
+    }
+
+  private:
+    T psi_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1)
+    {
+        T J = F.determinant();
+        T I1 = (F.transpose() * F).trace();
+        T psiNet = ((phi_s0 * c1) / c2) * (exp(c2 * (I1 - dim)) - 1);
+        T psiMix = (pi_0 / (beta_1 - 1)) * ((pow(1 - phi_s0, beta_1)) / (pow(J - phi_s0, beta_1 - 1)));
+        T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
+        T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
+        return psiNet + psiMix - psi0 - muC;
+    }
+
+    void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, Matrix<T, dim, dim>& P)
+    {
+        T J = F.determinant();
+        T I1 = (F.transpose() * F).trace();
+        Eigen::Matrix<T, dim, dim> JFinvT;
+        Math::cofactor(F, JFinvT);
+        Eigen::Matrix<T, dim, dim> Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
+        Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - mu) * JFinvT;
+        P = Pnet + Pmix;
+    }
+
+};
+
+template <class T, int dim>
+using FibrinPoroelasticityOp = FBasedPoroelasticityOp<T, dim, ConstitutiveModel::FixedCorotated<T, dim>, false>;
+
+
+
+
+
 template <class T, int dim>
 class EquationOfStateOp : public ElasticityOp<T, dim>, public ConstitutiveModel::EquationOfState<T> {
 public:
