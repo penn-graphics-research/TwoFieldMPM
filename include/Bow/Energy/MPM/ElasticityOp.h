@@ -325,6 +325,7 @@ public:
     //T mu_0;
     T beta_1;
     //T r_f;
+    T a1; //for correcting initial stress state
 
     Field<Matrix<T, dim, dim>> t_F; // only used in implicit
 
@@ -334,7 +335,7 @@ public:
     SERIALIZATION_REGISTER(m_mu)
     SERIALIZATION_REGISTER(m_lambda)
 
-    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1)
+    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1, T _a1)
     {
         mu = 0;
         lambda = 0;
@@ -344,6 +345,7 @@ public:
         pi_0 = _pi_0;
         //mu_0 = _mu_0;
         beta_1 = _beta_1;
+        a1 = _a1;
     }
     void append(int start, int end, T vol) override
     {
@@ -367,7 +369,7 @@ public:
     {
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             T mu = 0.0; // TODO: grab actual chemical potential, mu
-            T energy = m_vol[i] * psi_poro(m_F[i], mu, c1, c2, phi_s0, pi_0, beta_1);
+            T energy = m_vol[i] * psi_poro(m_F[i], mu, c1, c2, phi_s0, pi_0, beta_1, a1);
             m_energy[m_global_index[i]] = energy;
         });
     }
@@ -380,7 +382,7 @@ public:
             Matrix<T, dim, dim> P;
             T J = F.determinant();
             T mu = 0.0; //TODO: grab actual chemical potential, mu
-            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             cauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
         });
     }
@@ -401,7 +403,7 @@ public:
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
             T mu = 0.0; //TODO: grab actual chemical potential, mu
-            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             stress[m_global_index[i]] = m_vol[i] * P * F.transpose();
         });
     }
@@ -413,7 +415,7 @@ public:
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
             T mu = 0.0; //TODO: grab actual chemical potential, mu
-            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, P);
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             piola[m_global_index[i]] = P;
         });
     }
@@ -466,7 +468,7 @@ public:
     }
 
   private:
-    T psi_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1)
+    T psi_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1)
     {
         T J = F.determinant();
         T I1 = (F.transpose() * F).trace();
@@ -477,7 +479,7 @@ public:
         return psiNet + psiMix - psi0 - muC;
     }
 
-    void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, Matrix<T, dim, dim>& P)
+    void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1, Matrix<T, dim, dim>& P)
     {
         T J = F.determinant();
         T I1 = (F.transpose() * F).trace();
