@@ -335,7 +335,7 @@ public:
     SERIALIZATION_REGISTER(m_mu)
     SERIALIZATION_REGISTER(m_lambda)
 
-    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1, T _a1)
+    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1)
     {
         mu = 0;
         lambda = 0;
@@ -345,7 +345,7 @@ public:
         pi_0 = _pi_0;
         //mu_0 = _mu_0;
         beta_1 = _beta_1;
-        a1 = _a1;
+        a1 = (pi_0 / phi_s0) - (2.0 * c1);
     }
     void append(int start, int end, T vol) override
     {
@@ -476,7 +476,8 @@ public:
         T psiMix = (pi_0 / (beta_1 - 1)) * ((pow(1 - phi_s0, beta_1)) / (pow(J - phi_s0, beta_1 - 1)));
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
         T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
-        return psiNet + psiMix - psi0 - muC;
+        T correction = phi_s0 * a1 * log(J); // psi += a1 * ln(J), log here = ln
+        return psiNet + psiMix - psi0 - muC + correction;
     }
 
     void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1, Matrix<T, dim, dim>& P)
@@ -487,7 +488,8 @@ public:
         Math::cofactor(F, JFinvT);
         Eigen::Matrix<T, dim, dim> Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
         Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - mu) * JFinvT;
-        P = Pnet + Pmix;
+        Eigen::Matrix<T, dim, dim> Pcorrection = phi_s0 * a1 * (JFinvT / J); // P += a1 * F^-T
+        P = Pnet + Pmix + Pcorrection;
     }
 
 };

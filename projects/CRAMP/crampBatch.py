@@ -424,6 +424,7 @@ if sectorD[0]:
         pStartArray = [1200.0]
         pGrad = -48.0
         couplingFrictionArray = [0.99]
+        a1 = 1000
         # lamC = 1.11
         # tanhWidth = 0.025
         # alpha = 1.0
@@ -431,7 +432,7 @@ if sectorD[0]:
         # minDp = 1.0
         for pStart in pStartArray:
             for friction in couplingFrictionArray:
-                runCommand = './cramp 232 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosityArray[0]) + ' ' + str(pStart) + ' ' + str(pGrad) + ' ' + str(friction)
+                runCommand = './cramp 232 ' + str(bulk) + ' ' + str(gamma) + ' ' + str(viscosityArray[0]) + ' ' + str(pStart) + ' ' + str(pGrad) + ' ' + str(friction) + ' ' + str(a1)
                 print(runCommand)
                 subprocess.call([runCommand], shell=True)
 
