@@ -21,6 +21,7 @@ public:
     Field<T> m_J;
     Field<T> m_mu, m_lambda;
     Field<T> m_vol;
+    Field<T> m_chemPotential; //used only for poroelasticity
     std::vector<int> m_global_index;
     virtual void append(int start, int end, T vol) = 0;
     virtual void compute_stress(Field<Matrix<T, dim, dim>>& stress) {}
@@ -42,6 +43,7 @@ public:
     virtual void collect_la(Field<T>& _m_la) {}
     virtual void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) {}
     virtual void collect_initialVolume(Field<T>& m_initialVolume) {}
+    virtual void collect_chemPotential(Field<T>& m_chemPotential) {}
 };
 
 template <class T, int dim, class Model, bool inversion_free>
@@ -292,6 +294,13 @@ public:
             m_initialVolume[m_global_index[i]] = m_vol[i];
         });
     }
+
+    void collect_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_chemPotential[m_global_index[i]] = 0.0;
+        });
+    }
 };
 
 template <class T, int dim>
@@ -317,6 +326,7 @@ public:
     using ElasticityOp<T, dim>::m_vol;
     using ElasticityOp<T, dim>::m_mu;
     using ElasticityOp<T, dim>::m_lambda;
+    using ElasticityOp<T, dim>::m_chemPotential;
 
     T mu, lambda; // TODO: passed by append
     T c1, c2;
@@ -328,6 +338,7 @@ public:
     T a1; //for correcting initial stress state
 
     Field<Matrix<T, dim, dim>> t_F; // only used in implicit
+    
 
     SERIALIZATION_REGISTER(m_global_index)
     SERIALIZATION_REGISTER(m_F)
@@ -355,6 +366,7 @@ public:
             m_global_index.push_back(i);
             m_mu.push_back(mu);
             m_lambda.push_back(lambda);
+            m_chemPotential.push_back(0.0);
         }
     }
 
@@ -464,6 +476,13 @@ public:
     {
         tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
             m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
+    }
+
+    void collect_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            _m_chemPotential[m_global_index[i]] = m_chemPotential[i];
         });
     }
 
@@ -669,6 +688,13 @@ public:
             m_initialVolume[m_global_index[i]] = m_vol[i];
         });
     }
+
+    void collect_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_chemPotential[m_global_index[i]] = 0.0;
+        });
+    }
 };
 
 template <class T, int dim>
@@ -844,6 +870,13 @@ public:
     {
         tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
             m_initialVolume[m_global_index[i]] = m_vol[i];
+        });
+    }
+
+    void collect_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_chemPotential[m_global_index[i]] = 0.0;
         });
     }
 

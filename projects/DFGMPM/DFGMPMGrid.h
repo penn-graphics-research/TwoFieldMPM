@@ -35,6 +35,10 @@ public:
 
     Vector<T, dim> u1, u2; //displacement 
 
+    T chemicalPotential; //chem potential
+    int chemPotIdx; //idx for chem pot DOFs
+    //bool chemPotDOF; //marker for if this grid node should be a DOF for chem potential solve
+
     //To get grid def grad, F_i, transfer singular values and quaternion coefficients for U and V rotations from SVD!
     // Vector<T, dim> sigma1, sigma2;
     // Vector<T, 4> Uquat1, Uquat2;
@@ -64,10 +68,10 @@ public:
     //PADDING to ensure GridState is power of 2
     //NOTE: if we already had a power of two, need to pad to the next one up still because can't conditionally do padding = 0 B
     
-    //AFTER adding displacement 4/19/22
+    //adding chemicalPotential 11/16/22
     //Double2D: 640 B -> add 384 B -> 48 Ts
-    //Double3D: 896 B -> add 160 B -> 16 Ts
-    Vector<T, (-32 * dim) + 112> padding; //dim2 = 48 Ts, dim3 = 16 Ts --> y = -32x + 112
+    //Double3D: 928 B -> add 96 B -> 12 Ts
+    Vector<T, (-36 * dim) + 120> padding; //dim2 = 48 Ts, dim3 = 12 Ts --> y = -36x + 120
 
     GridState()
     {
@@ -87,6 +91,9 @@ public:
         fi2 = Vector<T, dim>::Zero();
         u1 = Vector<T,dim>::Zero();
         u2 = Vector<T,dim>::Zero();
+        chemicalPotential = 0.0;
+        chemPotIdx = -1;
+        //chemPotDOF = false;
         // sigma1 = Vector<T, dim>::Zero();
         // sigma2 = Vector<T, dim>::Zero();
         // Uquat1 = Vector<T, 4>::Zero();
@@ -285,6 +292,9 @@ public:
                     g[k].fi2 = Vector<T, dim>::Zero();
                     g[k].u1 = Vector<T, dim>::Zero();
                     g[k].u2 = Vector<T, dim>::Zero();
+                    g[k].chemicalPotential = 0;
+                    g[k].chemPotIdx = -1;
+                    //g[k].chemPotDOF = false;
                     // g[k].sigma1 = Vector<T, dim>::Zero();
                     // g[k].sigma2 = Vector<T, dim>::Zero();
                     // g[k].Uquat1 = Vector<T, 4>::Zero();
@@ -316,7 +326,7 @@ public:
 
                     //Neighbor Search
                     g[k].mappedParticles.clear();
-                    g[k].padding = Vector<T, (-32 * dim) + 112>::Zero();
+                    g[k].padding = Vector<T, (-36 * dim) + 120>::Zero();
                 }
             }
         }

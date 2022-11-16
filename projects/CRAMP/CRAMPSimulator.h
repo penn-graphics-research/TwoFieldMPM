@@ -39,7 +39,7 @@ public:
     std::vector<std::shared_ptr<ElasticityOp<T, dim>>> elasticity_models;
     BoundaryConditionManager<T, dim> BC; */
 
-    Field<int> m_marker; //0 = solid material particle, 1 = crack particle, 2 = top plane, 3 = bottom plane, 4 = fluid
+    Field<int> m_marker; //0 = solid material particle, 1 = crack particle, 2 = top plane, 3 = bottom plane, 4 = fluid, 5 = poroelastic solid (has chem potential evolution)
     int crackPlane_startIdx = 0;
     int topPlane_startIdx = 0;
     int bottomPlane_startIdx = 0;
@@ -72,6 +72,7 @@ public:
     Field<TM> m_FSmoothed;
     Field<TM> m_Fprevious; //hold previous def grad to compute Fdot, need this for dynamic J-Integral only
     Field<TV> m_Vprevious; //needed for dynamic J-integral
+    Field<T> m_chemPotential; //hold particle chemical potentials
 
     //Sim Data
     std::string outputPath;
@@ -101,6 +102,7 @@ public:
     bool trackEnergy = false;
     bool smoothParticleStressField = false;
     bool computeLamMaxFlag = false; //override to compute this even without tanh damage model
+    bool evolveChemicalPotential = false; //set in initialize by iterating through m_marker
 
     //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
     std::vector<Vector<T,8>> systemEnergy;
@@ -289,7 +291,7 @@ public:
 
         if(damageType == 1){ //for Rankine damage only
             for(int i = 0; i < (int)Base::m_mass.size(); ++i){
-                if(m_marker[i] == 0 && m_useDamage[i]){
+                if((m_marker[i] == 0 || m_marker[i] == 5) && m_useDamage[i]){
                     T mu = m_mu[i];
                     T la = m_la[i];
                     T E = (mu*(3*la + 2*mu)) / (la + mu); //recompute E for this particle
@@ -299,6 +301,13 @@ public:
                 }
             }
             Bow::Logging::info("[Rankine Damage] Computed Hs");
+        }
+
+        for(int i = 0; i < (int)m_marker.size(); ++i){
+            if(m_marker[i] == 5){
+                evolveChemicalPotential = true;
+                break;
+            }
         }
     }
 
@@ -460,6 +469,7 @@ public:
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
             model->collect_strain(m_F);
         }
+        std::cout << "Finished collecting F and Cauchy..." << std::endl;
 
         if(computeLamMaxFlag || damageType == 3){ //NOTE: only do this for tanh damage because this is super expensive
             //Now let's compute the maximum stretch for each particle
@@ -467,8 +477,6 @@ public:
             computeLamMax();
             std::cout << "Finished collecting lamMax..." << std::endl;
         }
-
-        std::cout << "Finished collecting F and Cauchy..." << std::endl;
 
         if(useDFG) {
             //DFG specific routines (partitioning)
@@ -493,6 +501,15 @@ public:
                 Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax, m_marker };
                 update_tanh();
             }
+        }
+
+        if(evolveChemicalPotential && currSubstep != 0){ //only evolve after we've done one complete substep (need m_Fprev)
+            //Collect particle chemical potentials
+            for (auto& model : Base::elasticity_models){
+                model->collect_chemPotential(m_chemPotential);
+            }
+            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, Base::dx, dt, grid };
+            solveChemPotentialSystem();
         }
 
         //Compute Scaled Stress from Elasticity Degradation
@@ -641,11 +658,11 @@ public:
         //If Loading this specimen:
         if(loading){
             //If we've not yet marked particles for loading, do so!
-            if(!particlesMarkedForLoading && !nodalLoading){
-                Bow::CRAMP::MarkParticlesForLoadingOp<T, dim> markParticles{ {}, Base::m_X, m_marker, y1, y2, grid };
-                markParticles();
-                particlesMarkedForLoading = true;
-            }
+            // if(!particlesMarkedForLoading && !nodalLoading){
+            //     Bow::CRAMP::MarkParticlesForLoadingOp<T, dim> markParticles{ {}, Base::m_X, m_marker, y1, y2, grid };
+            //     markParticles();
+            //     particlesMarkedForLoading = true;
+            // }
             
             //Grab initial volume
             for (auto& model : Base::elasticity_models){
@@ -1033,6 +1050,7 @@ public:
         m_FSmoothed.push_back(TM::Identity());
         m_cauchySmoothed.push_back(TM::Identity()); 
         m_scaledCauchy.push_back(TM::Identity());
+        m_chemPotential.push_back(0.0);
         
         //DFG Neighbor Structures
         std::vector<int> placeholder, placeholder2, placeholder3;

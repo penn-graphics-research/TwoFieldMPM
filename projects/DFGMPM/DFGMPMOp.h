@@ -42,7 +42,7 @@ public:
         
         //Now we can do backGrid sorting!
         grid.serial_for([&](int i) {   
-            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles, fluid particles, or non-damaging solid particles     
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && (m_marker[i] == 0 || m_marker[i] == 5)){ //skip crack particles, fluid particles, or non-damaging solid particles     
                 const Vector<T, dim> pos = m_X[i];
 
                 //convert particle position to gridIdx
@@ -78,7 +78,7 @@ public:
     {
         BOW_TIMER_FLAG("particleNeighborSorting");
         grid.parallel_for([&](int p_i) {
-            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0){ //skip crack particles, fluid particles, or non-damaging solid particles    
+            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && (m_marker[p_i] == 0 || m_marker[p_i] == 5)){ //skip crack particles, fluid particles, or non-damaging solid particles    
                 const Vector<T, dim> pos_i = m_X[p_i];
                 BSplineWeights<T, dim> spline(pos_i, rp);
                 particleNeighbors[p_i].clear(); //empty neighbor list for this particle before we fill it up
@@ -124,7 +124,7 @@ public:
         //parallel loop over particles
         tbb::parallel_for(tbb::blocked_range<int>(0, particleNeighbors.size()), [&](tbb::blocked_range<int> b) {
             for (int p_i = b.begin(); p_i < b.end(); ++p_i) {
-                if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0){ //skip crack particles or fluid particles if we have them   
+                if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && (m_marker[p_i] == 0 || m_marker[p_i] == 5)){ //skip crack particles or fluid particles if we have them   
                     const Vector<T, dim> pos_i = m_X[p_i];
                     T S = 0.0;
                     for (size_t j = 0; j < particleNeighbors[p_i].size(); ++j) { //iter particle neighbors
@@ -171,7 +171,7 @@ public:
 
         BOW_TIMER_FLAG("computeDGs");
         grid.colored_for([&](int p_i) {
-            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && m_marker[p_i] == 0 && m_useDamage[p_i]){ //skip crack particles, fluid particles, or non-damaging solid particles 
+            if((!grid.crackInitialized || p_i < grid.crackParticlesStartIdx) && (m_marker[p_i] == 0 || m_marker[p_i] == 5) && m_useDamage[p_i]){ //skip crack particles, fluid particles, or non-damaging solid particles 
                 const Vector<T, dim> pos_i = m_X[p_i];
                 T D = 0.0;
                 T S = 0.0;
@@ -283,7 +283,7 @@ public:
 
                         //Now mark separable = 4 if this was fluid, 5 if it was solid, and mark it 3 if we've now been hit by both solid and fluid!
                         if(g.separable == 0){ //if previously never mapped to
-                            if(m_marker[i] == 0){
+                            if(m_marker[i] == 0 || m_marker[i] == 5){
                                 g.separable = 5;
                             }
                             else if(m_marker[i] == 4){
@@ -373,7 +373,7 @@ public:
                     grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
                         if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
                             int materialIdx = m_marker[i];
-                            if(materialIdx == 0){
+                            if(materialIdx == 0 || materialIdx == 5){
                                 g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
                             }
                             else if(materialIdx == 4){ //transfer fluid particles to field 2
@@ -1054,7 +1054,7 @@ public:
                     else if (g.separable == 3 || g.separable == 6) { //solid-fluid coupling case
                         //treat as two-field node
                         int materialIdx = m_marker[i]; //solid in field 1, fluid in field 2
-                        if (materialIdx == 0) {
+                        if (materialIdx == 0 || materialIdx == 5) {
                             picV += w * g_v_new;
                             flipV += w * (g_v_new - g_v_old);
                             picX += w * g.x1;
@@ -1089,7 +1089,7 @@ public:
                         }
                         else if (g.separable == 3 || g.separable == 6){ //solid-fluid coupling cases
                             int materialIdx = m_marker[i]; //grab materialIdx, solid in field 1, fluid in field 2
-                            if (materialIdx == 0) {
+                            if (materialIdx == 0 || materialIdx == 5) {
                                 Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
                             }
                             else if (materialIdx == 4) {

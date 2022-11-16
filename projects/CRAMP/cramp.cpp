@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
-        using T = double;
+        using T = float;
         static const int dim = 2;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
@@ -155,6 +155,11 @@ int main(int argc, char *argv[])
         //Double2D: 640 B -> add 384 B -> 48 Ts
         //Double3D: 896 B -> add 160 B -> 16 Ts
         //Vector<T, (-32 * dim) + 112> padding; //dim2 = 48 Ts, dim3 = 16 Ts --> y = -32x + 112
+
+        //adding chemicalPotential and Idx (T and int) 11/16/22
+        //Double2D: 640 B -> add 384 B -> 48 Ts
+        //Double3D: 928 B -> add 96 B -> 12 Ts
+        //Vector<T, (-36 * dim) + 120> padding; //dim2 = 48 Ts, dim3 = 12 Ts --> y = -36x + 120
     }
     
     /*--------------2D BEGIN (200 SERIES)---------------*/
@@ -3877,7 +3882,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/232_ToroidalPressureGradientWithPoroelasticClot_DirichletPipeWallsSTICKY_c1_300k_c2_2.0_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
+        std::string path = "output/232_ToroidalPressureGradientWPoroelasticClotAndChemPotentialEvolution_DirichletPipeWallsSTICKY_c1_300k_c2_2.0_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -3950,7 +3955,7 @@ int main(int argc, char *argv[])
         //Vector<T, dim> notchMin(center[0] - radius, center[1] + sim.dx);
         //Vector<T, dim> notchMax(center[0] - radius*0.5, center[1] + sim.dx*3.0);
         //bool damageRegion = false; //toggle this to switch between damage region and material discontinuity
-        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 0);
+        sim.sampleHemispherePoissonDisk(material3, center, radius, Vector<T, dim>(0, 0), ppc, rhoSolid2, true, 5); //add marker = 5 for poroelastic clot
 
         //Add blood particles inside artery
         //T height_f = pipeWidth - (sim.dx * 2.0); //32mm

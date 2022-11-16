@@ -12,6 +12,7 @@
 #include <SPGrid/Core/SPGrid_Page_Map.h>
 #include <Bow/Math/SVD.h>
 #include <Bow/Math/PolarDecomposition.h>
+#include <Eigen/SparseCore>
 
 using namespace SPGrid;
 
@@ -123,7 +124,7 @@ public:
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2
                             int materialIdx = m_marker[i];
-                            if(materialIdx == 0){
+                            if(materialIdx == 0 || materialIdx == 5){
                                 if(massRatio == 0){
                                     g.m1 += mass * w; //have to do this here if we don't use massRatio
                                 }
@@ -272,7 +273,7 @@ public:
     {
         BOW_TIMER_FLAG("simpleLinearTensionElasticityDegradation");
         grid.parallel_for([&](int i) {
-            if(m_marker[i] == 0){
+            if(m_marker[i] == 0 || m_marker[i] == 5){
                 //Compute updated damage and the associated scaled Cauchy stress (Homel 2016 eq. 26 and 27) 
                 Matrix<T, dim, dim> sigmaScaled = Matrix<T, dim, dim>::Zero();
                 Vector<T, dim> eigenVec;
@@ -319,7 +320,7 @@ public:
     {
         BOW_TIMER_FLAG("updateRankineDamage");
         grid.parallel_for([&](int i) {
-            if(m_marker[i] == 0 && m_useDamage[i]){
+            if((m_marker[i] == 0 || m_marker[i] == 5) && m_useDamage[i]){
                 //Compute updated damage
                 Vector<T, dim> eigenVec;
                 T eigenVal = 0.0;
@@ -364,7 +365,7 @@ public:
         
         //Compute updated damage using d = 0.5 + 0.5tanh((lamMax - lamC) / tanhWidth)
         grid.parallel_for([&](int i) {
-            if(m_marker[i] == 0 && m_useDamage[i]){            
+            if((m_marker[i] == 0 || m_marker[i] == 5) && m_useDamage[i]){            
                 //Update damage values
                 T newD = 0.5 + (0.5 * tanh((m_lamMax[i] - lamC)/tanhWidth));
                 m_Dp[i] = std::max(m_Dp[i], newD); //function will always be between 0 and 1, so we just have to make sure it's monotonically increasing
@@ -391,7 +392,7 @@ public:
         
         grid.serial_for([&](int i) {
             
-            if(m_marker[i] == 0 && m_useDamage[i]){
+            if((m_marker[i] == 0 || m_marker[i] == 5) && m_useDamage[i]){
                 
                 //Compute polar decomposition so we can compute maximum stretch, lamMax
                 // Matrix<T, dim, dim> R, S;
@@ -441,7 +442,7 @@ public:
     {
         BOW_TIMER_FLAG("tensorP2G");
         grid.colored_for([&](int i) {
-            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles if we have them and only process SOLID particles!
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && (m_marker[i] == 0 || m_marker[i] == 5)){ //skip crack particles if we have them and only process SOLID particles!
                 const Vector<T, dim> pos = m_X[i];
                 const T mass = m_mass[i];
                 const Matrix<T, dim, dim> cauchyXmass = m_cauchy[i] * mass; //cauchy * m_p
@@ -546,7 +547,7 @@ public:
     {
         BOW_TIMER_FLAG("tensorG2P");
         grid.parallel_for([&](int i) {
-            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 0){ //skip crack particles if we have them and only process SOLID particles!
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && (m_marker[i] == 0 || m_marker[i] == 5)){ //skip crack particles if we have them and only process SOLID particles!
                 const Vector<T, dim> pos = m_X[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 
@@ -887,36 +888,36 @@ int signedTriangleArea(Vector<T,dim> _x1, Vector<T,dim> _x2, Vector<T,dim> _x3){
     return 0;
 }
 
-/*Mark particles for loading, takes in upper and lower boundaries for Mode 1 loading */
-template <class T, int dim>
-class MarkParticlesForLoadingOp : public AbstractOp {
-public:
-    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
-    Field<Vector<T, dim>>& m_X;
-    Field<int>& m_marker;
-    T y1;
-    T y2;
+// /*Mark particles for loading, takes in upper and lower boundaries for Mode 1 loading */
+// template <class T, int dim>
+// class MarkParticlesForLoadingOp : public AbstractOp {
+// public:
+//     using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+//     Field<Vector<T, dim>>& m_X;
+//     Field<int>& m_marker;
+//     T y1;
+//     T y2;
 
-    DFGMPM::DFGMPMGrid<T, dim>& grid;
+//     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
-    void operator()()
-    {
-        BOW_TIMER_FLAG("Mark Particles for Mode 1 Loading");
+//     void operator()()
+//     {
+//         BOW_TIMER_FLAG("Mark Particles for Mode 1 Loading");
 
-        //Iterate particles and mark as either 4 (up) or 5 (down)
-        grid.parallel_for([&](int i) {
-            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
-                const Vector<T, dim> pos = m_X[i];
-                if(pos[1] > y1 || pos[1] < y2){ //ONLY set to 4 or 5 if particle is above y1 and below y2!
-                    m_marker[i] = 4;
-                    if(pos[1] < y2){
-                        m_marker[i] = 5; //set as 5 for particles below y2
-                    }
-                }
-            }
-        });
-    }
-};
+//         //Iterate particles and mark as either 4 (up) or 5 (down)
+//         grid.parallel_for([&](int i) {
+//             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+//                 const Vector<T, dim> pos = m_X[i];
+//                 if(pos[1] > y1 || pos[1] < y2){ //ONLY set to 4 or 5 if particle is above y1 and below y2!
+//                     m_marker[i] = 4;
+//                     if(pos[1] < y2){
+//                         m_marker[i] = 5; //set as 5 for particles below y2
+//                     }
+//                 }
+//             }
+//         });
+//     }
+// };
 
 /*Iterate grid to apply a mode I loading to the configuration based on y1, y2, and sigmaA */
 template <class T, int dim>
@@ -954,43 +955,42 @@ public:
 
         //NOTE: using nodalLoading = TRUE is what we always use!!! false is outdated
 
+        // if(!nodalLoading){
+        //     //Using particle volume, compute per particle forces using the scaledSigmaA passed in, then transfer this force to the grid and apply it
+        //     grid.colored_for([&](int i) {
+        //         if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+        //             const Vector<T, dim> pos = m_X[i];
+        //             const int marker = m_marker[i];
+        //             stress = scaledSigmaA;
+
+        //             if(marker == 4 || marker == 5){ //ONLY apply this force to particles above y1 and below y2!
+        //                 if(marker == 5){
+        //                     stress *= -1; //apply negative here for particles below y2
+        //                 }
+
+        //                 //m_vol = dx^2 / PPC, however, need to compute Ap = dx / sqrt(PPC)
+        //                 T ppcSqrt = std::pow(ppc, (T)1 / (T)dim);
+        //                 T Ap = m_vol[i] * (ppcSqrt / dx);
+        //                 T fp = Ap * stress; //particle force (working simply with y direction magnitude, not full vector)
+
+        //                 //std::cout << "particle idx:" << i << "fp:" << fp << std::endl;
+
+        //                 BSplineWeights<T, dim> spline(pos, dx);
+        //                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+        //                     //Store f_i in gridViYi since we're not using it anyway
+        //                     g.gridViYi1 += fp * w;
+        //                 });
+        //             }
+        //         }
+        //     });
+        // }
+
         T stress = scaledSigmaA;
-        if(!nodalLoading){
-            //Using particle volume, compute per particle forces using the scaledSigmaA passed in, then transfer this force to the grid and apply it
-            grid.colored_for([&](int i) {
-                if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
-                    const Vector<T, dim> pos = m_X[i];
-                    const int marker = m_marker[i];
-                    stress = scaledSigmaA;
-
-                    if(marker == 4 || marker == 5){ //ONLY apply this force to particles above y1 and below y2!
-                        if(marker == 5){
-                            stress *= -1; //apply negative here for particles below y2
-                        }
-
-                        //m_vol = dx^2 / PPC, however, need to compute Ap = dx / sqrt(PPC)
-                        T ppcSqrt = std::pow(ppc, (T)1 / (T)dim);
-                        T Ap = m_vol[i] * (ppcSqrt / dx);
-                        T fp = Ap * stress; //particle force (working simply with y direction magnitude, not full vector)
-
-                        //std::cout << "particle idx:" << i << "fp:" << fp << std::endl;
-
-                        BSplineWeights<T, dim> spline(pos, dx);
-                        grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
-                            //Store f_i in gridViYi since we're not using it anyway
-                            g.gridViYi1 += fp * w;
-                        });
-                    }
-                }
-            });
-        }
-        else{
-            //F_total = sigmaA * width * thickness
-            //Distribute into N pieces with N = width / dx
-            //F_nodal = F_total / N = (sigmaA * width * thickness) / (width / dx) -> we use t = 1 here
-            //F_nodal = sigmaA * thickness * dx -> t = 1
-            stress *= dx; //F_nodal (ends get half of this)
-        }
+        //F_total = sigmaA * width * thickness
+        //Distribute into N pieces with N = width / dx
+        //F_nodal = F_total / N = (sigmaA * width * thickness) / (width / dx) -> we use t = 1 here
+        //F_nodal = sigmaA * thickness * dx -> t = 1
+        stress *= dx;
         
         /* Iterate grid to apply these loadings to the velocities */
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
@@ -2459,7 +2459,7 @@ public:
         //Now iterate particles and sum up energy contributions
         grid.serial_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ 
-                if(m_marker[i] == 0){
+                if(m_marker[i] == 0 || m_marker[i] == 5){
                     energies[0] += m_energy[i]; //solid PE
                     energies[2] += 0.5 * m_mass[i] * (m_V[i].dot(m_V[i])); //solid KE
                     energies[4] += gravity * m_mass[i] * m_X[i][1]; //solid GPE
@@ -2585,6 +2585,205 @@ public:
 //         });
 //     }
 // };
+
+/* Solve and Evolve Chemical Potential for Fibrin Poroelasticity */
+template <class T, int dim>
+class SolveChemicalPotentialSystemOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    using Vec = Bow::Vector<T, Eigen::Dynamic>;
+    using Mat = Matrix<T, dim, Eigen::Dynamic>;
+    Field<Vector<T, dim>>& m_X;
+    std::vector<T>& m_mass;
+    Field<T>& m_chemPotential;
+    Field<Matrix<T, dim, dim>>& m_F;
+    Field<Matrix<T, dim, dim>>& m_Fprev;
+    Field<int> m_marker;
+
+    T dx;
+    T dt;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("EvolveChemicalPotential");
+
+        //Parameters (can pass these later, for now hard coded)
+        T eta = 0.004;
+        T phi_s0 = 0.01;
+        T r_f = 60 * 10e-9; //60 nm
+        T k_net = computePermeability(r_f, phi_s0);
+        int max_iters = 1000;
+        T tol = 1e-6;
+
+        //Transfer current chemical potential, F, and Fprevious to the grid
+        grid.colored_for([&](int i) {
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                const T mass = m_mass[i];
+                const T chemPotential = m_chemPotential[i];
+                const Matrix<T, dim, dim> FxMass = m_F[i] * mass; //F * m_p
+                const Matrix<T, dim, dim> prevFxMass = m_Fprev[i] * mass; //Fprev * m_p
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    g.chemicalPotential += chemPotential * w;
+                    g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
+                    g.Fi1 += FxMass * w;
+                    g.Fi2 += prevFxMass * w;
+                    g.cauchy1(0,0) += mass * w; //hold mass in here to avoid messing with other mass transfers
+                    g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
+                });
+            }
+        });
+
+        
+
+        //Count DOFs and set indeces for them
+        int dofs = 0;
+        grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                g.chemPotIdx = dofs;
+                dofs++;
+            }
+        });
+
+        //Set RHS => Build A (num_nodes x 1)
+        Vec rhs(dofs);
+        rhs.setZero();
+
+        // Divide out the grid masses
+        grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                g.Fi1 /= g.cauchy1(0,0); //current
+                g.Fi2 /= g.cauchy1(0,0); //previous
+
+                g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
+                
+                //Build RHS after we divide out the grid masses
+                rhs[g.chemPotIdx] = ((1.0 - (g.Fi2.determinant() / g.Fi1.determinant())) / dt ) * (eta / k_net);
+            }
+        });
+
+        //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
+        Vec x(dofs);
+        Vec r(dofs);
+        Vec p(dofs);
+        Vec q(dofs);
+        Vec temp(dofs);
+        r.setZero();
+        p.setZero();
+        q.setZero();
+        temp.setZero();
+        x.setZero(); //initial guess
+        T alpha = 0.0;
+        T beta = 0.0;
+        T rhoCurr = 0.0;
+        T rhoPrev = 0.0;
+        
+        multiply(x, temp);
+        r = rhs - temp;
+        for(int count = 0; count < max_iters; ++count){
+            rhoCurr = r.dot(r); //rho_(i-1)
+            
+            T residualNorm = std::sqrt(rhoCurr);
+            if(residualNorm <= tol){
+                Logging::info("\tCG terminates at ", count, ": residual = ", residualNorm);
+                break;
+            }
+            if(count % 50 == 0){
+                Logging::info("\tCG iter ", count, "; residual = ", residualNorm);
+            }
+            
+            if(count == 0){
+                p = r; // p_1 
+            }
+            else{
+                beta = rhoCurr / rhoPrev; //beta_(i-1)
+                p = r + (beta * p); // p_i
+            }
+            multiply(p, q); //q = Ap
+            alpha = rhoCurr / (p.dot(q));
+            x = x + (alpha * p);
+            r = r - (alpha * q);
+
+            rhoPrev = rhoCurr;
+        }
+
+        //Compute the difference in grid chemical potential
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between old and new chem pot!
+            }
+        });
+
+        //Transfer back the differenced chemical potentials and update particle chem pots
+
+
+        //Reset the grid structures we used for this evolution
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                g.chemPotIdx = -1;
+                g.Fi1 = Matrix<T,dim,dim>::Zero();
+                g.Fi2 = Matrix<T,dim,dim>::Zero();
+                g.cauchy1 = Matrix<T,dim,dim>::Zero();
+                g.cauchy2 = Matrix<T,dim,dim>::Zero();
+            }
+        });
+
+        return;
+    }
+
+    //---- Helper methods for Chemical Potential PCG solver ----
+
+    T computePermeability(T r_f, T phi_s0){
+        return (r_f*r_f) / (16*pow(phi_s0, 1.5) * (1 + 56*pow(phi_s0, 3.0)));
+    }
+
+    // b = A*x
+    void multiply(Vec& x, Vec& b){
+
+        int numParticles = (int)m_X.size();
+        Mat gradc_scp = Mat::Zero(dim, numParticles);
+        
+        grid.parallel_for([&](int i) {
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    int node_id = g.chemPotIdx; //this indexes the chem pot DOFs
+                    if(node_id < 0){
+                        return;
+                    }
+                    gradc_scp.col(i) += x(node_id) * dw;
+                });
+            }
+        });
+
+        b.setZero();
+
+        //Now set b = A*x (A defined by our chem potential system)
+        grid.colored_for([&](int i) {
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    int node_id = g.chemPotIdx;
+                    if(node_id < 0){
+                        return;
+                    }
+                    b(node_id) += gradc_scp.col(i).dot(dw);
+                });
+            }
+        });
+
+        return;
+    }
+
+};
+
 
 }
 } // namespace Bow::DFGMPM
