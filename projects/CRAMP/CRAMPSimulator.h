@@ -507,8 +507,9 @@ public:
             //Collect particle chemical potentials
             for (auto& model : Base::elasticity_models){
                 model->collect_chemPotential(m_chemPotential);
+                model->compute_volume(m_currentVolume);
             }
-            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, Base::dx, dt, grid };
+            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, m_currentVolume, Base::dx, dt, grid };
             solveChemPotentialSystem();
             //Assign the new chemical potentials to the elasticity models
             for (auto& model : Base::elasticity_models){

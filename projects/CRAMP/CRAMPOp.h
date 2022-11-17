@@ -2599,6 +2599,7 @@ public:
     Field<Matrix<T, dim, dim>>& m_F;
     Field<Matrix<T, dim, dim>>& m_Fprev;
     Field<int> m_marker;
+    Field<T> m_vol;
 
     T dx;
     T dt;
@@ -2764,6 +2765,7 @@ public:
         grid.parallel_for([&](int i) {
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
                 const Vector<T, dim> pos = m_X[i];
+                const T vol = m_vol[i];
                 BSplineWeights<T, dim> spline(pos, dx);
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
@@ -2773,6 +2775,8 @@ public:
                     }
                     gradc_scp.col(i) += x(node_id) * dw;
                 });
+
+                gradc_scp.col(i) *= vol;
             }
         });
 
