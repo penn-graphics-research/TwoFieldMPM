@@ -2650,8 +2650,8 @@ public:
         });
 
         //Set RHS => Build A (num_nodes x 1)
-        Vec rhs(dofs);
-        rhs.setZero();
+        Vec b(dofs);
+        b.setZero();
 
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
@@ -2662,9 +2662,11 @@ public:
                 g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
                 
                 //Build RHS after we divide out the grid masses
-                rhs[g.chemPotIdx] = ((1.0 - (g.Fi2.determinant() / g.Fi1.determinant())) / dt ) * (eta / k_net);
+                b[g.chemPotIdx] = ((1.0 - (g.Fi2.determinant() / g.Fi1.determinant())) / dt ) * (eta / k_net);
             }
         });
+
+        std::cout << "RHS: " << b << std::endl;
 
         //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
         Vec x(dofs);
@@ -2679,15 +2681,17 @@ public:
         x.setZero(); //initial guess
         T alpha = 0.0;
         T beta = 0.0;
-        T rhoMinusOne = 0.0;
-        T rhoMinusTwo = 0.0;
+        T zTrk = 0.0;
+        T zTrk_last = 0.0;
+        T residualNorm = 0.0;
         
         multiply(x, temp);
-        r = rhs - temp;
-        for(int count = 0; count < max_iters; ++count){
-            rhoMinusOne = r.dot(r); //rho_(i-1)
-            
-            T residualNorm = std::sqrt(rhoMinusOne);
+        r = b - temp;
+        precondition(r, q);
+        p = q;
+        zTrk = r.dot(q);
+        residualNorm = std::sqrt(zTrk);
+        for(int count = 0; count < max_iters; ++count){            
             if(residualNorm <= tol){
                 Logging::info("\tCG terminates at ", count, ": residual = ", residualNorm);
                 break;
@@ -2695,20 +2699,20 @@ public:
             if(count % 50 == 0){
                 Logging::info("\tCG iter ", count, "; residual = ", residualNorm);
             }
-            
-            if(count == 0){
-                p = r; // p_1 
-            }
-            else{
-                beta = rhoMinusOne / rhoMinusTwo; //beta_(i-1)
-                p = r + (beta * p); // p_i
-            }
-            multiply(p, q); //q = Ap
-            alpha = rhoMinusOne / (p.dot(q));
+            multiply(p, temp);
+            alpha = zTrk / (temp.dot(p));
             x += (alpha * p);
-            r -= (alpha * q);
+            r -= (alpha * temp);
 
-            rhoMinusTwo = rhoMinusOne;
+            precondition(r, q);
+
+            zTrk_last = zTrk;
+            zTrk = q.dot(r);
+            beta = zTrk / zTrk_last;
+
+            p = q + beta*p;
+
+            residualNorm = std::sqrt(zTrk);
         }
 
         //Compute the difference in grid chemical potential
@@ -2799,6 +2803,29 @@ public:
         });
 
         return;
+    }
+
+    void precondition(Vec& in, Vec& out){
+
+        out.setZero();
+        grid.parallel_for([&](int i) {
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                const T vol = m_vol[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    int node_id = g.chemPotIdx; //this indexes the chem pot DOFs
+                    if(node_id < 0){
+                        return;
+                    }
+                    out(node_id) += vol * dw.dot(dw);
+                });
+            }
+        });
+        for(int i = 0; i < (int)in.size(); ++i){
+            out(i) = in(i) / out(i);
+        }
     }
 
 };
