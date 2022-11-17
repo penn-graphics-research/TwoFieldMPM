@@ -44,6 +44,7 @@ public:
     virtual void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) {}
     virtual void collect_initialVolume(Field<T>& m_initialVolume) {}
     virtual void collect_chemPotential(Field<T>& m_chemPotential) {}
+    virtual void update_chemPotential(Field<T>& m_chemPotential) {}
 };
 
 template <class T, int dim, class Model, bool inversion_free>
@@ -301,6 +302,11 @@ public:
             _m_chemPotential[m_global_index[i]] = 0.0;
         });
     }
+
+    void update_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        return;
+    }
 };
 
 template <class T, int dim>
@@ -393,7 +399,7 @@ public:
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
             T J = F.determinant();
-            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            T mu = m_chemPotential[i];
             first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             cauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
         });
@@ -414,7 +420,7 @@ public:
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
-            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            T mu = m_chemPotential[i];
             first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             stress[m_global_index[i]] = m_vol[i] * P * F.transpose();
         });
@@ -426,7 +432,7 @@ public:
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             Matrix<T, dim, dim> F = m_F[i];
             Matrix<T, dim, dim> P;
-            T mu = 0.0; //TODO: grab actual chemical potential, mu
+            T mu = m_chemPotential[i];
             first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
             piola[m_global_index[i]] = P;
         });
@@ -483,6 +489,13 @@ public:
     {
         tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
             _m_chemPotential[m_global_index[i]] = m_chemPotential[i];
+        });
+    }
+
+    void update_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+            m_chemPotential[i] = _m_chemPotential[m_global_index[i]];
         });
     }
 
@@ -695,6 +708,11 @@ public:
             _m_chemPotential[m_global_index[i]] = 0.0;
         });
     }
+
+    void update_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        return;
+    }
 };
 
 template <class T, int dim>
@@ -878,6 +896,11 @@ public:
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
             _m_chemPotential[m_global_index[i]] = 0.0;
         });
+    }
+
+    void update_chemPotential(Field<T>& _m_chemPotential) override
+    {
+        return;
     }
 
     // T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) override

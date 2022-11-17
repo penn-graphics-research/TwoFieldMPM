@@ -2678,15 +2678,15 @@ public:
         x.setZero(); //initial guess
         T alpha = 0.0;
         T beta = 0.0;
-        T rhoCurr = 0.0;
-        T rhoPrev = 0.0;
+        T rhoMinusOne = 0.0;
+        T rhoMinusTwo = 0.0;
         
         multiply(x, temp);
         r = rhs - temp;
         for(int count = 0; count < max_iters; ++count){
-            rhoCurr = r.dot(r); //rho_(i-1)
+            rhoMinusOne = r.dot(r); //rho_(i-1)
             
-            T residualNorm = std::sqrt(rhoCurr);
+            T residualNorm = std::sqrt(rhoMinusOne);
             if(residualNorm <= tol){
                 Logging::info("\tCG terminates at ", count, ": residual = ", residualNorm);
                 break;
@@ -2699,26 +2699,41 @@ public:
                 p = r; // p_1 
             }
             else{
-                beta = rhoCurr / rhoPrev; //beta_(i-1)
+                beta = rhoMinusOne / rhoMinusTwo; //beta_(i-1)
                 p = r + (beta * p); // p_i
             }
             multiply(p, q); //q = Ap
-            alpha = rhoCurr / (p.dot(q));
-            x = x + (alpha * p);
-            r = r - (alpha * q);
+            alpha = rhoMinusOne / (p.dot(q));
+            x += (alpha * p);
+            r -= (alpha * q);
 
-            rhoPrev = rhoCurr;
+            rhoMinusTwo = rhoMinusOne;
         }
 
         //Compute the difference in grid chemical potential
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
-                g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between old and new chem pot!
+                g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
             }
         });
 
         //Transfer back the differenced chemical potentials and update particle chem pots
+        grid.parallel_for([&](int i) {
+            if(m_marker[i] == 5){ //skip crack particles if we have them and only process SOLID particles!
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
 
+                T newChemPotential = 0.0;
+                
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    if (g.chemPotIdx > -1){
+                        newChemPotential += g.chemicalPotential * w;
+                    }
+                });
+
+                m_chemPotential[i] += newChemPotential;
+            }
+        });
 
         //Reset the grid structures we used for this evolution
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {

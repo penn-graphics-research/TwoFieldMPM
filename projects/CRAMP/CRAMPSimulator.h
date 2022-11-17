@@ -510,6 +510,10 @@ public:
             }
             Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, Base::dx, dt, grid };
             solveChemPotentialSystem();
+            //Assign the new chemical potentials to the elasticity models
+            for (auto& model : Base::elasticity_models){
+                model->update_chemPotential(m_chemPotential);
+            }
         }
 
         //Compute Scaled Stress from Elasticity Degradation
@@ -788,7 +792,7 @@ public:
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential);
 
             std::cout << "Substep Written..." << std::endl;
 
@@ -981,7 +985,7 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential);
 
             std::cout << "Frame Written (p)..." << std::endl;
 

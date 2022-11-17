@@ -318,7 +318,7 @@ BOW_INLINE void write_ply(const std::string filename, const Field<Vector<T, dim>
 }
 
 template <class T, int dim>
-BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Field<Vector<T, dim>>& _vertices, const Field<Vector<T, dim>>& velocities, const Field<Vector<T, dim>>& damageGradients, const std::vector<T>& masses, const std::vector<T>& damage, const std::vector<int>& _sp, const Field<int>& _markers, const Field<Matrix<T,dim,dim>>& _m_cauchySmooth, const Field<Matrix<T,dim,dim>>& _m_FSmooth, const Field<T>& m_lamMax, const bool smoothParticleStressField, const Field<Matrix<T,dim,dim>>& _m_cauchy, const Field<Matrix<T,dim,dim>>& _m_F, const bool binary)
+BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Field<Vector<T, dim>>& _vertices, const Field<Vector<T, dim>>& velocities, const Field<Vector<T, dim>>& damageGradients, const std::vector<T>& masses, const std::vector<T>& damage, const std::vector<int>& _sp, const Field<int>& _markers, const Field<Matrix<T,dim,dim>>& _m_cauchySmooth, const Field<Matrix<T,dim,dim>>& _m_FSmooth, const Field<T>& m_lamMax, const bool smoothParticleStressField, const Field<Matrix<T,dim,dim>>& _m_cauchy, const Field<Matrix<T,dim,dim>>& _m_F, const Field<T>& m_chemPot, const bool binary)
 {
     Logging::info("Writing: ", filename);
     Field<Vector<T, 3>> vertices(_vertices.size());
@@ -349,6 +349,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
     Field<T> pressure(_vertices.size());
     Field<T> smoothJ(_vertices.size());
     Field<T> smoothPressure(_vertices.size());
+    Field<T> chemicalPotential(_vertices.size());
 
     //Logging::info("Fields Initialized");
 
@@ -389,7 +390,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         d[i] = damage[i];
         sp[i] = _sp[i];
         markers[i] = _markers[i];
-        if(_markers[i] == 0){ //only write the rest if these are actual particles (rather than crack particles)
+        if(_markers[i] == 0 || _markers[i] == 5){ //only write the rest if these are actual particles (rather than crack particles)
 
             F11[i] = _m_F[i](0,0);
             F22[i] = _m_F[i](1,1);
@@ -406,6 +407,10 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
             smooth_sigma12[i] = _m_cauchySmooth[i](0,1);
 
             lamMax[i] = m_lamMax[i];
+
+            if(_markers[i] == 5){
+                chemicalPotential[i] = m_chemPot[i];
+            }
         }
         else if(_markers[i] == 4){ //collect J and pressure for fluid particles (stored in F11 and F22 respectively)
             
@@ -458,6 +463,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         file.add_properties_to_element("vertex", { "pressure" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(pressure.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothJ" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smoothJ.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothPressure" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(smoothPressure.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "chemPot" }, tinyply::Type::FLOAT32, vertices.size(), reinterpret_cast<const uint8_t*>(chemicalPotential.data()), tinyply::Type::INVALID, 0);
     }
     else {
         file.add_properties_to_element("vertex", { "x", "y", "z" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<uint8_t*>(vertices.data()), tinyply::Type::INVALID, 0);
@@ -488,6 +494,7 @@ BOW_INLINE void writeTwoField_particles_ply(const std::string filename, const Fi
         file.add_properties_to_element("vertex", { "pressure" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(pressure.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothJ" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smoothJ.data()), tinyply::Type::INVALID, 0);
         file.add_properties_to_element("vertex", { "smoothPressure" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(smoothPressure.data()), tinyply::Type::INVALID, 0);
+        file.add_properties_to_element("vertex", { "chemPot" }, tinyply::Type::FLOAT64, vertices.size(), reinterpret_cast<const uint8_t*>(chemicalPotential.data()), tinyply::Type::INVALID, 0);
     }
 
     //Logging::info("Properties Added");
@@ -738,8 +745,8 @@ template void write_ply(const std::string filename, const Field<Vector<float, 2>
 template void write_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const bool);
 template void write_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Vector<int, 3>>&, const Field<float>&, const bool);
 template void write_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Vector<int, 3>>&, const Field<float>&, const bool);
-template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Vector<float, 2>>& velocities, const Field<Vector<float, 2>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,2,2>>& m_cauchySmooth, const Field<Matrix<float,2,2>>& m_FSmooth, const Field<float>& lamMax, const bool smoothParticleStressField, const Field<Matrix<float,2,2>>& m_cauchy, const Field<Matrix<float,2,2>>& m_F, const bool);
-template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Vector<float, 3>>& velocities, const Field<Vector<float, 3>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,3,3>>& m_cauchySmooth, const Field<Matrix<float,3,3>>& m_FSmooth, const Field<float>& lamMax, const bool smoothParticleStressField, const Field<Matrix<float,3,3>>& m_cauchy, const Field<Matrix<float,3,3>>& m_F,const bool);
+template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Vector<float, 2>>& velocities, const Field<Vector<float, 2>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,2,2>>& m_cauchySmooth, const Field<Matrix<float,2,2>>& m_FSmooth, const Field<float>& lamMax, const bool smoothParticleStressField, const Field<Matrix<float,2,2>>& m_cauchy, const Field<Matrix<float,2,2>>& m_F, const Field<float>& m_chemPot, const bool);
+template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Vector<float, 3>>& velocities, const Field<Vector<float, 3>>& damageGradients, const std::vector<float>& masses, const std::vector<float>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<float,3,3>>& m_cauchySmooth, const Field<Matrix<float,3,3>>& m_FSmooth, const Field<float>& lamMax, const bool smoothParticleStressField, const Field<Matrix<float,3,3>>& m_cauchy, const Field<Matrix<float,3,3>>& m_F, const Field<float>& m_chemPot, const bool);
 template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 2>>& vertices, const Field<Matrix<float, 2, 2>>& cauchy1, const Field<Matrix<float, 2, 2>>& cauchy2, const Field<Matrix<float, 2, 2>>& Fi1, const Field<Matrix<float, 2, 2>>& Fi2, const Field<Vector<float, 2>>& damageGradients, const Field<Vector<float, 2>>& v1, const Field<Vector<float, 2>>& v2, const Field<Vector<float, 2>>& fct1, const Field<Vector<float, 2>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const Field<Vector<float, 2>>& n1, const Field<Vector<float, 2>>& n2, const bool);
 template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<float, 3>>& vertices, const Field<Matrix<float, 3, 3>>& cauchy1, const Field<Matrix<float, 3, 3>>& cauchy2, const Field<Matrix<float, 3, 3>>& Fi1, const Field<Matrix<float, 3, 3>>& Fi2, const Field<Vector<float, 3>>& damageGradients, const Field<Vector<float, 3>>& v1, const Field<Vector<float, 3>>& v2, const Field<Vector<float, 3>>& fct1, const Field<Vector<float, 3>>& fct2, const std::vector<float>& m1, const std::vector<float>& m2, const std::vector<float>& sep1, const std::vector<float>& sep2, const std::vector<int>& separable, const Field<Vector<float, 3>>& n1, const Field<Vector<float, 3>>& n2, const bool);
 #endif
@@ -754,8 +761,8 @@ template void write_ply(const std::string filename, const Field<Vector<double, 2
 template void write_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const bool);
 template void write_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Vector<int, 3>>&, const Field<double>&, const bool);
 template void write_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Vector<int, 3>>&, const Field<double>&, const bool);
-template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Vector<double, 2>>& velocities, const Field<Vector<double, 2>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,2,2>>& m_cauchySmooth, const Field<Matrix<double,2,2>>& m_FSmooth, const Field<double>& lamMax, const bool smoothParticleStressField, const Field<Matrix<double,2,2>>& m_cauchy, const Field<Matrix<double,2,2>>& m_F, const bool);
-template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Vector<double, 3>>& velocities, const Field<Vector<double, 3>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,3,3>>& m_cauchySmooth, const Field<Matrix<double,3,3>>& m_FSmooth, const Field<double>& lamMax, const bool smoothParticleStressField, const Field<Matrix<double,3,3>>& m_cauchy, const Field<Matrix<double,3,3>>& m_F, const bool);
+template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Vector<double, 2>>& velocities, const Field<Vector<double, 2>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,2,2>>& m_cauchySmooth, const Field<Matrix<double,2,2>>& m_FSmooth, const Field<double>& lamMax, const bool smoothParticleStressField, const Field<Matrix<double,2,2>>& m_cauchy, const Field<Matrix<double,2,2>>& m_F, const Field<double>& m_chemPot, const bool);
+template void writeTwoField_particles_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Vector<double, 3>>& velocities, const Field<Vector<double, 3>>& damageGradients, const std::vector<double>& masses, const std::vector<double>& damage, const std::vector<int>& sp, const Field<int>& markers, const Field<Matrix<double,3,3>>& m_cauchySmooth, const Field<Matrix<double,3,3>>& m_FSmooth, const Field<double>& lamMax, const bool smoothParticleStressField, const Field<Matrix<double,3,3>>& m_cauchy, const Field<Matrix<double,3,3>>& m_F, const Field<double>& m_chemPot, const bool);
 template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 2>>& vertices, const Field<Matrix<double, 2, 2>>& cauchy1, const Field<Matrix<double, 2, 2>>& cauchy2, const Field<Matrix<double, 2, 2>>& Fi1, const Field<Matrix<double, 2, 2>>& Fi2, const Field<Vector<double, 2>>& damageGradients, const Field<Vector<double, 2>>& v1, const Field<Vector<double, 2>>& v2, const Field<Vector<double, 2>>& fct1, const Field<Vector<double, 2>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const Field<Vector<double, 2>>& n1, const Field<Vector<double, 2>>& n2, const bool);
 template void writeTwoField_nodes_ply(const std::string filename, const Field<Vector<double, 3>>& vertices, const Field<Matrix<double, 3, 3>>& cauchy1, const Field<Matrix<double, 3, 3>>& cauchy2, const Field<Matrix<double, 3, 3>>& Fi1, const Field<Matrix<double, 3, 3>>& Fi2, const Field<Vector<double, 3>>& damageGradients, const Field<Vector<double, 3>>& v1, const Field<Vector<double, 3>>& v2, const Field<Vector<double, 3>>& fct1, const Field<Vector<double, 3>>& fct2, const std::vector<double>& m1, const std::vector<double>& m2, const std::vector<double>& sep1, const std::vector<double>& sep2, const std::vector<int>& separable, const Field<Vector<double, 3>>& n1, const Field<Vector<double, 3>>& n2, const bool);
 #endif
