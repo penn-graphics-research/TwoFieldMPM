@@ -13,6 +13,7 @@
 #include <Bow/Math/SVD.h>
 #include <Bow/Math/PolarDecomposition.h>
 #include <Eigen/SparseCore>
+#include <Eigen/Sparse>
 
 using namespace SPGrid;
 
@@ -2638,8 +2639,6 @@ public:
             }
         });
 
-        
-
         //Count DOFs and set indeces for them
         int dofs = 0;
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
@@ -2650,8 +2649,7 @@ public:
         });
 
         //Set RHS => Build A (num_nodes x 1)
-        Vec b(dofs);
-        b.setZero();
+        Eigen::VectorXd b(dofs);
 
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
@@ -2666,59 +2664,81 @@ public:
             }
         });
 
+        std::cout << "eta: " << eta << std::endl;
+        std::cout << "k_net: " << k_net << std::endl;
+        std::cout << "eta/k_net: " << eta/k_net << std::endl;
         std::cout << "RHS: " << b << std::endl;
-
-        //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
-        Vec x(dofs);
-        Vec r(dofs);
-        Vec p(dofs);
-        Vec q(dofs);
-        Vec temp(dofs);
-        r.setZero();
-        p.setZero();
-        q.setZero();
-        temp.setZero();
-        x.setZero(); //initial guess
-        T alpha = 0.0;
-        T beta = 0.0;
-        T zTrk = 0.0;
-        T zTrk_last = 0.0;
-        T residualNorm = 0.0;
         
-        multiply(x, temp);
-        r = b - temp;
-        precondition(r, q);
-        p = q;
-        zTrk = r.dot(q);
-        residualNorm = std::sqrt(zTrk);
-        for(int count = 0; count < max_iters; ++count){            
-            if(residualNorm <= tol){
-                Logging::info("\tCG terminates at ", count, ": residual = ", residualNorm);
-                break;
-            }
-            if(count % 50 == 0){
-                Logging::info("\tCG iter ", count, "; residual = ", residualNorm);
-            }
-            multiply(p, temp);
-            alpha = zTrk / (temp.dot(p));
-            x += (alpha * p);
-            r -= (alpha * temp);
+        //Build Matrix, A
+        Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView(0.5, 1);
+        A.resize(dofs, dofs);
+        buildMatrix(A);
+        
+        std::cout << "Matrix A with " << dofs << " dofs: " << A << std::endl;
 
-            precondition(r, q);
+        //Solve with IncompleteCholesky preconditioned CG
+        Eigen::VectorXd iccg_result(dofs);
+        Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<T>> iccg;
+        iccg.compute(A);
+        iccg.setMaxIterations(max_iters);
+        iccg.setTolerance(tol);
+        iccg_result = iccg.solve(b);
+        std::cout << "result: " << iccg_result << std::endl;
+        std::cout << "#iterations:     " << iccg.iterations() << std::endl;
+        std::cout << "estimated error: " << iccg.error()      << std::endl;
+        
+        //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
+        // Vec x(dofs);
+        // Vec r(dofs);
+        // Vec p(dofs);
+        // Vec q(dofs);
+        // Vec temp(dofs);
+        // r.setZero();
+        // p.setZero();
+        // q.setZero();
+        // temp.setZero();
+        // x.setZero(); //initial guess
+        // T alpha = 0.0;
+        // T beta = 0.0;
+        // T zTrk = 0.0;
+        // T zTrk_last = 0.0;
+        // T residualNorm = 0.0;
+        
+        // multiply(x, temp);
+        // r = b - temp;
+        // precondition(r, q);
+        // p = q;
+        // zTrk = r.dot(q);
+        // residualNorm = std::sqrt(zTrk);
+        // for(int count = 0; count < max_iters; ++count){            
+        //     if(residualNorm <= tol){
+        //         Logging::info("\tCG terminates at ", count, ": residual = ", residualNorm);
+        //         break;
+        //     }
+        //     if(count % 50 == 0){
+        //         Logging::info("\tCG iter ", count, "; residual = ", residualNorm);
+        //     }
+        //     multiply(p, temp);
+        //     alpha = zTrk / (temp.dot(p));
+        //     x += (alpha * p);
+        //     r -= (alpha * temp);
 
-            zTrk_last = zTrk;
-            zTrk = q.dot(r);
-            beta = zTrk / zTrk_last;
+        //     precondition(r, q);
 
-            p = q + beta*p;
+        //     zTrk_last = zTrk;
+        //     zTrk = q.dot(r);
+        //     beta = zTrk / zTrk_last;
 
-            residualNorm = std::sqrt(zTrk);
-        }
+        //     p = q + beta*p;
+
+        //     residualNorm = std::sqrt(zTrk);
+        // }
 
         //Compute the difference in grid chemical potential
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
-                g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
+                //g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
+                g.chemicalPotential = iccg_result(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
             }
         });
 
@@ -2758,6 +2778,52 @@ public:
 
     T computePermeability(T r_f, T phi_s0){
         return (r_f*r_f) / (16*pow(phi_s0, 1.5) * (1 + 56*pow(phi_s0, 3.0)));
+    }
+
+    // Get Matrix, A
+    void buildMatrix(Eigen::SparseMatrix<T>& A){
+
+        //Sparse Matrix is initialized from a list of triplets of the form (i, j, value) -- duplicate triplets are accumulated together! 
+        //So for each particle contribution we add a triplet to each i,j pair!
+        std::vector<Eigen::Triplet<T>> tripletList;
+
+        //std::cout << "Before build matrix..." << std::endl;
+
+        grid.serial_for([&](int i) { //serial since we are adding entries to tripletList and dont want race conditions
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                const T vol = m_vol[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                Mat dwStorage = Mat::Zero(dim, 9); //only should need 9 since each particle splats to 9 nodes in quadratic BSpline
+                Bow::Vector<int, Eigen::Dynamic> idxStorage = Bow::Vector<int, Eigen::Dynamic>::Zero(9);
+                
+                //Store all 9 grid dw for this particle
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                    int node_id = g.chemPotIdx; //this indexes the chem pot DOFs
+                    idxStorage[oidx] = node_id;
+                    dwStorage.col(oidx) = dw;
+                });
+
+                //Add a triplet for each contribution from each pairing of mapped nodes
+                for(int row = 0; row < 9; ++row){
+                    for(int col = 0; col < 9; ++col){
+                        T rowIdx = idxStorage[row];
+                        T colIdx = idxStorage[col];
+                        T value = vol * dwStorage.col(row).dot(dwStorage.col(col));
+                        tripletList.push_back(Eigen::Triplet<T>(colIdx, rowIdx, value));
+                    }
+                }
+
+            }
+        });
+
+        //std::cout << "After triplets construction..." << std::endl;
+
+        A.setFromTriplets(tripletList.begin(), tripletList.end());
+
+        //std::cout << "After setFromTriplets..." << std::endl;
+
+        return;
     }
 
     // b = A*x

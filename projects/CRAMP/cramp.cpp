@@ -3907,7 +3907,7 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = false;
+        sim.verbose = true;
         sim.writeGrid = true;
         
         //Solid Material properties (soft artery walls)
