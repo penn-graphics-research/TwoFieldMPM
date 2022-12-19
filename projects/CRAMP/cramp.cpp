@@ -3901,7 +3901,7 @@ int main(int argc, char *argv[])
         
         //DFG Specific Params
         sim.st = 4.7; //5.5 good for dx = 0.2, 
-        sim.useDFG = true;
+        sim.useDFG = false;
         sim.fricCoeff = couplingFriction; //for no slip condition between solid and fluid
         sim.useExplicitContact = true;
         //sim.massRatio = 15.0;
@@ -4188,6 +4188,101 @@ int main(int argc, char *argv[])
         //set minDp
         //sim.minDp = minDp;
 
+        sim.run(start_frame);
+    }
+
+    //Chem Potential Solve Simple Mode 1 Tension Test
+    if(testcase == 234){
+        
+        using T = double;
+        static const int dim = 2;
+
+        // if (argc < 8) {
+        //     puts("ERROR: please add parameters");
+        //     puts("TEST 234 USAGE: ./cramp testcase bulk gamma viscosity pStart pGrad couplingFriction ");
+        //     exit(0);
+        // }
+
+        // T bulk = std::atof(argv[2]);
+        // T gamma = std::atof(argv[3]);
+        // T viscosity = std::atof(argv[4]);
+        // T pStart = std::atof(argv[5]);
+        // T pGrad = std::atof(argv[6]);
+        // T couplingFriction = std::atof(argv[7]);
+        // // T alpha = std::atof(argv[7]);
+        // // T dMin = std::atof(argv[8]);
+        // // T minDp = std::atof(argv[9]);
+        // std::vector<std::string> cleanedStrings;
+        // for(int i = 2; i < 8; ++i){
+        //     std::string cleanString = argv[i];
+        //     if(i == 4 || i == 7){// || i == 6 || i == 8 || i == 9){
+        //         cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+        //     }
+        //     cleanedStrings.push_back(cleanString);
+        // }
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension";
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //Params
+        sim.dx = 5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = 0.0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.7; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        //sim.fricCoeff = couplingFriction; //for no slip condition between solid and fluid
+        sim.useExplicitContact = true;
+        //sim.massRatio = 15.0;
+        
+        //Debug mode
+        sim.verbose = true;
+        sim.writeGrid = true;
+        
+        //solid material (fibrin clot)
+        T c1 = 300000;
+        T c2 = 2.0;
+        T phi_s0 = 0.01;
+        T pi_0 = 1000.0;
+        T beta_1 = 1.02;
+        T rhoSolid2 = 1200;
+
+        //Compute time step for symplectic
+        sim.suggested_dt = 1e-4;
+
+        auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
+        
+        //-----PARTICLE SAMPLING-----
+
+        //Sampling Constants
+        int ppc = 4;
+        T minX = 0.06; //tuning this enabled making the BoxSampling actually a square lol must be rounding error :O
+        T minY = 0.05;
+
+        //Add fibrin block
+        T width = sim.dx * 2;
+        T height = width;
+        sim.sampleGridAlignedBox(material3, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rhoSolid2, false, 5);
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + 0.5*sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall - hold artery in place
+
+        //Displacement Half Space
+        T moveTime = 5.0;
+        T displacement = sim.dx * 2;
+        T speed = displacement / moveTime;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - 0.5*sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
+    
         sim.run(start_frame);
     }
 
