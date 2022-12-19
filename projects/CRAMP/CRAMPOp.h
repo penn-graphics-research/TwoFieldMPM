@@ -2615,7 +2615,7 @@ public:
         T phi_s0 = 0.01;
         T r_f = 60 * 10e-9; //60 nm
         T k_net = computePermeability(r_f, phi_s0);
-        //k_net = 1.0;
+        k_net = 1.0;
         int max_iters = 1000;
         T tol = 1e-6;
 
@@ -2681,16 +2681,25 @@ public:
         
         std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
 
+        //Solve with Direct Solver -> LDL^T Factorization
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
+        solver.compute(A); //compute factorization
+        if(solver.info() != Eigen::Success){
+            std::cout << "ERROR: Chem Potential Solve -- Factorization failed!" << std::endl;
+        }
+        Eigen::VectorXd x = solver.solve(b);
+        std::cout << "Result:\n" << x << std::endl;
+
         //Solve with IncompleteCholesky preconditioned CG
-        Eigen::VectorXd iccg_result(dofs);
-        Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<T>> iccg;
-        iccg.compute(A);
-        iccg.setMaxIterations(max_iters);
-        iccg.setTolerance(tol);
-        iccg_result = iccg.solve(b);
-        std::cout << "result: \n" << iccg_result << std::endl;
-        std::cout << "#iterations:     " << iccg.iterations() << std::endl;
-        std::cout << "estimated error: " << iccg.error()      << std::endl;
+        // Eigen::VectorXd iccg_result(dofs);
+        // Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<T>> iccg;
+        // iccg.compute(A);
+        // iccg.setMaxIterations(max_iters);
+        // iccg.setTolerance(tol);
+        // iccg_result = iccg.solve(b);
+        // std::cout << "result: \n" << iccg_result << std::endl;
+        // std::cout << "#iterations:     " << iccg.iterations() << std::endl;
+        // std::cout << "estimated error: " << iccg.error()      << std::endl;
         
         //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
         // Vec x(dofs);
@@ -2742,8 +2751,8 @@ public:
         //Compute the difference in grid chemical potential
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
-                //g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
-                g.chemicalPotential = iccg_result(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
+                g.chemicalPotential = x(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
+                //g.chemicalPotential = iccg_result(g.chemPotIdx) - g.chemicalPotential; //encodes the difference between new and old chem pot!
             }
         });
 

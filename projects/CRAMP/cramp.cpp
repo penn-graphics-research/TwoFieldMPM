@@ -3907,7 +3907,7 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
         
         //Solid Material properties (soft artery walls)
@@ -3926,7 +3926,7 @@ int main(int argc, char *argv[])
         //Compute time step for symplectic
         sim.cfl = 0.4;
         sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
-        //sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-6;
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         //auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
@@ -4242,7 +4242,7 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
         
         //solid material (fibrin clot)
@@ -4278,8 +4278,8 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + 0.5*sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall - hold artery in place
 
         //Displacement Half Space
-        T moveTime = 5.0;
-        T displacement = sim.dx * 2;
+        T moveTime = 3.0;
+        T displacement = sim.dx * 0.5;
         T speed = displacement / moveTime;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - 0.5*sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
     
