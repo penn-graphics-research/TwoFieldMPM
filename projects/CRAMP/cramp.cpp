@@ -4220,7 +4220,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_volumeFix_dcdt_1e-4_withFullPoroElasticity";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_dcdt_1e-4_DirectSolverWithNablaTheta_scalarsSwappedSides_withElasticity";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4242,7 +4242,7 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
         
         //solid material (fibrin clot)

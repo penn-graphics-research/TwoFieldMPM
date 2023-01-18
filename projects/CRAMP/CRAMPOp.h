@@ -2616,7 +2616,7 @@ public:
         T r_f = 60 * 10e-9; //60 nm
         T k_net = computePermeability(r_f, phi_s0);
         //k_net = 1.0;
-        int max_iters = 1000;
+        int max_iters = 10000;
         T tol = 1e-6;
 
         //Transfer current chemical potential, F, and Fprevious to the grid
@@ -2624,7 +2624,7 @@ public:
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
                 const Vector<T, dim> pos = m_X[i];
                 const T vol = m_vol[i];
-                const T mass = m_mass[i];
+                //const T mass = m_mass[i];
                 const T chemPotential = m_chemPotential[i];
                 T dCdt = (m_F[i].determinant() - m_Fprev[i].determinant()) / dt;
                 T dcdt = ((1.0 - (m_Fprev[i].determinant() / m_F[i].determinant())) / dt );
@@ -2635,11 +2635,8 @@ public:
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     g.chemicalPotential += chemPotential * w;
                     g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
-                    g.Fi1(0,0) += vol * (dcdt * (eta / k_net)) * w; //with dcdt
-                    g.Fi1(1,1) += vol * (dCdt * (eta / k_net)) * w; //with dCdt
-                    //g.Fi1(0,1) += dCdt * w * mass;
-                    //g.Fi1(1,0) += dCdt * w;
-                    //g.cauchy1(0,0) += mass * w; //hold mass in here to avoid messing with other mass transfers
+                    g.Fi1(0,0) += vol * dcdt * w; //with dcdt
+                    g.Fi1(1,1) += vol * dCdt * w; //with dCdt
                     g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
                 });
             }
@@ -2660,17 +2657,10 @@ public:
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
-                //g.Fi1(0,0) /= g.cauchy1(0,0); //sum of dcdt * w * mass / sum of m*w
-                //g.Fi1(1,1) /= g.cauchy1(1,1); //sum of dcdt * w / sum of w
-                //g.Fi1(0,1) /= g.cauchy1(0,0);
-                //g.Fi1(1,0) /= g.cauchy1(1,1);
-
                 g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
                 
                 //Build RHS after we divide out the grid masses
                 b[g.chemPotIdx] = g.Fi1(0,0); //00 = dcdt, 11 = dCdt
-                
-                //std::cout << "Fprev: " << g.Fi2 << " Fcurr: " << g.Fi1 << " RHS: " << b[g.chemPotIdx] << std::endl;
             }
         });
 
@@ -2679,12 +2669,14 @@ public:
         //std::cout << "eta/k_net: " << eta/k_net << std::endl;
         //std::cout << "RHS: \n   " << b << std::endl;
         
+        //--DIRECT SOLVER--
+
         //Build Matrix, A
         Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView(0.5, 1);
         A.resize(dofs, dofs);
-        buildMatrix(A);
+        buildMatrix(A, eta, k_net);
         
-        //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
+        // //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
 
         //Solve with Direct Solver -> LDL^T Factorization
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
@@ -2694,6 +2686,8 @@ public:
         }
         Eigen::VectorXd x = solver.solve(b);
         //std::cout << "Result:\n" << x << std::endl;
+
+        //--IC CG Solver--
 
         //Solve with IncompleteCholesky preconditioned CG
         // Eigen::VectorXd iccg_result(dofs);
@@ -2705,6 +2699,8 @@ public:
         // std::cout << "result: \n" << iccg_result << std::endl;
         // std::cout << "#iterations:     " << iccg.iterations() << std::endl;
         // std::cout << "estimated error: " << iccg.error()      << std::endl;
+
+        //-- CG SOLVER -- 
         
         //Conjugate Gradient Solve (no preconditioner yet) -- Reference: https://netlib.org/templates/templates.pdf
         // Vec x(dofs);
@@ -2800,7 +2796,7 @@ public:
     }
 
     // Get Matrix, A
-    void buildMatrix(Eigen::SparseMatrix<T>& A){
+    void buildMatrix(Eigen::SparseMatrix<T>& A, T _eta, T _k_net){
 
         //Sparse Matrix is initialized from a list of triplets of the form (i, j, value) -- duplicate triplets are accumulated together! 
         //So for each particle contribution we add a triplet to each i,j pair!
@@ -2813,14 +2809,15 @@ public:
                 const Vector<T, dim> pos = m_X[i];
                 const T vol = m_vol[i];
                 BSplineWeights<T, dim> spline(pos, dx);
-                Mat dwStorage = Mat::Zero(dim, 9); //only should need 9 since each particle splats to 9 nodes in quadratic BSpline
+                Mat nablaThetaStorage = Mat::Zero(dim, 9); //only should need 9 since each particle splats to 9 nodes in quadratic BSpline
                 Bow::Vector<int, Eigen::Dynamic> idxStorage = Bow::Vector<int, Eigen::Dynamic>::Zero(9);
                 
                 //Store all 9 grid dw for this particle
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     int node_id = g.chemPotIdx; //this indexes the chem pot DOFs
                     idxStorage[oidx] = node_id;
-                    dwStorage.col(oidx) = dw;
+                    T DpInv = 1.0 / (0.25 * dx * dx);
+                    nablaThetaStorage.col(oidx) = DpInv * w * (g.x1 - pos);
                 });
 
                 //Add a triplet for each contribution from each pairing of mapped nodes
@@ -2828,7 +2825,7 @@ public:
                     for(int col = 0; col < 9; ++col){
                         T rowIdx = idxStorage[row];
                         T colIdx = idxStorage[col];
-                        T value = vol * dwStorage.col(row).dot(dwStorage.col(col));
+                        T value = vol * (_eta / _k_net) * nablaThetaStorage.col(row).dot(nablaThetaStorage.col(col));
                         tripletList.push_back(Eigen::Triplet<T>(colIdx, rowIdx, value));
                     }
                 }
@@ -2910,6 +2907,7 @@ public:
         });
         for(int i = 0; i < (int)in.size(); ++i){
             out(i) = in(i) / out(i);
+            //out(i) = in(i);
         }
     }
 
