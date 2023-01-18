@@ -4220,11 +4220,11 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_volumeFix_dcdt_1e-4_withFullPoroElasticity";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
-        sim.dx = 5e-3; //0.5 mm --> make sure this evenly fits into the width and height
+        sim.dx = 1e-3; //0.5 mm --> make sure this evenly fits into the width and height
         sim.symplectic = true;
         sim.end_frame = 240;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
@@ -4242,7 +4242,7 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = false;
+        sim.verbose = true;
         sim.writeGrid = true;
         
         //solid material (fibrin clot)
@@ -4263,25 +4263,25 @@ int main(int argc, char *argv[])
         //Sampling Constants
         int ppc = 4;
         T minX = 0.06; //tuning this enabled making the BoxSampling actually a square lol must be rounding error :O
-        T minY = 0.05;
+        T minY = 0.055;
 
         //Add fibrin block
-        T width = sim.dx * 2;
+        T width = sim.dx * 25;
         T height = width;
         sim.sampleGridAlignedBox(material3, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rhoSolid2, false, 5);
 
         //-----BOUNDARY CONDITIONS-----
 
         //Add Static Half Spaces
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + 0.5*sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall - hold artery in place
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
 
         //Displacement Half Space
         T moveTime = 3.0;
-        T displacement = sim.dx * 0.5;
+        T displacement = sim.dx * 1;
         T speed = displacement / moveTime;
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - 0.5*sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
     
         sim.run(start_frame);
     }

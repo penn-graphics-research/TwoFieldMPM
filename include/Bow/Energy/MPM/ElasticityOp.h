@@ -508,6 +508,9 @@ public:
         T psiMix = (pi_0 / (beta_1 - 1)) * ((pow(1 - phi_s0, beta_1)) / (pow(J - phi_s0, beta_1 - 1)));
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
         T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
+
+        //muC = 0; //set chemPot = 0 for now
+
         T correction = phi_s0 * a1 * log(J); // psi += a1 * ln(J), log here = ln
         return psiNet + psiMix - psi0 - muC + correction;
     }
@@ -519,7 +522,11 @@ public:
         Eigen::Matrix<T, dim, dim> JFinvT;
         Math::cofactor(F, JFinvT);
         Eigen::Matrix<T, dim, dim> Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
-        Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - mu) * JFinvT;
+        T chemPotential = mu;
+
+        //chemPotential = 0; //set chemPot = 0 for now
+
+        Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - chemPotential) * JFinvT;
         Eigen::Matrix<T, dim, dim> Pcorrection = phi_s0 * a1 * (JFinvT / J); // P += a1 * F^-T
         P = Pnet + Pmix + Pcorrection;
     }

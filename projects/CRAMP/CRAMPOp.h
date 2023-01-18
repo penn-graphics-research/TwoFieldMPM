@@ -2615,7 +2615,7 @@ public:
         T phi_s0 = 0.01;
         T r_f = 60 * 10e-9; //60 nm
         T k_net = computePermeability(r_f, phi_s0);
-        k_net = 1.0;
+        //k_net = 1.0;
         int max_iters = 1000;
         T tol = 1e-6;
 
@@ -2623,8 +2623,10 @@ public:
         grid.colored_for([&](int i) {  //TODO: put back to colored for
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
                 const Vector<T, dim> pos = m_X[i];
+                const T vol = m_vol[i];
                 const T mass = m_mass[i];
                 const T chemPotential = m_chemPotential[i];
+                T dCdt = (m_F[i].determinant() - m_Fprev[i].determinant()) / dt;
                 T dcdt = ((1.0 - (m_Fprev[i].determinant() / m_F[i].determinant())) / dt );
                 BSplineWeights<T, dim> spline(pos, dx);
                 
@@ -2633,9 +2635,11 @@ public:
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     g.chemicalPotential += chemPotential * w;
                     g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
-                    g.Fi1(0,0) += dcdt * w * mass; //with mass
-                    g.Fi1(1,1) += dcdt * w; //without mass
-                    g.cauchy1(0,0) += mass * w; //hold mass in here to avoid messing with other mass transfers
+                    g.Fi1(0,0) += vol * (dcdt * (eta / k_net)) * w; //with dcdt
+                    g.Fi1(1,1) += vol * (dCdt * (eta / k_net)) * w; //with dCdt
+                    //g.Fi1(0,1) += dCdt * w * mass;
+                    //g.Fi1(1,0) += dCdt * w;
+                    //g.cauchy1(0,0) += mass * w; //hold mass in here to avoid messing with other mass transfers
                     g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
                 });
             }
@@ -2656,30 +2660,31 @@ public:
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
-                g.Fi1(0,0) /= g.cauchy1(0,0); //sum of dcdt * w * mass / sum of m*w
-                g.Fi1(1,1) /= g.cauchy1(1,1); //sum of dcdt * w / sum of w
-
+                //g.Fi1(0,0) /= g.cauchy1(0,0); //sum of dcdt * w * mass / sum of m*w
+                //g.Fi1(1,1) /= g.cauchy1(1,1); //sum of dcdt * w / sum of w
+                //g.Fi1(0,1) /= g.cauchy1(0,0);
+                //g.Fi1(1,0) /= g.cauchy1(1,1);
 
                 g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
                 
                 //Build RHS after we divide out the grid masses
-                b[g.chemPotIdx] = g.Fi1(0,0) * (eta / k_net); //00 = mass weighted, 11 = not mass weighted
+                b[g.chemPotIdx] = g.Fi1(0,0); //00 = dcdt, 11 = dCdt
                 
                 //std::cout << "Fprev: " << g.Fi2 << " Fcurr: " << g.Fi1 << " RHS: " << b[g.chemPotIdx] << std::endl;
             }
         });
 
-        std::cout << "eta: " << eta << std::endl;
-        std::cout << "k_net: " << k_net << std::endl;
-        std::cout << "eta/k_net: " << eta/k_net << std::endl;
-        std::cout << "RHS: \n   " << b << std::endl;
+        //std::cout << "eta: " << eta << std::endl;
+        //std::cout << "k_net: " << k_net << std::endl;
+        //std::cout << "eta/k_net: " << eta/k_net << std::endl;
+        //std::cout << "RHS: \n   " << b << std::endl;
         
         //Build Matrix, A
         Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView(0.5, 1);
         A.resize(dofs, dofs);
         buildMatrix(A);
         
-        std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
+        //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
 
         //Solve with Direct Solver -> LDL^T Factorization
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
@@ -2688,7 +2693,7 @@ public:
             std::cout << "ERROR: Chem Potential Solve -- Factorization failed!" << std::endl;
         }
         Eigen::VectorXd x = solver.solve(b);
-        std::cout << "Result:\n" << x << std::endl;
+        //std::cout << "Result:\n" << x << std::endl;
 
         //Solve with IncompleteCholesky preconditioned CG
         // Eigen::VectorXd iccg_result(dofs);
