@@ -74,6 +74,12 @@ public:
     Field<TV> m_Vprevious; //needed for dynamic J-integral
     Field<T> m_chemPotential; //hold particle chemical potentials
 
+    //Store Data Across Frames for a single point
+    bool collectDataAcrossFrames = false;
+    bool collectDataAcrossFrames_Verbose = false;
+    int collectDataAcrossFramesIndex = 0;
+    std::string collectDataAcrossFramesFilepath;
+
     //Sim Data
     std::string outputPath;
     T flipPicRatio = 0.95;
@@ -308,6 +314,19 @@ public:
                 evolveChemicalPotential = true;
                 break;
             }
+        }
+
+        if(collectDataAcrossFrames){
+            collectDataAcrossFramesFilepath = outputPath + "/DataAcossFrames" + std::to_string(collectDataAcrossFramesIndex) + ".csv";
+            std::ofstream ofs;
+            ofs.open(collectDataAcrossFramesFilepath, std::ofstream::out | std::ofstream::app);
+            if(collectDataAcrossFrames_Verbose){
+                ofs << "substep, s22, F22, chemPot\n";
+            }
+            else{
+                ofs << "frame, s22, F22, chemPot\n";
+            }
+            ofs.close();
         }
     }
 
@@ -780,6 +799,24 @@ public:
             loopFluidParticles();
         }
 
+        //Collect data across substeps (collectDataAcrossFrames_Verbose true)
+        if(collectDataAcrossFrames && collectDataAcrossFrames_Verbose){
+
+            std::ofstream ofs;
+            ofs.open(collectDataAcrossFramesFilepath, std::ofstream::out | std::ofstream::app);
+            
+            ofs << std::to_string(currSubstep);
+            ofs << ",";
+            ofs << std::to_string(m_scaledCauchy[collectDataAcrossFramesIndex](1,1));
+            ofs << ",";
+            ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
+            ofs << ",";
+            ofs << std::to_string(m_chemPotential[collectDataAcrossFramesIndex]);
+            ofs << "\n";
+
+            ofs.close();
+        }
+
         //Helpful timers and counters
         elapsedTime += dt;
         currSubstep++;
@@ -998,6 +1035,26 @@ public:
                 std::cout << "Frame Written (i)..." << std::endl;
             }
         }
+
+        if(collectDataAcrossFrames && !collectDataAcrossFrames_Verbose){
+
+            std::ofstream ofs;
+            ofs.open(collectDataAcrossFramesFilepath, std::ofstream::out | std::ofstream::app);
+            
+            ofs << std::to_string(frame_num);
+            ofs << ",";
+            ofs << std::to_string(m_scaledCauchy[collectDataAcrossFramesIndex](1,1));
+            ofs << ",";
+            ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
+            ofs << ",";
+            ofs << std::to_string(m_chemPotential[collectDataAcrossFramesIndex]);
+            ofs << "\n";
+
+            ofs.close();
+        }
+
+
+        
     }
 
     //Stress Snapshot Output -> to CSV

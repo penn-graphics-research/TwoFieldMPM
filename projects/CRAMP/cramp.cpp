@@ -4220,7 +4220,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_dcdt_1e-4_DirectSolverWithNablaTheta_scalarsSwappedSides_withElasticity";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_dcdt_1e-4_DirectSolverWithNablaTheta_scalarsSwappedSides_withElasticity_savingFrameData";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4269,6 +4269,11 @@ int main(int argc, char *argv[])
         T width = sim.dx * 25;
         T height = width;
         sim.sampleGridAlignedBox(material3, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rhoSolid2, false, 5);
+
+        //DATA COLLECTION
+        sim.collectDataAcrossFrames = true;
+        sim.collectDataAcrossFramesIndex = 1238;
+        sim.collectDataAcrossFrames_Verbose = true;
 
         //-----BOUNDARY CONDITIONS-----
 
