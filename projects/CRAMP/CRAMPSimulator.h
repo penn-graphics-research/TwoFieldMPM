@@ -14,6 +14,7 @@
 //#include "../DFGMPM/TwoFieldHodgepodgeEnergy.h"
 //#include "../DFGMPM/TwoFieldBackwardEuler.h"
 #include <Bow/IO/ply.h>
+#include <cmath>
 
 namespace Bow::MPM {
 
@@ -109,6 +110,7 @@ public:
     bool smoothParticleStressField = false;
     bool computeLamMaxFlag = false; //override to compute this even without tanh damage model
     bool evolveChemicalPotential = false; //set in initialize by iterating through m_marker
+    bool useFBarStabilization = false;
 
     //Tracking System Energies: (PE_solid, PE_fluid, KE_solid, KE_fluid, GPE_solid, GPE_fluid, Work by BCs)
     std::vector<Vector<T,8>> systemEnergy;
@@ -127,6 +129,7 @@ public:
     Field<TV> particleDG; //particle damage gradients
     Field<std::vector<int>> particleAF; //store which activefield each particle belongs to for the 3^d grid nodes it maps to
     Field<std::vector<int>> p_cached_idx; //store which DOF index each particle maps to for each of the 3^dim nodes
+    Field<T> m_dcdt; //for chemical potential solve
 
     //Data for Stress Snapshot and J Integral
     bool takeStressSnapshot = false;
@@ -321,10 +324,10 @@ public:
             std::ofstream ofs;
             ofs.open(collectDataAcrossFramesFilepath, std::ofstream::out | std::ofstream::app);
             if(collectDataAcrossFrames_Verbose){
-                ofs << "substep, s22, F22, chemPot\n";
+                ofs << "substep, s22, F22, chemPot, dcdt\n";
             }
             else{
-                ofs << "frame, s22, F22, chemPot\n";
+                ofs << "frame, s22, F22, chemPot, dcdt\n";
             }
             ofs.close();
         }
@@ -527,10 +530,38 @@ public:
             for (auto& model : Base::elasticity_models){
                 model->collect_chemPotential(m_chemPotential);
                 model->compute_volume(m_currentVolume);
+                model->collect_initialVolume(m_initialVolume);
             }
-            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, m_currentVolume, Base::dx, dt, grid };
+
+            if(useFBarStabilization){
+                Bow::CRAMP::ComputeFBarOp<T,dim> computeFBar{ {}, Base::m_X, Base::m_mass, m_F, m_marker, m_initialVolume, Base::dx, grid };
+                computeFBar(); //update m_F in place to contain Fbar for all poroelastic particles!
+
+                for (auto& model : Base::elasticity_models){
+                    model->set_strain(m_F);
+                }
+
+                std::cout << "Computed F Bar" << std::endl;
+            }
+
+            //Compute dcdt
+            T Jcurr, Jprev;
+            for(unsigned int i = 0; i < m_dcdt.size(); ++i){
+                Jcurr = m_F[i].determinant();
+                Jprev = m_Fprevious[i].determinant();
+                //m_dcdt[i] = (m_F[i].determinant() - m_Fprevious[i].determinant()) / dt;
+                m_dcdt[i] = ((1.0 - (Jprev / Jcurr)) / dt );
+                //m_dcdt[i] = ((log(Jcurr) - log(Jprev)) / dt );
+            }
+
+            std::cout << "Computed dcdt" << std::endl;
+
+            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, m_currentVolume, Base::dx, dt, grid, m_dcdt };
             solveChemPotentialSystem();
-            //Assign the new chemical potentials to the elasticity models
+
+            std::cout << "SolvedChemPot" << std::endl;
+
+            //Assign the new chemical potentials to the elasticity modelss
             for (auto& model : Base::elasticity_models){
                 model->update_chemPotential(m_chemPotential);
             }
@@ -812,6 +843,8 @@ public:
             ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
             ofs << std::to_string(m_chemPotential[collectDataAcrossFramesIndex]);
+            ofs << ",";
+            ofs << std::to_string(m_dcdt[collectDataAcrossFramesIndex]);
             ofs << "\n";
 
             ofs.close();
@@ -1048,6 +1081,8 @@ public:
             ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
             ofs << std::to_string(m_chemPotential[collectDataAcrossFramesIndex]);
+            ofs << ",";
+            ofs << std::to_string(m_dcdt[collectDataAcrossFramesIndex]);
             ofs << "\n";
 
             ofs.close();
@@ -1113,6 +1148,7 @@ public:
         m_cauchySmoothed.push_back(TM::Identity()); 
         m_scaledCauchy.push_back(TM::Identity());
         m_chemPotential.push_back(0.0);
+        m_dcdt.push_back(0.0);
         
         //DFG Neighbor Structures
         std::vector<int> placeholder, placeholder2, placeholder3;

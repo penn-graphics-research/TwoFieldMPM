@@ -2606,6 +2606,8 @@ public:
     T dt;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
+    Field<T> m_dcdt;
+
     void operator()()
     {
         BOW_TIMER_FLAG("EvolveChemicalPotential");
@@ -2626,8 +2628,7 @@ public:
                 const T vol = m_vol[i];
                 //const T mass = m_mass[i];
                 const T chemPotential = m_chemPotential[i];
-                T dCdt = (m_F[i].determinant() - m_Fprev[i].determinant()) / dt;
-                T dcdt = ((1.0 - (m_Fprev[i].determinant() / m_F[i].determinant())) / dt );
+                T dcdt = m_dcdt[i];
                 BSplineWeights<T, dim> spline(pos, dx);
                 
                 //std::cout << "\nFcurr: " << m_F[i] << "\nFprev: " << m_Fprev[i];
@@ -2636,7 +2637,7 @@ public:
                     g.chemicalPotential += chemPotential * w;
                     g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
                     g.Fi1(0,0) += vol * dcdt * w; //with dcdt
-                    g.Fi1(1,1) += vol * dCdt * w; //with dCdt
+                    //g.Fi1(1,1) += vol * dCdt * w; //with dCdt
                     g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
                 });
             }
@@ -2654,6 +2655,8 @@ public:
         //Set RHS => Build A (num_nodes x 1)
         Eigen::VectorXd b(dofs);
 
+        std::cout << "Computed and set RHS" << std::endl;
+
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
@@ -2663,6 +2666,8 @@ public:
                 b[g.chemPotIdx] = g.Fi1(0,0); //00 = dcdt, 11 = dCdt
             }
         });
+
+        std::cout << "Divided out kernel weight sum" << std::endl;
 
         //std::cout << "eta: " << eta << std::endl;
         //std::cout << "k_net: " << k_net << std::endl;
@@ -2681,11 +2686,16 @@ public:
         //Solve with Direct Solver -> LDL^T Factorization
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
         solver.compute(A); //compute factorization
+
+        std::cout << "system factorized" << std::endl;
+
         if(solver.info() != Eigen::Success){
             std::cout << "ERROR: Chem Potential Solve -- Factorization failed!" << std::endl;
         }
         Eigen::VectorXd x = solver.solve(b);
         //std::cout << "Result:\n" << x << std::endl;
+
+        std::cout << "system solved" << std::endl;
 
         //--IC CG Solver--
 
@@ -2757,6 +2767,8 @@ public:
             }
         });
 
+        std::cout << "Computed difference in grid chem pot" << std::endl;
+
         //Transfer back the differenced chemical potentials and update particle chem pots
         grid.parallel_for([&](int i) {
             if(m_marker[i] == 5){ //skip crack particles if we have them and only process SOLID particles!
@@ -2802,7 +2814,7 @@ public:
         //So for each particle contribution we add a triplet to each i,j pair!
         std::vector<Eigen::Triplet<T>> tripletList;
 
-        //std::cout << "Before build matrix..." << std::endl;
+        std::cout << "Before build matrix..." << std::endl;
 
         grid.serial_for([&](int i) { //serial since we are adding entries to tripletList and dont want race conditions
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
@@ -2825,7 +2837,7 @@ public:
                     for(int col = 0; col < 9; ++col){
                         T rowIdx = idxStorage[row];
                         T colIdx = idxStorage[col];
-                        T value = vol * (_eta / _k_net) * nablaThetaStorage.col(row).dot(nablaThetaStorage.col(col));
+                        T value = vol * (_k_net / _eta) * nablaThetaStorage.col(row).dot(nablaThetaStorage.col(col));
                         tripletList.push_back(Eigen::Triplet<T>(colIdx, rowIdx, value));
                     }
                 }
@@ -2833,11 +2845,11 @@ public:
             }
         });
 
-        //std::cout << "After triplets construction..." << std::endl;
+        std::cout << "After triplets construction..." << std::endl;
 
         A.setFromTriplets(tripletList.begin(), tripletList.end());
 
-        //std::cout << "After setFromTriplets..." << std::endl;
+        std::cout << "After setFromTriplets..." << std::endl;
 
         return;
     }
@@ -2913,6 +2925,78 @@ public:
 
 };
 
+/* Compute F-Bar -- Pressure Stabilization */
+template <class T, int dim>
+class ComputeFBarOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPM::DFGMPMGrid<T, dim>::SparseMask;
+    using Vec = Bow::Vector<T, Eigen::Dynamic>;
+    using Mat = Matrix<T, dim, Eigen::Dynamic>;
+    Field<Vector<T, dim>>& m_X;
+    std::vector<T>& m_mass;
+    Field<Matrix<T, dim, dim>>& m_F;
+    Field<int> m_marker;
+    Field<T> m_initialVol;
+
+    T dx;
+    DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    void operator()()
+    {
+        BOW_TIMER_FLAG("ComputeFBar");
+
+        //Compute det F0 for each cell (iterate points in each cell)
+        grid.serial_for([&](int i) { 
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                const T vol = m_initialVol[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                const Matrix<T, dim, dim> F = m_F[i];
+                
+                grid.getCellCenteredNode(spline, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) { //cellCenteredNode = floor(Xp)
+                    //std::cout << "xp: " << pos << ", cellCenteredNode: " << node << std::endl;
+                    g.chemPotIdx = 0; //this marks the cell as having chem potntial particles in it
+                    g.Fi2(0,0) += vol * F.determinant();
+                    g.Fi2(1,1) += vol;
+                });
+            }
+        });
+
+        //Compute det F0 for each cell with chem pot particles in it!
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                //std::cout << "V_0^t: " << g.Fi2(0,0) << std::endl;
+                //std::cout << "V_0^0: " << g.Fi2(1,1) << std::endl;
+                g.Fi2(0,0) /= g.Fi2(1,1); //store det F0 in Fi2(0,0)
+                //std::cout << "det F_0: " << g.Fi2(0,0) << std::endl;
+            }
+        });
+
+        //Compute Fbar for each particle
+        grid.serial_for([&](int i) { 
+            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
+                const Vector<T, dim> pos = m_X[i];
+                BSplineWeights<T, dim> spline(pos, dx);
+                const Matrix<T, dim, dim> F = m_F[i];
+                
+                grid.getCellCenteredNode(spline, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) { //cellCenteredNode = floor(Xp)
+                    m_F[i] = std::pow(g.Fi2(0,0) / F.determinant(), (T)1/3) * F;
+                });
+            }
+        });
+
+        //Reset the grid structures we used for this evolution
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            if(g.chemPotIdx > -1){
+                g.chemPotIdx = -1;
+                g.Fi2 = Matrix<T,dim,dim>::Zero();
+            }
+        });
+
+        return;
+    }
+
+};
 
 }
 } // namespace Bow::DFGMPM

@@ -622,6 +622,19 @@ public:
     }
 
     template <typename OP>
+    inline void getCellCenteredNode(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
+    {
+        uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.cell_centered_node.data()));
+        uint64_t base_offset = SparseMask::Packed_Add(biased_offset, origin_offset);
+        auto grid_array = grid->Get_Array();
+        const Vector<int, dim>& coord = spline.cell_centered_node;
+        
+        auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(0, 0));
+        GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
+        target(coord, g);
+    }
+
+    template <typename OP>
     inline void iterateNeighbors_BaseNode(const BSplineWeights<T, dim, interpolation_degree>& spline, const OP& target)
     {
         uint64_t biased_offset = SparseMask::Linear_Offset(to_std_array<int, dim>(spline.base_node.data())); //this is outdated now, for both use cases we want to use closest node, not base node

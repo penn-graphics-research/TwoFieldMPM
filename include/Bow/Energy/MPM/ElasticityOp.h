@@ -42,6 +42,7 @@ public:
     virtual void collect_mu(Field<T>& _m_mu) {}
     virtual void collect_la(Field<T>& _m_la) {}
     virtual void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) {}
+    virtual void set_strain(Field<Matrix<T, dim, dim>>& _m_F) {}
     virtual void collect_initialVolume(Field<T>& m_initialVolume) {}
     virtual void collect_chemPotential(Field<T>& m_chemPotential) {}
     virtual void update_chemPotential(Field<T>& m_chemPotential) {}
@@ -478,6 +479,13 @@ public:
         });
     }
 
+    void set_strain(Field<Matrix<T, dim, dim>>& _m_F) override
+    {
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            m_F[i] = _m_F[m_global_index[i]];
+        });
+    }
+
     void collect_initialVolume(Field<T>& m_initialVolume) override
     {
         tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
@@ -509,7 +517,7 @@ public:
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
         T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
 
-        //muC = 0; //set chemPot = 0 for now
+        muC = 0; //set chemPot = 0 for now
 
         T correction = phi_s0 * a1 * log(J); // psi += a1 * ln(J), log here = ln
         return psiNet + psiMix - psi0 - muC + correction;
@@ -524,7 +532,7 @@ public:
         Eigen::Matrix<T, dim, dim> Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
         T chemPotential = mu;
 
-        //chemPotential = 0; //set chemPot = 0 for now
+        chemPotential = 0; //set chemPot = 0 for now
 
         Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - chemPotential) * JFinvT;
         Eigen::Matrix<T, dim, dim> Pcorrection = phi_s0 * a1 * (JFinvT / J); // P += a1 * F^-T

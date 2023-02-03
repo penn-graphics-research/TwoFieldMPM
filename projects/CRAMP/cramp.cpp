@@ -4220,7 +4220,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_ActualPermeability_dcdt_1e-4_DirectSolverWithNablaTheta_scalarsSwappedSides_withElasticity_savingFrameData";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-5_FBarStabilized";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4254,9 +4254,10 @@ int main(int argc, char *argv[])
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
-        sim.suggested_dt = 1e-4;
+        sim.suggested_dt = 1e-5;
 
         auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
+        sim.useFBarStabilization = true;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4273,7 +4274,7 @@ int main(int argc, char *argv[])
         //DATA COLLECTION
         sim.collectDataAcrossFrames = true;
         sim.collectDataAcrossFramesIndex = 1238;
-        sim.collectDataAcrossFrames_Verbose = true;
+        sim.collectDataAcrossFrames_Verbose = false;
 
         //-----BOUNDARY CONDITIONS-----
 
@@ -4283,7 +4284,7 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
 
         //Displacement Half Space
-        T moveTime = 3.0;
+        T moveTime = 3;
         T displacement = sim.dx * 1;
         T speed = displacement / moveTime;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
