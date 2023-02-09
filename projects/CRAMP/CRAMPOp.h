@@ -2681,34 +2681,46 @@ public:
         A.resize(dofs, dofs);
         buildMatrix(A, eta, k_net);
         
+        //CHECK RANK OF MATRIX
+        Eigen::ColPivHouseholderQR<Eigen::MatrixXd> rankChecker(A);
+        std::cout << "DOFs: " << dofs << ", Rank of A: " << rankChecker.rank() << std::endl;
+
+        //MATRIX CHECKS
+        // if(!A.isApprox(A.transpose())){
+        //     throw std::runtime_error("Matrix not symmetric!");
+        // }
+        // Eigen::LDLT<Eigen::MatrixXd, Eigen::Upper> ldlt;
+        // ldlt.compute(A);
+        // if(ldlt.info() == Eigen::NumericalIssue || !ldlt.isPositive()){
+        //     throw std::runtime_error("Matrix not PSD!");
+        // }
+
         // //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
 
         //Solve with Direct Solver -> LDL^T Factorization
-        Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
-        solver.compute(A); //compute factorization
-
-        std::cout << "system factorized" << std::endl;
-
-        if(solver.info() != Eigen::Success){
-            std::cout << "ERROR: Chem Potential Solve -- Factorization failed!" << std::endl;
-        }
-        Eigen::VectorXd x = solver.solve(b);
+        // Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
+        // solver.compute(A); //compute factorization
+        // if(solver.info() != Eigen::Success){
+        //     std::cout << "ERROR: Chem Potential Solve -- Factorization failed!" << std::endl;
+        // }
+        // Eigen::VectorXd x = solver.solve(b);
         //std::cout << "Result:\n" << x << std::endl;
-
-        std::cout << "system solved" << std::endl;
 
         //--IC CG Solver--
 
         //Solve with IncompleteCholesky preconditioned CG
-        // Eigen::VectorXd iccg_result(dofs);
-        // Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<T>> iccg;
-        // iccg.compute(A);
-        // iccg.setMaxIterations(max_iters);
-        // iccg.setTolerance(tol);
-        // iccg_result = iccg.solve(b);
-        // std::cout << "result: \n" << iccg_result << std::endl;
-        // std::cout << "#iterations:     " << iccg.iterations() << std::endl;
-        // std::cout << "estimated error: " << iccg.error()      << std::endl;
+        Eigen::VectorXd x(dofs);
+        Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<T>> iccg;
+        iccg.compute(A);
+        if(iccg.info() != Eigen::Success){
+            std::cout << "ERROR ICCG Solver: Factorization failed!" << std::endl;
+        }
+        iccg.setMaxIterations(max_iters);
+        iccg.setTolerance(tol);
+        x = iccg.solve(b);
+        //std::cout << "result: \n" << x << std::endl;
+        std::cout << "#iterations:     " << iccg.iterations() << std::endl;
+        std::cout << "estimated error: " << iccg.error()      << std::endl;
 
         //-- CG SOLVER -- 
         
@@ -2821,24 +2833,39 @@ public:
                 const Vector<T, dim> pos = m_X[i];
                 const T vol = m_vol[i];
                 BSplineWeights<T, dim> spline(pos, dx);
-                Mat nablaThetaStorage = Mat::Zero(dim, 9); //only should need 9 since each particle splats to 9 nodes in quadratic BSpline
-                Bow::Vector<int, Eigen::Dynamic> idxStorage = Bow::Vector<int, Eigen::Dynamic>::Zero(9);
+                Matrix<T, 9, 9> localMatrix = Matrix<T, 9, 9>::Zero(); //particle maps to 9 nodes, each node has a contribution with each other node including itself (9x9 matrix of these influences)
+                Mat nablaThetaStorage = Mat::Zero(dim, 9); //store nabla theta for each grid node
+                Bow::Vector<int, Eigen::Dynamic> idxStorage = Bow::Vector<int, Eigen::Dynamic>::Zero(9); //store the global matrix indeces we should use to map each of these 9 grid nodes
                 
-                //Store all 9 grid dw for this particle
+                //std::cout << "localMatrix before: " << localMatrix << std::endl;
+                //std::cout << "nablaThetaStorage before: " << nablaThetaStorage << std::endl;
+
+                //Collect grid node data for the 9 nodes in our particle kernel
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
-                    int node_id = g.chemPotIdx; //this indexes the chem pot DOFs
-                    idxStorage[oidx] = node_id;
+                    idxStorage[oidx] = g.chemPotIdx; //this indexes the chem pot DOFs
                     T DpInv = 1.0 / (0.25 * dx * dx);
                     nablaThetaStorage.col(oidx) = DpInv * w * (g.x1 - pos);
                 });
+
+                //Construct localMatrix
+                //std::cout << "localMAtrix after iterateKernel: " << localMatrix << std::endl;
+                for(int m = 0; m < 9; ++m){
+                    for(int n = 0; n < 9; ++n){
+                        localMatrix(m, n) += nablaThetaStorage.col(m).dot(nablaThetaStorage.col(n));
+                    }
+                }
+
+                //Project local matrix to be PD
+                //std::cout << "localMAtrix after setting it: " << localMatrix << std::endl;
+                makePD(localMatrix);
 
                 //Add a triplet for each contribution from each pairing of mapped nodes
                 for(int row = 0; row < 9; ++row){
                     for(int col = 0; col < 9; ++col){
                         T rowIdx = idxStorage[row];
                         T colIdx = idxStorage[col];
-                        T value = vol * (_k_net / _eta) * nablaThetaStorage.col(row).dot(nablaThetaStorage.col(col));
-                        tripletList.push_back(Eigen::Triplet<T>(colIdx, rowIdx, value));
+                        T value = vol * (_k_net / _eta) * localMatrix(row, col);
+                        tripletList.push_back(Eigen::Triplet<T>(rowIdx, colIdx, value));
                     }
                 }
 
@@ -2852,6 +2879,41 @@ public:
         std::cout << "After setFromTriplets..." << std::endl;
 
         return;
+    }
+
+    //Project Local Matrix to be Positive Definite
+    void makePD(Matrix<T, 9, 9>& A){
+        //SYMMETRY CHECK
+        // if(!A.isApprox(A.transpose())){
+        //     std::cout << A << std::endl;
+        //     throw std::runtime_error("makePD: Input matrix not symmetric!");
+        // }
+        
+        Eigen::SelfAdjointEigenSolver<Matrix<T, 9, 9>> eigenSolver(A);
+        if(eigenSolver.eigenvalues()[0] >= 0){
+            return;
+        }
+        Eigen::VectorXd D = eigenSolver.eigenvalues();
+        for(int i = 0; i < 9; ++i){
+            if(D[i] < 0){
+                D[i] = 0;
+            }
+            else{
+                break;
+            }
+        }
+        A = eigenSolver.eigenvectors() * D.asDiagonal() * eigenSolver.eigenvectors().transpose();
+
+        //SYMMETRY CHECK
+        // if(!A.isApprox(A.transpose())){
+        //     throw std::runtime_error("makePD: Matrix not symmetric (after projection)!");
+        // }
+        // //PSD CHECK
+        // Eigen::LDLT<Eigen::MatrixXd, Eigen::Upper> ldlt;
+        // ldlt.compute(A);
+        // if(ldlt.info() == Eigen::NumericalIssue || !ldlt.isPositive()){
+        //     throw std::runtime_error("makePD: Matrix still not PSD!");
+        // }
     }
 
     // b = A*x
