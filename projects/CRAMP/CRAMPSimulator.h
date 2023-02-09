@@ -449,9 +449,17 @@ public:
         Bow::DFGMPM::GridToParticlesOp<T, dim> G2P{ {}, Base::m_X, Base::m_V, Base::m_C, particleAF, grid, Base::dx, dt, flipPicRatio, useDFG, m_marker };
         G2P(useAPIC); //P2G
 
-        std::cout << "G2P Done, starting Evolve Strain" << std::endl;
+        std::cout << "G2P Done..." << std::endl;
 
         m_Fprevious = m_F; //make a copy of the deformation gradients before we update them
+
+        //FBar Stabilization - Modifies m_gradXp
+        if(useFBarStabilization){
+            Bow::CRAMP::ComputeFBarOp<T,dim> computeFBar{ {}, Base::m_X, m_F, m_marker, m_currentVolume, particleAF, useDFG, Base::dx, grid, G2P.m_gradXp };
+            computeFBar(); //update m_F in place to contain Fbar for all poroelastic particles!
+
+            std::cout << "Computed FBar Updates" << std::endl;
+        }
 
         //Now evolve strain (updateF)
         for (auto& model : Base::elasticity_models){
@@ -531,17 +539,6 @@ public:
                 model->collect_chemPotential(m_chemPotential);
                 model->compute_volume(m_currentVolume);
                 model->collect_initialVolume(m_initialVolume);
-            }
-
-            if(useFBarStabilization){
-                Bow::CRAMP::ComputeFBarOp<T,dim> computeFBar{ {}, Base::m_X, Base::m_mass, m_F, m_marker, m_initialVolume, Base::dx, grid };
-                computeFBar(); //update m_F in place to contain Fbar for all poroelastic particles!
-
-                for (auto& model : Base::elasticity_models){
-                    model->set_strain(m_F);
-                }
-
-                std::cout << "Computed F Bar" << std::endl;
             }
 
             //Compute dcdt

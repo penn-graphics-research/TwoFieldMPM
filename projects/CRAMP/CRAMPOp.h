@@ -2995,64 +2995,66 @@ public:
     using Vec = Bow::Vector<T, Eigen::Dynamic>;
     using Mat = Matrix<T, dim, Eigen::Dynamic>;
     Field<Vector<T, dim>>& m_X;
-    std::vector<T>& m_mass;
     Field<Matrix<T, dim, dim>>& m_F;
     Field<int> m_marker;
-    Field<T> m_initialVol;
+    Field<T> m_currentVol;
+    Bow::Field<std::vector<int>>& particleAF;
+
+    bool useDFG;
 
     T dx;
     DFGMPM::DFGMPMGrid<T, dim>& grid;
+
+    Field<Matrix<T, dim, dim>>& m_gradXp;
 
     void operator()()
     {
         BOW_TIMER_FLAG("ComputeFBar");
 
-        //Compute det F0 for each cell (iterate points in each cell)
-        grid.serial_for([&](int i) { 
-            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
-                const Vector<T, dim> pos = m_X[i];
-                const T vol = m_initialVol[i];
-                BSplineWeights<T, dim> spline(pos, dx);
-                const Matrix<T, dim, dim> F = m_F[i];
-                
-                grid.getCellCenteredNode(spline, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) { //cellCenteredNode = floor(Xp)
-                    //std::cout << "xp: " << pos << ", cellCenteredNode: " << node << std::endl;
-                    g.chemPotIdx = 0; //this marks the cell as having chem potntial particles in it
-                    g.Fi2(0,0) += vol * F.determinant();
-                    g.Fi2(1,1) += vol;
-                });
-            }
-        });
-
-        //Compute det F0 for each cell with chem pot particles in it!
-        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-            if(g.chemPotIdx > -1){
-                //std::cout << "V_0^t: " << g.Fi2(0,0) << std::endl;
-                //std::cout << "V_0^0: " << g.Fi2(1,1) << std::endl;
-                g.Fi2(0,0) /= g.Fi2(1,1); //store det F0 in Fi2(0,0)
-                //std::cout << "det F_0: " << g.Fi2(0,0) << std::endl;
-            }
-        });
-
-        //Compute Fbar for each particle
-        grid.serial_for([&](int i) { 
-            if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
-                const Vector<T, dim> pos = m_X[i];
-                BSplineWeights<T, dim> spline(pos, dx);
-                const Matrix<T, dim, dim> F = m_F[i];
-                
-                grid.getCellCenteredNode(spline, [&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) { //cellCenteredNode = floor(Xp)
-                    m_F[i] = std::pow(g.Fi2(0,0) / F.determinant(), (T)1/3) * F;
-                });
-            }
-        });
-
         //Reset the grid structures we used for this evolution
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-            if(g.chemPotIdx > -1){
-                g.chemPotIdx = -1;
-                g.Fi2 = Matrix<T,dim,dim>::Zero();
-            }
+            g.u1 = Vector<T,dim>::Zero();
+            g.u2 = Vector<T,dim>::Zero(); //we use these structures to hold quantities
+        });
+
+        //Calculate Volume Averaged Jacobians at Each Node, JBar_i
+        grid.colored_for([&](int i) { 
+            const Vector<T, dim> pos = m_X[i];
+            const T vol = m_currentVol[i];
+            BSplineWeights<T, dim> spline(pos, dx);
+            const Matrix<T, dim, dim> Fbar = m_F[i];
+            T Jbar = Fbar.determinant();
+            T deltaJ = m_gradXp[i].determinant();
+            grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
+                if (g.idx < 0) return;
+                g.u1[0] += w * vol * Jbar * deltaJ;
+                g.u1[1] += w * vol;
+            });
+        });
+
+        //Divide out denom
+        grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            g.u1[0] /= g.u1[1];
+        });
+
+        //Now compute the scalars to modify entries in m_gradXp
+        grid.parallel_for([&](int i) {
+            Vector<T, dim>& Xp = m_X[i];
+            T numerator = 0; //sum_i w_ip * J_i
+            const Matrix<T, dim, dim> Fbar = m_F[i];
+            T Jbar = Fbar.determinant();
+            T deltaJ = m_gradXp[i].determinant();
+            T denominator = Jbar * deltaJ;
+            BSplineWeights<T, dim> spline(Xp, dx);
+
+            grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, DFGMPM::GridState<T, dim>& g) {
+                if (g.idx < 0) return;
+                numerator += w * g.u1[0]; //u1[0] is where we stored J_i
+            });
+
+            T scaleFactor = std::pow(numerator / denominator, ((T)1.0/dim));
+
+            m_gradXp[i] *= scaleFactor; //update gradXp to make this gradXpBar (deltaF Bar)
         });
 
         return;

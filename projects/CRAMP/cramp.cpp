@@ -4220,7 +4220,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-4_ICCG";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-4_ICCG_FBar";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4257,7 +4257,7 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 1e-4;
 
         auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
-        sim.useFBarStabilization = false;
+        sim.useFBarStabilization = true;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4274,7 +4274,7 @@ int main(int argc, char *argv[])
         //DATA COLLECTION
         sim.collectDataAcrossFrames = true;
         sim.collectDataAcrossFramesIndex = 1238;
-        sim.collectDataAcrossFrames_Verbose = false;
+        sim.collectDataAcrossFrames_Verbose = true;
 
         //-----BOUNDARY CONDITIONS-----
 
