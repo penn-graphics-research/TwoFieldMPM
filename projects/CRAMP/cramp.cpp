@@ -4051,8 +4051,11 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/233_ToroidalPressureGradient_noClot_DirichletPipeWallsSTICKY_c1_300k_c2_2.0_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
+        std::string path = "output/233_APIC_FBar_ToroidalPressureGradient_noClot_DirichletPipeWallsSTICKY_c1_300k_c2_2.0_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
         MPM::CRAMPSimulator<T, dim> sim(path);
+
+
+        sim.useFBarStabilization = true;
 
         //water material
         T rhoFluid = 1060; //density of blood
@@ -4066,7 +4069,7 @@ int main(int argc, char *argv[])
 
         //Interpolation Scheme
         sim.useAPIC = true;
-        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        sim.flipPicRatio = 1.0; //0 = PIC, 1 = FLIP
         
         //DFG Specific Params
         sim.st = 4.7; //5.5 good for dx = 0.2, 
@@ -4095,7 +4098,7 @@ int main(int argc, char *argv[])
         //Compute time step for symplectic
         sim.cfl = 0.4;
         sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
-        //sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-6;
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         //auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
@@ -4220,7 +4223,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-4_ICCG_FBar";
+        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-6_ICCG_FBar_FLIP";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4231,8 +4234,8 @@ int main(int argc, char *argv[])
         sim.gravity = 0.0;
 
         //Interpolation Scheme
-        sim.useAPIC = true;
-        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        sim.useAPIC = false;
+        sim.flipPicRatio = 1.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
         sim.st = 4.7; //5.5 good for dx = 0.2, 
@@ -4254,7 +4257,7 @@ int main(int argc, char *argv[])
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
-        sim.suggested_dt = 1e-4;
+        sim.suggested_dt = 1e-6;
 
         auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
         sim.useFBarStabilization = true;
@@ -4274,7 +4277,7 @@ int main(int argc, char *argv[])
         //DATA COLLECTION
         sim.collectDataAcrossFrames = true;
         sim.collectDataAcrossFramesIndex = 1238;
-        sim.collectDataAcrossFrames_Verbose = true;
+        sim.collectDataAcrossFrames_Verbose = false;
 
         //-----BOUNDARY CONDITIONS-----
 
@@ -4288,6 +4291,79 @@ int main(int argc, char *argv[])
         T displacement = sim.dx * 1;
         T speed = displacement / moveTime;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + height - sim.dx), Vector<T, dim>(0, -1), Vector<T, dim>(0, speed), moveTime)); //bottom wall - hold artery in place
+    
+        sim.run(start_frame);
+    }
+
+    //Dam Break Test - from Zhao2022 Volumetric
+    if(testcase == 235){
+        
+        using T = double;
+        static const int dim = 2;
+
+        T bulk = std::atof(argv[2]);
+        std::string bulkString = argv[2];
+
+        std::string path = "output/235_DamBreakTest_FLIP_1e-5_FbarONAfterVolFix_Bulk" + bulkString;
+        MPM::CRAMPSimulator<T, dim> sim(path);
+
+        //Params
+        sim.dx = 0.25;
+        sim.symplectic = true;
+        sim.end_frame = 120;
+        sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
+        sim.gravity = -9.81;
+
+        //Interpolation Scheme
+        sim.useAPIC = false;
+        sim.flipPicRatio = 1.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        
+        //DFG Specific Params
+        sim.st = 4.7; //5.5 good for dx = 0.2, 
+        sim.useDFG = false;
+        //sim.fricCoeff = couplingFriction; //for no slip condition between solid and fluid
+        sim.useExplicitContact = true;
+        //sim.massRatio = 15.0;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+        
+        //fluid params
+        T gamma = 7.0;
+        T viscosity = 0.001;
+        T rho = 997.5;
+
+        //Compute time step for symplectic
+        sim.suggested_dt = 1e-5;
+
+        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        sim.useFBarStabilization = true;
+        
+        //-----PARTICLE SAMPLING-----
+
+        //Sampling Constants
+        int ppc = 25;
+        
+        T minX = 0.25; //tuning this enabled making the BoxSampling actually a square lol must be rounding error :O
+        T minY = 0.25;
+
+        //Add fibrin block
+        T width = 4.0;
+        T height = 2.0;
+        sim.sampleGridAlignedBox(material, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rho, false, 4);
+
+        //DATA COLLECTION
+        // sim.collectDataAcrossFrames = true;
+        // sim.collectDataAcrossFramesIndex = 1238;
+        // sim.collectDataAcrossFrames_Verbose = false;
+
+        //-----BOUNDARY CONDITIONS-----
+
+        //Add Static Half Spaces
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - sim.dx, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + 2.0, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
     
         sim.run(start_frame);
     }

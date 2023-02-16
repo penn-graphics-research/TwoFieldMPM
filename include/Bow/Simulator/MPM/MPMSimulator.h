@@ -202,10 +202,11 @@ public:
     template <int interpolation_degree = 2>
     void g2p(T dt)
     {
+        Field<T> FBarMultipliers;
         GridToParticlesOp<T, dim, interpolation_degree> G2P{ {}, m_X, m_V, m_C, grid, dx, dt };
         G2P(apic);
         for (auto& model : elasticity_models)
-            model->evolve_strain(G2P.m_gradXp);
+            model->evolve_strain(G2P.m_gradXp, FBarMultipliers);
         for (auto& model : plasticity_models)
             model->project_strain();
     }

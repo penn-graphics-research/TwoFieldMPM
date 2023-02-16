@@ -74,6 +74,9 @@ public:
     Field<TM> m_Fprevious; //hold previous def grad to compute Fdot, need this for dynamic J-Integral only
     Field<TV> m_Vprevious; //needed for dynamic J-integral
     Field<T> m_chemPotential; //hold particle chemical potentials
+    Field<T> m_J;
+    Field<T> m_pressure;
+    Field<T> m_FBarMultipliers;
 
     //Store Data Across Frames for a single point
     bool collectDataAcrossFrames = false;
@@ -258,6 +261,8 @@ public:
             model->collect_mu(m_mu);
             model->collect_la(m_la);
             model->collect_strain(m_F);
+            model->collect_J(m_J);
+            model->collect_pressure(m_pressure);
         }
 
         if(damageType == 2){
@@ -455,15 +460,15 @@ public:
 
         //FBar Stabilization - Modifies m_gradXp
         if(useFBarStabilization){
-            Bow::CRAMP::ComputeFBarOp<T,dim> computeFBar{ {}, Base::m_X, m_F, m_marker, m_currentVolume, particleAF, useDFG, Base::dx, grid, G2P.m_gradXp };
+            Bow::CRAMP::ComputeFBarOp<T,dim> computeFBar{ {}, Base::m_X, m_F, m_marker, m_currentVolume, particleAF, useDFG, Base::dx, grid, G2P.m_gradXp, m_FBarMultipliers };
             computeFBar(); //update m_F in place to contain Fbar for all poroelastic particles!
 
-            std::cout << "Computed FBar Updates" << std::endl;
+            std::cout << "Computed FBar Multipliers" << std::endl;
         }
 
         //Now evolve strain (updateF)
         for (auto& model : Base::elasticity_models){
-            model->evolve_strain(G2P.m_gradXp);
+            model->evolve_strain(G2P.m_gradXp, m_FBarMultipliers);
         }
 
         std::cout << "Finished Evolve Strain" << std::endl;
@@ -498,6 +503,8 @@ public:
             model->set_dt(dt); //pass dt into elastic model for viscous fluids! all others this is just a quick return
             model->compute_cauchy(m_cauchy); //we also use this for anisoMPM damage --> do not take out unless replace it in AnisoMPM damage
             model->collect_strain(m_F);
+            model->collect_J(m_J);
+            model->collect_pressure(m_pressure);
         }
         std::cout << "Finished collecting F and Cauchy..." << std::endl;
 
@@ -544,6 +551,9 @@ public:
             //Compute dcdt
             T Jcurr, Jprev;
             for(unsigned int i = 0; i < m_dcdt.size(); ++i){
+                if(m_marker[i] != 5){
+                    continue;
+                }
                 Jcurr = m_F[i].determinant();
                 Jprev = m_Fprevious[i].determinant();
                 //m_dcdt[i] = (m_F[i].determinant() - m_Fprevious[i].determinant()) / dt;
@@ -860,7 +870,7 @@ public:
         if(verbose){
             BOW_TIMER_FLAG("writeSubstep");
             
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(currSubstep) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential, m_J, m_pressure);
 
             std::cout << "Substep Written..." << std::endl;
 
@@ -1053,7 +1063,7 @@ public:
     {
         if(!frame_num || !verbose){
             BOW_TIMER_FLAG("writeFrame");
-            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential);
+            IO::writeTwoField_particles_ply(outputPath + "/p" + std::to_string(frame_num) + ".ply", Base::m_X, Base::m_V, particleDG, Base::m_mass, Dp, sp, m_marker, m_cauchySmoothed, m_FSmoothed, m_lamMax, smoothParticleStressField, m_scaledCauchy, m_F, m_chemPotential, m_J, m_pressure);
 
             std::cout << "Frame Written (p)..." << std::endl;
 
@@ -1146,6 +1156,9 @@ public:
         m_scaledCauchy.push_back(TM::Identity());
         m_chemPotential.push_back(0.0);
         m_dcdt.push_back(0.0);
+        m_J.push_back(0.0);
+        m_pressure.push_back(0.0);
+        m_FBarMultipliers.push_back(1.0); //needs to be 1.0 if unset
         
         //DFG Neighbor Structures
         std::vector<int> placeholder, placeholder2, placeholder3;

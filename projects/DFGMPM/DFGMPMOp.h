@@ -1103,7 +1103,8 @@ public:
                 else{
                     m_C[i].setZero();
                     //Finish computing FLIP velocity: v_p^n+1 = v_p^n + dt (v_i^n+1 - v_i^n) * wip
-                    flipV = m_V[i] + (dt * flipV);
+                    //flipV = m_V[i] + (dt * flipV);
+                    flipV = m_V[i] + flipV;
                     m_V[i] = (flipPicRatio * flipV) + ((1.0 - flipPicRatio) * picV); //blended velocity
                 }
                 

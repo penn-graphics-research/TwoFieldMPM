@@ -21,6 +21,7 @@ public:
     Field<T> m_J;
     Field<T> m_mu, m_lambda;
     Field<T> m_vol;
+    Field<T> m_currentVolume;
     Field<T> m_chemPotential; //used only for poroelasticity
     std::vector<int> m_global_index;
     virtual void append(int start, int end, T vol) = 0;
@@ -30,7 +31,7 @@ public:
     virtual void compute_volume(Field<T>& volume) {}
     virtual void compute_von_mises(Field<T>& stress) {}
     virtual void compute_criticalStress(T percent, Field<Matrix<T, dim, dim>>& stretchedCauchy) { BOW_NOT_IMPLEMENTED }
-    virtual void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) = 0;
+    virtual void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp, const Field<T>& m_FBarMultipliers) = 0;
     virtual void trial_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) { BOW_NOT_IMPLEMENTED }
     virtual void trial_energy(Field<T>& t_energy) { BOW_NOT_IMPLEMENTED }
     virtual void strain_energy(Field<T>& m_energy) { }
@@ -46,6 +47,8 @@ public:
     virtual void collect_initialVolume(Field<T>& m_initialVolume) {}
     virtual void collect_chemPotential(Field<T>& m_chemPotential) {}
     virtual void update_chemPotential(Field<T>& m_chemPotential) {}
+    virtual void collect_J(Field<T>& _m_J) {}
+    virtual void collect_pressure(Field<T>& _m_pressure) {}
 };
 
 template <class T, int dim, class Model, bool inversion_free>
@@ -57,6 +60,7 @@ public:
     using ElasticityOp<T, dim>::m_J;
     using ElasticityOp<T, dim>::m_global_index;
     using ElasticityOp<T, dim>::m_vol;
+    using ElasticityOp<T, dim>::m_currentVolume;
     using ElasticityOp<T, dim>::m_mu;
     using ElasticityOp<T, dim>::m_lambda;
     using Model::first_piola;
@@ -84,6 +88,7 @@ public:
         for (int i = start; i < end; ++i) {
             m_F.push_back(Matrix<T, dim, dim>::Identity());
             m_vol.push_back(vol);
+            m_currentVolume.push_back(vol);
             m_global_index.push_back(i);
             m_J.push_back(1.0);
             m_mu.push_back(mu);
@@ -91,10 +96,14 @@ public:
         }
     }
 
-    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp, const Field<T>& m_FBarMultipliers) override
     {
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            m_F[i] = (m_gradXp[m_global_index[i]]) * m_F[i];
+            Matrix<T, dim, dim> F = m_gradXp[m_global_index[i]] * m_F[i]; //F for volume update
+            T J = F.determinant(); //J for volume update
+            m_currentVolume[i] = J * m_vol[i];
+            
+            m_F[i] = (m_FBarMultipliers[m_global_index[i]] * m_gradXp[m_global_index[i]]) * m_F[i]; //F update with FBar multiplier
         });
     }
 
@@ -176,9 +185,7 @@ public:
     void compute_volume(Field<T>& volume){
         BOW_TIMER_FLAG("compute current volume (Fbased)");
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            Matrix<T, dim, dim> F = m_F[i];
-            T J = F.determinant();
-            volume[m_global_index[i]] = J * m_vol[i]; //current volume VpN = J * Vp0
+            volume[m_global_index[i]] = m_currentVolume[i]; //current volume VpN = J * Vp0, computed in evolve_strain
         });
     }
 
@@ -308,6 +315,16 @@ public:
     {
         return;
     }
+
+    void collect_J(Field<T>& _m_J) override
+    {
+        return;
+    }
+
+    void collect_pressure(Field<T>& _m_pressure) override
+    {
+        return;
+    }
 };
 
 template <class T, int dim>
@@ -331,6 +348,7 @@ public:
     using ElasticityOp<T, dim>::m_F;
     using ElasticityOp<T, dim>::m_global_index;
     using ElasticityOp<T, dim>::m_vol;
+    using ElasticityOp<T, dim>::m_currentVolume;
     using ElasticityOp<T, dim>::m_mu;
     using ElasticityOp<T, dim>::m_lambda;
     using ElasticityOp<T, dim>::m_chemPotential;
@@ -370,6 +388,7 @@ public:
         for (int i = start; i < end; ++i) {
             m_F.push_back(Matrix<T, dim, dim>::Identity());
             m_vol.push_back(vol);
+            m_currentVolume.push_back(vol);
             m_global_index.push_back(i);
             m_mu.push_back(mu);
             m_lambda.push_back(lambda);
@@ -377,10 +396,14 @@ public:
         }
     }
 
-    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp, const Field<T>& m_FBarMultipliers) override
     {
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            m_F[i] = (m_gradXp[m_global_index[i]]) * m_F[i];
+            Matrix<T, dim, dim> F = m_gradXp[m_global_index[i]] * m_F[i]; //F for volume update
+            T J = F.determinant(); //J for volume update
+            m_currentVolume[i] = J * m_vol[i];
+
+            m_F[i] = (m_FBarMultipliers[m_global_index[i]] * m_gradXp[m_global_index[i]]) * m_F[i]; //F update with FBar multiplier
         });
     }
 
@@ -409,9 +432,7 @@ public:
     void compute_volume(Field<T>& volume){
         BOW_TIMER_FLAG("compute current volume (Fbased)");
         tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
-            Matrix<T, dim, dim> F = m_F[i];
-            T J = F.determinant();
-            volume[m_global_index[i]] = J * m_vol[i]; //current volume VpN = J * Vp0
+            volume[m_global_index[i]] = m_currentVolume[i]; //current volume VpN = J * Vp0, computed in evolve_strain
         });
     }
 
@@ -507,6 +528,16 @@ public:
         });
     }
 
+    void collect_J(Field<T>& _m_J) override
+    {
+        return;
+    }
+
+    void collect_pressure(Field<T>& _m_pressure) override
+    {
+        return;
+    }
+
   private:
     T psi_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1)
     {
@@ -539,6 +570,8 @@ public:
         P = Pnet + Pmix + Pcorrection;
     }
 
+    
+
 };
 
 template <class T, int dim>
@@ -557,6 +590,7 @@ public:
     using ElasticityOp<T, dim>::m_J;
     using ElasticityOp<T, dim>::m_global_index;
     using ElasticityOp<T, dim>::m_vol;
+    using ElasticityOp<T, dim>::m_currentVolume;
     Field<T> t_J; // only used in implicit
     T bulk, gamma;
 
@@ -572,14 +606,18 @@ public:
         for (int i = start; i < end; ++i) {
             m_J.push_back(1);
             m_vol.push_back(vol);
+            m_currentVolume.push_back(vol);
             m_global_index.push_back(i);
         }
     }
 
-    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp, const Field<T>& m_FBarMultipliers) override
     {
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
-            m_J[i] = (1 + (m_gradXp[m_global_index[i]].trace() - dim)) * m_J[i];
+            T J = (1 + (m_gradXp[m_global_index[i]].trace() - dim)) * m_J[i]; //J for volume update
+            m_currentVolume[i] = J * m_vol[i];
+
+            m_J[i] = (1 + ((m_FBarMultipliers[m_global_index[i]] * m_gradXp[m_global_index[i]]).trace() - dim)) * m_J[i];
         });
     }
 
@@ -646,8 +684,7 @@ public:
     {
         BOW_TIMER_FLAG("compute current volume (EOS)");
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
-            T J = m_J[i];
-            volume[m_global_index[i]] = m_vol[i] * J;
+            volume[m_global_index[i]] = m_currentVolume[i]; //current volume VpN = J * Vp0, computed in evolve_strain
         });
     }
 
@@ -728,6 +765,21 @@ public:
     {
         return;
     }
+
+    void collect_J(Field<T>& _m_J) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_J[m_global_index[i]] = m_J[i];
+        });
+    }
+
+    void collect_pressure(Field<T>& _m_pressure) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_pressure[m_global_index[i]] = -1 * first_piola(m_J[i], bulk, gamma);
+        });
+        
+    }
 };
 
 template <class T, int dim>
@@ -742,6 +794,7 @@ public:
     using ElasticityOp<T, dim>::m_J;
     using ElasticityOp<T, dim>::m_global_index;
     using ElasticityOp<T, dim>::m_vol;
+    using ElasticityOp<T, dim>::m_currentVolume;
     Field<T> t_J; // only used in implicit
     Field<TM> m_Fprevious; //for computing Fdot
     T bulk, gamma, viscosity, dt;
@@ -762,16 +815,24 @@ public:
             m_F.push_back(Matrix<T, dim, dim>::Identity());
             m_Fprevious.push_back(Matrix<T, dim, dim>::Identity());
             m_vol.push_back(vol);
+            m_currentVolume.push_back(vol);
             m_global_index.push_back(i);
         }
     }
 
-    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp) override
+    void evolve_strain(const Field<Matrix<T, dim, dim>>& m_gradXp, const Field<T>& m_FBarMultipliers) override
     {
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
             m_Fprevious[i] = m_F[i]; //save Fprevious
-            m_F[i] = (m_gradXp[m_global_index[i]]) * m_F[i]; //also evolve F for viscosity!
-            m_J[i] = (1 + (m_gradXp[m_global_index[i]].trace() - dim)) * m_J[i];
+
+            //Compute Volume
+            Matrix<T, dim, dim> F = m_gradXp[m_global_index[i]] * m_F[i]; //F for volume update
+            T J = F.determinant(); //J for volume update
+            m_currentVolume[i] = J * m_vol[i];
+
+            //Update F and J
+            m_F[i] = (m_FBarMultipliers[m_global_index[i]] * m_gradXp[m_global_index[i]]) * m_F[i]; //F update with FBar multiplier
+            m_J[i] = m_F[i].determinant();
         });
     }
 
@@ -820,8 +881,7 @@ public:
     {
         BOW_TIMER_FLAG("Compute Current Volume (V_p^n), (ViscousEOS)");
         tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
-            T J = m_J[i];
-            volume[m_global_index[i]] = m_vol[i] * J;
+            volume[m_global_index[i]] = m_currentVolume[i]; //current volume VpN = J * Vp0, computed in evolve_strain
         });
     }
 
@@ -884,10 +944,8 @@ public:
     //for viscous Equation of State, collect J here and store it in F_11, pressure in F_22
     void collect_strain(Field<Matrix<T, dim, dim>>& _m_F) override 
     {
-        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
-            T J = m_J[i];
-            _m_F[m_global_index[i]](0,0) = J; //J (volumetric def grad)
-            _m_F[m_global_index[i]](1,1) = -1 * first_piola(J, bulk, gamma); //pressure
+        tbb::parallel_for(size_t(0), m_F.size(), [&](size_t i) {
+            _m_F[m_global_index[i]] = m_F[i];
         });
     }
 
@@ -916,6 +974,21 @@ public:
     void update_chemPotential(Field<T>& _m_chemPotential) override
     {
         return;
+    }
+
+    void collect_J(Field<T>& _m_J) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_J[m_global_index[i]] = m_J[i];
+        });
+    }
+
+    void collect_pressure(Field<T>& _m_pressure) override
+    {
+        tbb::parallel_for(size_t(0), m_J.size(), [&](size_t i) {
+            _m_pressure[m_global_index[i]] = -1 * first_piola(m_J[i], bulk, gamma);
+        });
+        
     }
 
     // T stepsize_upperbound(const Field<Matrix<T, dim, dim>>& m_gradDXp) override

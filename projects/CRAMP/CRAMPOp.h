@@ -3006,6 +3006,7 @@ public:
     DFGMPM::DFGMPMGrid<T, dim>& grid;
 
     Field<Matrix<T, dim, dim>>& m_gradXp;
+    Field<T>& m_FBarMultipliers;
 
     void operator()()
     {
@@ -3054,7 +3055,8 @@ public:
 
             T scaleFactor = std::pow(numerator / denominator, ((T)1.0/dim));
 
-            m_gradXp[i] *= scaleFactor; //update gradXp to make this gradXpBar (deltaF Bar)
+            //m_gradXp[i] *= scaleFactor; //update gradXp to make this gradXpBar (deltaF Bar)
+            m_FBarMultipliers[i] = scaleFactor;
         });
 
         return;
