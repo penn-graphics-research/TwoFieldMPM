@@ -409,7 +409,7 @@ public:
             }
         }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral, massRatio };
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral, massRatio, useFBarStabilization };
         P2G();
     }
 
@@ -574,11 +574,11 @@ public:
             }
         }
 
-        //Compute Scaled Stress from Elasticity Degradation
-        if(elasticityDegradationType == 1){
+        //Compute Scaled Cauchy Stress from Elasticity Degradation or for FBar since we need to use Cauchy for that
+        if(useFBarStabilization || elasticityDegradationType == 1){
             Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, degAlpha, grid, m_marker };
             linearTensionDegradation();
-            std::cout << "Elasticity Degradation Done..." << std::endl;
+            std::cout << "Scaled Cauchy Stress Computed (FBar/ElasticityDeg)..." << std::endl;
         }
 
         p2g(dt); //compute forces, p2g transfer

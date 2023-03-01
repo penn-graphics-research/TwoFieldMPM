@@ -4304,7 +4304,7 @@ int main(int argc, char *argv[])
         T bulk = std::atof(argv[2]);
         std::string bulkString = argv[2];
 
-        std::string path = "output/235_DamBreakTest_FLIP_1e-5_FbarONAfterVolFix_Bulk" + bulkString;
+        std::string path = "output/235_DamBreakTest_FLIP_1e-5_FbarOFF_RestStateSEP_wVEOS_wFLIP_Bulk" + bulkString;
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4338,7 +4338,8 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 1e-5;
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
-        sim.useFBarStabilization = true;
+        //auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        sim.useFBarStabilization = false;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4348,7 +4349,7 @@ int main(int argc, char *argv[])
         T minX = 0.25; //tuning this enabled making the BoxSampling actually a square lol must be rounding error :O
         T minY = 0.25;
 
-        //Add fibrin block
+        //Add water block
         T width = 4.0;
         T height = 2.0;
         sim.sampleGridAlignedBox(material, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rho, false, 4);
@@ -4364,6 +4365,8 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - sim.dx, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + 2.0, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + sim.dx, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
     
         sim.run(start_frame);
     }

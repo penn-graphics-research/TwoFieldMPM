@@ -59,6 +59,8 @@ public:
 
     T massRatio;
 
+    bool useFBarStabilization;
+
     void operator()()
     {
         BOW_TIMER_FLAG("P2G");
@@ -74,7 +76,7 @@ public:
                 BSplineWeights<T, dim> spline(pos, dx);
 
                 //Compute scaled stress forces (if using elasticity degradation)
-                if(elasticityDegradationType == 1){
+                if(useFBarStabilization || elasticityDegradationType == 1){
                     //Use damage scaled Cauchy stress for grid forces
                     delta_t_tmp_force = -dt * m_currentVolume[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
                     tmp_force = -m_currentVolume[i] * m_scaledCauchy[i]; 
@@ -90,7 +92,6 @@ public:
                     }
                     Vector<T, dim> delta_APIC = w * velocity_term_APIC + stress_term_dw;
                     Vector<T, dim> delta_FLIP = w * momentum + stress_term_dw;
-                    Vector<T, dim> delta_vn = w * momentum; //we'll use this to compute v1^n and v2^n for FLIP
 
                     //Notice we treat single-field and two-field nodes differently
                     //NOTE: remember we are also including explicit force here if symplectic!
@@ -101,7 +102,6 @@ public:
                         }
                         else {
                             g.v1 += delta_FLIP;
-                            g.vn1 += delta_vn; //transfer momentum to compute v^n
                         }
 
                         //Now transfer mass if we aren't using DFG (this means we skipped massP2G earlier)
@@ -135,7 +135,6 @@ public:
                                 }
                                 else {
                                     g.v1 += delta_FLIP;
-                                    g.vn1 += delta_vn; //transfer momentum to compute v^n
                                 }
                                 //Compute normal for field 1 (solid) particles
                                 g.n1 += mass * dw; //remember to normalize this later!
@@ -158,7 +157,6 @@ public:
                                 }
                                 else {
                                     g.v2 += delta_FLIP;
-                                    g.vn2 += delta_vn; //transfer momentum to compute v^n
                                 }
                                 //Compute normal for field 2 (fluid) particles
                                 g.n2 += mass * dw; //remember to normalize this later!
@@ -180,7 +178,6 @@ public:
                                 }
                                 else {
                                     g.v1 += delta_FLIP;
-                                    g.vn1 += delta_vn; //transfer momentum to compute v^n
                                 }
                                 //Compute normal for field 1 particles
                                 g.n1 += mass * dw; //remember to normalize this later!
@@ -199,7 +196,6 @@ public:
                                 }
                                 else {
                                     g.v2 += delta_FLIP;
-                                    g.vn2 += delta_vn; //transfer momentum to compute v^n
                                 }
                                 //Compute normal for field 2 particles
                                 g.n2 += mass * dw; //remember to normalize this later!
@@ -231,13 +227,13 @@ public:
             Vector<T, dim> alpha1;
             alpha1 = Vector<T, dim>::Ones() * ((T)1 / mass1);
             g.v1 = g.v1.cwiseProduct(alpha1);
+            g.vn1 = g.v1; //grab vOld before we add gravity and BCs
 
             if(computeJIntegral){
                 g.u1.cwiseProduct(alpha1); //divide out m_i
             }
 
             g.v1 += gravity_term;
-            g.vn1 = g.vn1.cwiseProduct(alpha1); // this is how we get v1^n
             g.x1 = node.template cast<T>() * dx; //put nodal position in x1 regardless of separability
             g.fi1 += mass1 * (gravity_term / dt); //add gravity term to nodal force
             if (g.separable != 0) {
@@ -245,13 +241,13 @@ public:
                 Vector<T, dim> alpha2;
                 alpha2 = Vector<T, dim>::Ones() * ((T)1 / mass2);
                 g.v2 = g.v2.cwiseProduct(alpha2);
+                g.vn2 = g.v2; //grab vOld before we add gravity to it
 
                 if(computeJIntegral){
                     g.u2.cwiseProduct(alpha2); //divide out m_i
                 }
 
                 g.v2 += gravity_term;
-                g.vn2 = g.vn2.cwiseProduct(alpha2); //this is how we get v2^n
                 g.fi2 += mass2 * (gravity_term / dt); //add gravity term to nodal force, field 2
             }
         });

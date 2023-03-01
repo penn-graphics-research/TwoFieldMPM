@@ -1014,24 +1014,20 @@ public:
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 Vector<T, dim>& Xp = m_X[i];
                 Vector<T, dim> picV = Vector<T, dim>::Zero();
-                Vector<T, dim> flipV = Vector<T, dim>::Zero();
+                Vector<T, dim> oldV = Vector<T, dim>::Zero();
                 BSplineWeights<T, dim> spline(Xp, dx);
 
                 Matrix<T, dim, dim> gradXp = Matrix<T, dim, dim>::Identity();
                 Vector<T, dim> picX = Vector<T, dim>::Zero();
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, GridState<T, dim>& g) {
                     if (g.idx < 0) return;
-                    Vector<T, dim> g_v_new = g.v1;
-                    Vector<T, dim> g_v2_new = g.v2;
-                    Vector<T, dim> g_v_old = g.vn1;
-                    Vector<T, dim> g_v2_old = g.vn2;
                     
                     Vector<T, dim> xn = node.template cast<T>() * dx; //same regardless of separability
                     //these steps depend on which field the particle is in
                     if (g.separable == 0 || !useDFG) {
                         //treat as single field node
-                        picV += w * g_v_new;
-                        flipV += w * (g_v_new - g_v_old);   
+                        picV += w * g.v1;
+                        oldV += w * g.vn1;   
                         picX += w * g.x1;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
                     }
@@ -1039,14 +1035,14 @@ public:
                         //treat as two-field node
                         int fieldIdx = particleAF[i][oidx]; //grab the field that this particle belongs in for this grid node (oidx)
                         if (fieldIdx == 0) {
-                            picV += w * g_v_new;
-                            flipV += w * (g_v_new - g_v_old);
+                            picV += w * g.v1;
+                            oldV += w * g.vn1;
                             picX += w * g.x1;
                             gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
                         }
                         else if (fieldIdx == 1) {
-                            picV += w * g_v2_new;
-                            flipV += w * (g_v2_new - g_v2_old);
+                            picV += w * g.v2;
+                            oldV += w * g.vn2;
                             picX += w * g.x2;
                             gradXp.noalias() += (g.x2 - xn) * dw.transpose();
                         }
@@ -1055,14 +1051,14 @@ public:
                         //treat as two-field node
                         int materialIdx = m_marker[i]; //solid in field 1, fluid in field 2
                         if (materialIdx == 0 || materialIdx == 5) {
-                            picV += w * g_v_new;
-                            flipV += w * (g_v_new - g_v_old);
+                            picV += w * g.v1;
+                            oldV += w * g.vn1;
                             picX += w * g.x1;
                             gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
                         }
                         else if (materialIdx == 4) {
-                            picV += w * g_v2_new;
-                            flipV += w * (g_v2_new - g_v2_old);
+                            picV += w * g.v2;
+                            oldV += w * g.vn2;
                             picX += w * g.x2;
                             gradXp.noalias() += (g.x2 - xn) * dw.transpose();
                         }
@@ -1103,9 +1099,8 @@ public:
                 else{
                     m_C[i].setZero();
                     //Finish computing FLIP velocity: v_p^n+1 = v_p^n + dt (v_i^n+1 - v_i^n) * wip
-                    //flipV = m_V[i] + (dt * flipV);
-                    flipV = m_V[i] + flipV;
-                    m_V[i] = (flipPicRatio * flipV) + ((1.0 - flipPicRatio) * picV); //blended velocity
+                    m_V[i] *= flipPicRatio;
+                    m_V[i] += picV - flipPicRatio * oldV; //simplified form
                 }
                 
                 m_X[i] = picX; //use PIC for advection
