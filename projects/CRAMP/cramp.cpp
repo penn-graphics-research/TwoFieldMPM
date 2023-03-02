@@ -4304,7 +4304,7 @@ int main(int argc, char *argv[])
         T bulk = std::atof(argv[2]);
         std::string bulkString = argv[2];
 
-        std::string path = "output/235_DamBreakTest_FLIP_1e-5_FbarOFF_RestStateSEP_wVEOS_wFLIP_Bulk" + bulkString;
+        std::string path = "output/235_DamBreakTest_1e-5_FbarON_nodxGap_wVEOS_FLIP_Bulk" + bulkString;
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4339,7 +4339,7 @@ int main(int argc, char *argv[])
 
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         //auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
-        sim.useFBarStabilization = false;
+        sim.useFBarStabilization = true;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4362,11 +4362,16 @@ int main(int argc, char *argv[])
         //-----BOUNDARY CONDITIONS-----
 
         //Add Static Half Spaces
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - sim.dx, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + 2.0, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
 
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + sim.dx, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        //with dx gaps
+        // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX - sim.dx, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
+        // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + 2.0, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
+
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + sim.dx, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
     
         sim.run(start_frame);
     }

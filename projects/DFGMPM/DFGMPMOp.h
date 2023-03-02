@@ -1027,7 +1027,7 @@ public:
                     if (g.separable == 0 || !useDFG) {
                         //treat as single field node
                         picV += w * g.v1;
-                        oldV += w * g.vn1;   
+                        oldV += w * g.vn1; 
                         picX += w * g.x1;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
                     }
