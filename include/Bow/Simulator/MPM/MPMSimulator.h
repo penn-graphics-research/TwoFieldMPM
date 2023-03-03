@@ -203,10 +203,11 @@ public:
     void g2p(T dt)
     {
         Field<T> FBarMultipliers;
+        Field<TM> defRates;
         GridToParticlesOp<T, dim, interpolation_degree> G2P{ {}, m_X, m_V, m_C, grid, dx, dt };
         G2P(apic);
         for (auto& model : elasticity_models)
-            model->evolve_strain(G2P.m_gradXp, FBarMultipliers);
+            model->evolve_strain(G2P.m_gradXp, FBarMultipliers, defRates); //passing dummy for third arg here
         for (auto& model : plasticity_models)
             model->project_strain();
     }

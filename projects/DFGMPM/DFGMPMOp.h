@@ -941,15 +941,21 @@ public:
         grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
             //always process first field velocity
             Vector<T, dim> new_v1 = g.v1;
+            Vector<T, dim> new_vn1 = g.vn1; //for FLIP
             BC.mpm_explicit_update(node.template cast<T>() * dx, new_v1);
+            BC.mpm_explicit_update(node.template cast<T>() * dx, new_vn1);
             g.v1 = new_v1;
+            g.vn1 = new_vn1; //for FLIP
             g.x1 = node.template cast<T>() * dx + dt * new_v1;
 
             //only process second field if node is separable
             if (g.separable != 0) {
                 Vector<T, dim> new_v2 = g.v2;
+                Vector<T, dim> new_vn2 = g.vn2;
                 BC.mpm_explicit_update(node.template cast<T>() * dx, new_v2);
+                BC.mpm_explicit_update(node.template cast<T>() * dx, new_vn2);
                 g.v2 = new_v2;
+                g.vn2 = new_vn2;
                 g.x2 = node.template cast<T>() * dx + dt * new_v2; //advect second field nodal position separately... this feels weird
             }            
         });
@@ -1003,6 +1009,7 @@ public:
     Field<int>& m_marker;
 
     Field<Matrix<T, dim, dim>> m_gradXp = Field<Matrix<T, dim, dim>>();
+    Field<Matrix<T, dim, dim>> m_deformationRates = Field<Matrix<T, dim, dim>>();
 
     template <bool useAPIC>
     void gridToParticles()
@@ -1010,6 +1017,7 @@ public:
         BOW_TIMER_FLAG("G2P");
         T D_inverse = (T)4 / (dx * dx);
         m_gradXp.assign(m_X.size(), Matrix<T, dim, dim>());
+        m_deformationRates.assign(m_X.size(), Matrix<T, dim, dim>());
         grid.parallel_for([&](int i) {
             if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
                 Vector<T, dim>& Xp = m_X[i];
@@ -1018,6 +1026,7 @@ public:
                 BSplineWeights<T, dim> spline(Xp, dx);
 
                 Matrix<T, dim, dim> gradXp = Matrix<T, dim, dim>::Identity();
+                Matrix<T, dim, dim> gradVp = Matrix<T, dim, dim>::Identity();
                 Vector<T, dim> picX = Vector<T, dim>::Zero();
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, Vector<T, dim> dw, GridState<T, dim>& g) {
                     if (g.idx < 0) return;
@@ -1030,6 +1039,7 @@ public:
                         oldV += w * g.vn1; 
                         picX += w * g.x1;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
+                        gradVp.noalias() += g.v1 * dw.transpose();
                     }
                     else if (g.separable == 1 || g.separable == 2) {
                         //treat as two-field node
@@ -1038,13 +1048,15 @@ public:
                             picV += w * g.v1;
                             oldV += w * g.vn1;
                             picX += w * g.x1;
-                            gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
+                            gradXp.noalias() += (g.x1 - xn) * dw.transpose(); 
+                            gradVp.noalias() += g.v1 * dw.transpose(); 
                         }
                         else if (fieldIdx == 1) {
                             picV += w * g.v2;
                             oldV += w * g.vn2;
                             picX += w * g.x2;
                             gradXp.noalias() += (g.x2 - xn) * dw.transpose();
+                            gradVp.noalias() += g.v2 * dw.transpose();
                         }
                     }
                     else if (g.separable == 3 || g.separable == 6) { //solid-fluid coupling case
@@ -1055,12 +1067,14 @@ public:
                             oldV += w * g.vn1;
                             picX += w * g.x1;
                             gradXp.noalias() += (g.x1 - xn) * dw.transpose();  
+                            gradVp.noalias() += g.v1 * dw.transpose();
                         }
                         else if (materialIdx == 4) {
                             picV += w * g.v2;
                             oldV += w * g.vn2;
                             picX += w * g.x2;
                             gradXp.noalias() += (g.x2 - xn) * dw.transpose();
+                            gradVp.noalias() += g.v2 * dw.transpose();
                         }
                     }
                 });
@@ -1105,6 +1119,7 @@ public:
                 
                 m_X[i] = picX; //use PIC for advection
                 m_gradXp[i] = gradXp; //used for updating strain
+                m_deformationRates[i] = 0.5 * (gradVp + gradVp.transpose());
             }
         });
     }

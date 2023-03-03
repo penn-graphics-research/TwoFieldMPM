@@ -76,7 +76,7 @@ public:
                 BSplineWeights<T, dim> spline(pos, dx);
 
                 //Compute scaled stress forces (if using elasticity degradation)
-                if(useFBarStabilization || elasticityDegradationType == 1){
+                if(elasticityDegradationType == 1){
                     //Use damage scaled Cauchy stress for grid forces
                     delta_t_tmp_force = -dt * m_currentVolume[i] * m_scaledCauchy[i]; //NOTE: from Eq. 190 in MPM course notes
                     tmp_force = -m_currentVolume[i] * m_scaledCauchy[i]; 
@@ -3039,7 +3039,9 @@ public:
 
         //Divide out denom
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
-            g.u1[0] /= g.u1[1];
+            if(g.u1[1] > 0){
+                g.u1[0] /= g.u1[1];
+            }
         });
 
         //Now compute the scalars to modify entries in m_gradXp

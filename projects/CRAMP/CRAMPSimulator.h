@@ -468,7 +468,7 @@ public:
 
         //Now evolve strain (updateF)
         for (auto& model : Base::elasticity_models){
-            model->evolve_strain(G2P.m_gradXp, m_FBarMultipliers);
+            model->evolve_strain(G2P.m_gradXp, m_FBarMultipliers, G2P.m_deformationRates);
         }
 
         std::cout << "Finished Evolve Strain" << std::endl;
