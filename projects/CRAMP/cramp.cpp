@@ -4304,7 +4304,7 @@ int main(int argc, char *argv[])
         T bulk = std::atof(argv[2]);
         std::string bulkString = argv[2];
 
-        std::string path = "output/235_DamBreakTest_1e-5_FbarON_MastFluid_wVEOS_FLIP_Bulk" + bulkString;
+        std::string path = "output/235_DamBreakTest_1e-5_FbarOFF_Mast_NoWall_FLIP_Bulk" + bulkString;
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4331,8 +4331,8 @@ int main(int argc, char *argv[])
         
         //fluid params
         T gamma = 7.0;
-        T viscosity = 0.001e-3; //yidong has 0.001e-3
-        T rho = 0.9975; //yidong has 0.9975
+        T viscosity = 0.001; //yidong has 0.001e-3
+        T rho = 997.5; //yidong has 0.9975
 
         //Compute time step for symplectic
         sim.suggested_dt = 1e-5;
@@ -4340,7 +4340,7 @@ int main(int argc, char *argv[])
         //auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         auto material = sim.create_elasticity(new MPM::MastFluidOp<T, dim>(bulk, viscosity));
         //auto material = sim.create_elasticity(new MPM::EquationOfStateOp<T, dim>(bulk, gamma)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
-        sim.useFBarStabilization = true;
+        sim.useFBarStabilization = false;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4372,7 +4372,7 @@ int main(int argc, char *argv[])
         // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(minX + width + 2.0, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
         // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SEPARATE, Vector<T, dim>(0, minY - sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
 
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
     
         sim.run(start_frame);
     }

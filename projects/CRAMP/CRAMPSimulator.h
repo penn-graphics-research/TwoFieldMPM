@@ -575,7 +575,7 @@ public:
         }
 
         //Compute Scaled Cauchy Stress from Elasticity Degradation or for FBar since we need to use Cauchy for that
-        if(useFBarStabilization || elasticityDegradationType == 1){
+        if(elasticityDegradationType == 1){
             Bow::CRAMP::SimpleLinearTensionElasticityDegOp<T,dim>linearTensionDegradation{ {}, m_cauchy, m_scaledCauchy, Dp, degAlpha, grid, m_marker };
             linearTensionDegradation();
             std::cout << "Scaled Cauchy Stress Computed (FBar/ElasticityDeg)..." << std::endl;

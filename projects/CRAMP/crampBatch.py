@@ -457,7 +457,7 @@ if sectorD[0]:
 
     if pressureGradients[4]:
         #Dam Break from Zhao2022
-        bulk = 2e6 #yidong has 2e6
+        bulk = 2e9 #yidong has 2e6
         runCommand = './cramp 235 ' + str(bulk)
         print(runCommand)
         subprocess.call([runCommand], shell=True)
