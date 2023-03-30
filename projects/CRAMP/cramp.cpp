@@ -3756,6 +3756,7 @@ int main(int argc, char *argv[])
         T c2 = 3.0;
         T phi_s0 = 0.01;
         T pi_0 = 1000.0;
+        T mu_0 = 0.0;
         T beta_1 = 1.02;
         T rhoSolid2 = 1200;
 
@@ -3767,7 +3768,7 @@ int main(int argc, char *argv[])
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
         //auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
-        auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
+        auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
         
         //-----PARTICLE SAMPLING-----
 
@@ -3920,6 +3921,7 @@ int main(int argc, char *argv[])
         T c2 = 2.0;
         T phi_s0 = 0.01;
         T pi_0 = 1000.0;
+        T mu_0 = 0.0;
         T beta_1 = 1.02;
         T rhoSolid2 = 1200;
 
@@ -3931,7 +3933,7 @@ int main(int argc, char *argv[])
         auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
         //auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
         //auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
-        auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
+        auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
         
         //-----PARTICLE SAMPLING-----
 
@@ -4051,11 +4053,8 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/233_APIC_FBar_ToroidalPressureGradient_noClot_DirichletPipeWallsSTICKY_c1_300k_c2_2.0_d1cm_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
+        std::string path = "output/233_FLIPwMastFluid_FBar_ToroidalPressureGradient_noClot_DirichletPipeWallsSTICKY_BulkMod" + cleanedStrings[0] + "_Gamma" + cleanedStrings[1] + "_Viscosity" + cleanedStrings[2] + "_pStart" + cleanedStrings[3] + "_pGrad" + cleanedStrings[4] + "_couplingFriction" + cleanedStrings[5];
         MPM::CRAMPSimulator<T, dim> sim(path);
-
-
-        sim.useFBarStabilization = true;
 
         //water material
         T rhoFluid = 1060; //density of blood
@@ -4068,7 +4067,7 @@ int main(int argc, char *argv[])
         sim.gravity = 0.0;
 
         //Interpolation Scheme
-        sim.useAPIC = true;
+        sim.useAPIC = false;
         sim.flipPicRatio = 1.0; //0 = PIC, 1 = FLIP
         
         //DFG Specific Params
@@ -4092,18 +4091,21 @@ int main(int argc, char *argv[])
         // T c2 = 2.0;
         // T phi_s0 = 0.01;
         // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
         // T beta_1 = 1.02;
         // T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
         sim.cfl = 0.4;
         sim.suggested_dt = sim.suggestedDt(E, nu, rhoSolid, sim.dx, sim.cfl); //Solid CFL condition, will be overridden when particle velocity gets too big though!     
-        sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-5;
 
-        auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        //auto material = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water, viscosity = ?
+        auto material = sim.create_elasticity(new MPM::MastFluidOp<T, dim>(2e5, 0.001));
         //auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
         //auto material3 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
-        //auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
+        //auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        sim.useFBarStabilization = true;
         
         //-----PARTICLE SAMPLING-----
 
@@ -4223,7 +4225,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_ChemPotentialSolveTest_Mode1Tension_1e-6_ICCG_FBar_FLIP";
+        std::string path = "output/234_NewFibrinModel_ratio4_ChemPotentialSolveTest_Mode1Tension_1e-4_ICCG_FBarOff_FLIP";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4249,18 +4251,28 @@ int main(int argc, char *argv[])
         sim.writeGrid = true;
         
         //solid material (fibrin clot)
-        T c1 = 300000;
-        T c2 = 2.0;
+        T c1, c2;
+        bool newModel = true;
+        if(newModel){
+            c1 = 30e3;
+            c2 = c1 * 4.0;
+        }
+        else{
+            c1 = 30e4;
+            c2 = 2.0;
+        }
         T phi_s0 = 0.01;
         T pi_0 = 1000.0;
+        T mu_0 = 0.0;
         T beta_1 = 1.02;
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
-        sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-4;
 
-        auto material3 = sim.create_elasticity(new MPM::FibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, beta_1));
-        sim.useFBarStabilization = true;
+        //auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        auto material3 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        sim.useFBarStabilization = false;
         
         //-----PARTICLE SAMPLING-----
 

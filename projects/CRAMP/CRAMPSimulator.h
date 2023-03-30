@@ -317,12 +317,12 @@ public:
             Bow::Logging::info("[Rankine Damage] Computed Hs");
         }
 
-        for(int i = 0; i < (int)m_marker.size(); ++i){
-            if(m_marker[i] == 5){
-                evolveChemicalPotential = true;
-                break;
-            }
-        }
+        // for(int i = 0; i < (int)m_marker.size(); ++i){
+        //     if(m_marker[i] == 5){
+        //         evolveChemicalPotential = true;
+        //         break;
+        //     }
+        // }
 
         if(collectDataAcrossFrames){
             collectDataAcrossFramesFilepath = outputPath + "/DataAcossFrames" + std::to_string(collectDataAcrossFramesIndex) + ".csv";

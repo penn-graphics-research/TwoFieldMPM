@@ -338,7 +338,7 @@ template <class T, int dim>
 using LinearElasticityOp = FBasedElastiticityOp<T, dim, ConstitutiveModel::LinearElasticity<T, dim>, false>;
 
 
-template <class T, int dim, class Model, bool inversion_free>
+template <class T, int dim, class Model, bool newFiberModel>
 class FBasedPoroelasticityOp : public ElasticityOp<T, dim>, public Model {
 public:
     using TV = Vector<T, dim>;
@@ -355,7 +355,7 @@ public:
     T c1, c2;
     T phi_s0;
     T pi_0;
-    //T mu_0;
+    T mu_0;
     T beta_1;
     //T r_f;
     T a1; //for correcting initial stress state
@@ -369,7 +369,7 @@ public:
     SERIALIZATION_REGISTER(m_mu)
     SERIALIZATION_REGISTER(m_lambda)
 
-    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0, T _beta_1)
+    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0,  T _mu_0, T _beta_1)
     {
         mu = 0;
         lambda = 0;
@@ -377,9 +377,14 @@ public:
         c2 = _c2;
         phi_s0 = _phi_s0;
         pi_0 = _pi_0;
-        //mu_0 = _mu_0;
+        mu_0 = _mu_0;
         beta_1 = _beta_1;
-        a1 = (pi_0 / phi_s0) - (2.0 * c1);
+        if(newFiberModel){
+            a1 = ((pi_0 + mu_0) / phi_s0) - c1;
+        }
+        else{
+            a1 = (pi_0 / phi_s0) - (2.0 * c1);
+        }
     }
     void append(int start, int end, T vol) override
     {
@@ -539,7 +544,7 @@ public:
     {
         T J = F.determinant();
         T I1 = (F.transpose() * F).trace();
-        T psiNet = ((phi_s0 * c1) / c2) * (exp(c2 * (I1 - dim)) - 1);
+        T psiNet = newFiberModel ? phi_s0 * ((c1 / 2.0)*(I1-3) + (c2 / 4.0)*(I1-3)*(I1-3)) : ((phi_s0 * c1) / c2) * (exp(c2 * (I1 - dim)) - 1);
         T psiMix = (pi_0 / (beta_1 - 1)) * ((pow(1 - phi_s0, beta_1)) / (pow(J - phi_s0, beta_1 - 1)));
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
         T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
@@ -556,9 +561,15 @@ public:
         T I1 = (F.transpose() * F).trace();
         Eigen::Matrix<T, dim, dim> JFinvT;
         Math::cofactor(F, JFinvT);
-        Eigen::Matrix<T, dim, dim> Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
-        T chemPotential = mu;
+        Eigen::Matrix<T, dim, dim> Pnet = Eigen::Matrix<T, dim, dim>::Zero();
+        if(newFiberModel){
+            Pnet = phi_s0 * (c1*F + c2*(I1-3)*F);
+        }
+        else{
+            Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
+        }
 
+        T chemPotential = mu;
         chemPotential = 0; //set chemPot = 0 for now
 
         Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - chemPotential) * JFinvT;
@@ -571,7 +582,10 @@ public:
 };
 
 template <class T, int dim>
-using FibrinPoroelasticityOp = FBasedPoroelasticityOp<T, dim, ConstitutiveModel::FixedCorotated<T, dim>, false>;
+using FungFibrinPoroelasticityOp = FBasedPoroelasticityOp<T, dim, ConstitutiveModel::FixedCorotated<T, dim>, false>;
+
+template <class T, int dim>
+using NewFibrinPoroelasticityOp = FBasedPoroelasticityOp<T, dim, ConstitutiveModel::FixedCorotated<T, dim>, true>;
 
 
 
