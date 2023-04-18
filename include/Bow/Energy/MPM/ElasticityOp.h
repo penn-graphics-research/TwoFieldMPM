@@ -563,7 +563,7 @@ public:
         Math::cofactor(F, JFinvT);
         Eigen::Matrix<T, dim, dim> Pnet = Eigen::Matrix<T, dim, dim>::Zero();
         if(newFiberModel){
-            Pnet = phi_s0 * (c1*F + c2*(I1-3)*F);
+            Pnet = phi_s0 * (c1*F + c2*(I1-dim)*F);
         }
         else{
             Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;

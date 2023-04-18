@@ -4225,7 +4225,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_NewFibrinModel_ratio4_ChemPotentialSolveTest_Mode1Tension_1e-4_ICCG_FBarOff_FLIP";
+        std::string path = "output/234_NewFibrinModelRatio1_Mode1AfterRHSFixWithNoStressVerbose_ChemPotentialSolve_1e-6_ICCG_FBarOff_APIC";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4233,11 +4233,11 @@ int main(int argc, char *argv[])
         sim.symplectic = true;
         sim.end_frame = 240;
         sim.frame_dt = 1.0/60.0; //500 frames at 1e-3 is 0.5s
-        sim.gravity = 0.0;
+        sim.gravity = 0;
 
         //Interpolation Scheme
-        sim.useAPIC = false;
-        sim.flipPicRatio = 1.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
+        sim.useAPIC = true;
+        sim.flipPicRatio = 0.0; //0 -> want full PIC for analyzing static configurations (this is our damping)
         
         //DFG Specific Params
         sim.st = 4.7; //5.5 good for dx = 0.2, 
@@ -4247,15 +4247,16 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = false;
+        sim.verbose = true;
         sim.writeGrid = true;
         
         //solid material (fibrin clot)
         T c1, c2;
+        T ratio = 1.0;
         bool newModel = true;
         if(newModel){
             c1 = 30e3;
-            c2 = c1 * 4.0;
+            c2 = c1 * ratio;
         }
         else{
             c1 = 30e4;
@@ -4268,10 +4269,12 @@ int main(int argc, char *argv[])
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
-        sim.suggested_dt = 1e-4;
+        sim.suggested_dt = 1e-6;
 
-        //auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
-        auto material3 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        if(newModel){
+            material3 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        }
         sim.useFBarStabilization = false;
         
         //-----PARTICLE SAMPLING-----
@@ -4289,13 +4292,12 @@ int main(int argc, char *argv[])
         //DATA COLLECTION
         sim.collectDataAcrossFrames = true;
         sim.collectDataAcrossFramesIndex = 1238;
-        sim.collectDataAcrossFrames_Verbose = false;
+        sim.collectDataAcrossFrames_Verbose = true;
 
         //-----BOUNDARY CONDITIONS-----
 
         //Add Static Half Spaces
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX, 0), Vector<T, dim>(1, 0), Vector<T, dim>(0, 0), 0)); //left wall
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(minX + width, 0), Vector<T, dim>(-1, 0), Vector<T, dim>(0, 0), 0)); //right wall
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY - (5.0*sim.dx)), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall (for freefall)
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minY + sim.dx), Vector<T, dim>(0, 1), Vector<T, dim>(0, 0), 0)); //bottom wall
 
         //Displacement Half Space

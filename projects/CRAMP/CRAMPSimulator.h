@@ -317,12 +317,12 @@ public:
             Bow::Logging::info("[Rankine Damage] Computed Hs");
         }
 
-        // for(int i = 0; i < (int)m_marker.size(); ++i){
-        //     if(m_marker[i] == 5){
-        //         evolveChemicalPotential = true;
-        //         break;
-        //     }
-        // }
+        for(int i = 0; i < (int)m_marker.size(); ++i){
+            if(m_marker[i] == 5){
+                evolveChemicalPotential = true;
+                break;
+            }
+        }
 
         if(collectDataAcrossFrames){
             collectDataAcrossFramesFilepath = outputPath + "/DataAcossFrames" + std::to_string(collectDataAcrossFramesIndex) + ".csv";
@@ -559,11 +559,16 @@ public:
                 //m_dcdt[i] = (m_F[i].determinant() - m_Fprevious[i].determinant()) / dt;
                 m_dcdt[i] = ((1.0 - (Jprev / Jcurr)) / dt );
                 //m_dcdt[i] = ((log(Jcurr) - log(Jprev)) / dt );
+
+                m_J[i] = Jcurr;
             }
 
             std::cout << "Computed dcdt" << std::endl;
-
-            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_F, m_Fprevious, m_marker, m_currentVolume, Base::dx, dt, grid, m_dcdt };
+            // for(int i = 0; i < (int)m_dcdt.size(); ++i){
+            //     std::cout << m_dcdt[i] << std::endl;
+            // }
+            
+            Bow::CRAMP::SolveChemicalPotentialSystemOp<T,dim> solveChemPotentialSystem{ {}, Base::m_X, Base::m_mass, m_chemPotential, m_J, m_marker, m_currentVolume, Base::dx, dt, grid, m_dcdt, Base::BC, sp };
             solveChemPotentialSystem();
 
             std::cout << "SolvedChemPot" << std::endl;
@@ -1152,8 +1157,8 @@ public:
         m_la.push_back(0.0);
         m_F.push_back(TM::Identity());
         m_FSmoothed.push_back(TM::Identity());
-        m_cauchySmoothed.push_back(TM::Identity()); 
-        m_scaledCauchy.push_back(TM::Identity());
+        m_cauchySmoothed.push_back(TM::Zero()); 
+        m_scaledCauchy.push_back(TM::Zero());
         m_chemPotential.push_back(0.0);
         m_dcdt.push_back(0.0);
         m_J.push_back(0.0);

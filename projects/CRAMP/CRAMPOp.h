@@ -2601,8 +2601,7 @@ public:
     Field<Vector<T, dim>>& m_X;
     std::vector<T>& m_mass;
     Field<T>& m_chemPotential;
-    Field<Matrix<T, dim, dim>>& m_F;
-    Field<Matrix<T, dim, dim>>& m_Fprev;
+    Field<T>& m_J;
     Field<int> m_marker;
     Field<T> m_vol;
 
@@ -2612,6 +2611,10 @@ public:
 
     Field<T> m_dcdt;
 
+    BoundaryConditionManager<T, dim>& BC;
+
+    std::vector<int> m_sp;
+
     void operator()()
     {
         BOW_TIMER_FLAG("EvolveChemicalPotential");
@@ -2620,8 +2623,6 @@ public:
         T eta = 0.004;
         T phi_s0 = 0.01;
         T r_f = 60 * 10e-9; //60 nm
-        T k_net = computePermeability(r_f, phi_s0);
-        //k_net = 1.0;
         int max_iters = 10000;
         T tol = 1e-6;
 
@@ -2630,18 +2631,14 @@ public:
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
                 const Vector<T, dim> pos = m_X[i];
                 const T vol = m_vol[i];
-                //const T mass = m_mass[i];
                 const T chemPotential = m_chemPotential[i];
                 T dcdt = m_dcdt[i];
                 BSplineWeights<T, dim> spline(pos, dx);
                 
-                //std::cout << "\nFcurr: " << m_F[i] << "\nFprev: " << m_Fprev[i];
-
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     g.chemicalPotential += chemPotential * w;
                     g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
-                    g.Fi1(0,0) += vol * dcdt * w; //with dcdt
-                    //g.Fi1(1,1) += vol * dCdt * w; //with dCdt
+                    g.padding(0) += vol * dcdt * w; //with dcdt
                     g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
                 });
             }
@@ -2658,16 +2655,33 @@ public:
 
         //Set RHS => Build A (num_nodes x 1)
         Eigen::VectorXd b(dofs);
+        Eigen::VectorXd guess(dofs);
 
         std::cout << "Computed and set RHS" << std::endl;
 
         // Divide out the grid masses
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
+                Vector<T, dim> xi = node.template cast<T>() * dx;
                 g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
                 
-                //Build RHS after we divide out the grid masses
-                b[g.chemPotIdx] = g.Fi1(0,0); //00 = dcdt, 11 = dCdt
+                //Check if in BC
+                bool inBC = false;
+                for(auto& bc : BC.level_set_objects){
+                    if(bc->signed_distance(xi) <= 0){
+                        inBC = true;
+                    }
+                }
+
+                //Build RHS (keeping in mind BCs)
+                if(inBC){
+                    b[g.chemPotIdx] = 0;
+                    guess[g.chemPotIdx] = 0;
+                }
+                else{
+                    b[g.chemPotIdx] = g.padding(0); //00 = dcdt, 11 = dCdt
+                    guess[g.chemPotIdx] = g.chemicalPotential;
+                }
             }
         });
 
@@ -2683,7 +2697,7 @@ public:
         //Build Matrix, A
         Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView(0.5, 1);
         A.resize(dofs, dofs);
-        buildMatrix(A, eta, k_net);
+        buildMatrix(A, eta, r_f, phi_s0);
         
         //CHECK RANK OF MATRIX
         Eigen::ColPivHouseholderQR<Eigen::MatrixXd> rankChecker(A);
@@ -2699,7 +2713,7 @@ public:
         //     throw std::runtime_error("Matrix not PSD!");
         // }
 
-        // //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
+        //std::cout << "Matrix A with " << dofs << " dofs: \n" << A << std::endl;
 
         //Solve with Direct Solver -> LDL^T Factorization
         // Eigen::SimplicialLDLT<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper> solver;
@@ -2721,7 +2735,8 @@ public:
         }
         iccg.setMaxIterations(max_iters);
         iccg.setTolerance(tol);
-        x = iccg.solve(b);
+        //x = iccg.solve(b);
+        x = iccg.solveWithGuess(b, guess);
         //std::cout << "result: \n" << x << std::endl;
         std::cout << "#iterations:     " << iccg.iterations() << std::endl;
         std::cout << "estimated error: " << iccg.error()      << std::endl;
@@ -2787,7 +2802,7 @@ public:
 
         //Transfer back the differenced chemical potentials and update particle chem pots
         grid.parallel_for([&](int i) {
-            if(m_marker[i] == 5){ //skip crack particles if we have them and only process SOLID particles!
+            if(m_marker[i] == 5){ //only iterate poroelastic particles
                 const Vector<T, dim> pos = m_X[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 
@@ -2799,7 +2814,14 @@ public:
                     }
                 });
 
-                m_chemPotential[i] += newChemPotential;
+                if(m_sp[i]){
+                    m_chemPotential[i] = 0; //set to mu = 0 if surface particle (this will also dynamically set particles to 0 chem potential if surface detected)
+                    //m_chemPotential[i] += newChemPotential;
+                }
+                else{
+                    m_chemPotential[i] += newChemPotential;
+                }
+                
             }
         });
 
@@ -2807,8 +2829,7 @@ public:
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
                 g.chemPotIdx = -1;
-                g.Fi1 = Matrix<T,dim,dim>::Zero();
-                g.Fi2 = Matrix<T,dim,dim>::Zero();
+                g.padding(0) = 0;
                 g.cauchy1 = Matrix<T,dim,dim>::Zero();
                 g.cauchy2 = Matrix<T,dim,dim>::Zero();
             }
@@ -2819,12 +2840,13 @@ public:
 
     //---- Helper methods for Chemical Potential PCG solver ----
 
-    T computePermeability(T r_f, T phi_s0){
-        return (r_f*r_f) / (16*pow(phi_s0, 1.5) * (1 + 56*pow(phi_s0, 3.0)));
+    T computePermeability(T r_f, T phi_s0, T currJ){
+        T phi_s = phi_s0 / currJ;
+        return (r_f*r_f) / (16*pow(phi_s, 1.5) * (1 + 56*pow(phi_s, 3.0)));
     }
 
     // Get Matrix, A
-    void buildMatrix(Eigen::SparseMatrix<T>& A, T _eta, T _k_net){
+    void buildMatrix(Eigen::SparseMatrix<T>& A, T _eta, T _r_f, T _phi_s0){
 
         //Sparse Matrix is initialized from a list of triplets of the form (i, j, value) -- duplicate triplets are accumulated together! 
         //So for each particle contribution we add a triplet to each i,j pair!
@@ -2836,19 +2858,31 @@ public:
             if(m_marker[i] == 5){ //only transfer fields for poroelastic clot particles
                 const Vector<T, dim> pos = m_X[i];
                 const T vol = m_vol[i];
+                const T currJ = m_J[i];
                 BSplineWeights<T, dim> spline(pos, dx);
                 Matrix<T, 9, 9> localMatrix = Matrix<T, 9, 9>::Zero(); //particle maps to 9 nodes, each node has a contribution with each other node including itself (9x9 matrix of these influences)
                 Mat nablaThetaStorage = Mat::Zero(dim, 9); //store nabla theta for each grid node
                 Bow::Vector<int, Eigen::Dynamic> idxStorage = Bow::Vector<int, Eigen::Dynamic>::Zero(9); //store the global matrix indeces we should use to map each of these 9 grid nodes
+                Bow::Vector<bool, Eigen::Dynamic> inBCStorage = Bow::Vector<bool, Eigen::Dynamic>::Zero(9); //store a bool for whether this DOF is inside a BC or not
                 
                 //std::cout << "localMatrix before: " << localMatrix << std::endl;
                 //std::cout << "nablaThetaStorage before: " << nablaThetaStorage << std::endl;
+
+                const T currKnet = computePermeability(_r_f, _phi_s0, currJ); 
 
                 //Collect grid node data for the 9 nodes in our particle kernel
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     idxStorage[oidx] = g.chemPotIdx; //this indexes the chem pot DOFs
                     T DpInv = 1.0 / (0.25 * dx * dx);
                     nablaThetaStorage.col(oidx) = DpInv * w * (g.x1 - pos);
+
+                    Vector<T, dim> xi = node.template cast<T>() * dx;
+                    for(auto& bc : BC.level_set_objects){
+                        T dist = bc->signed_distance(xi);
+                        if(dist <= 0){
+                            inBCStorage[oidx] = true;
+                        }
+                    }
                 });
 
                 //Construct localMatrix
@@ -2868,11 +2902,46 @@ public:
                     for(int col = 0; col < 9; ++col){
                         T rowIdx = idxStorage[row];
                         T colIdx = idxStorage[col];
-                        T value = vol * (_k_net / _eta) * localMatrix(row, col);
-                        tripletList.push_back(Eigen::Triplet<T>(rowIdx, colIdx, value));
+                        bool rowInBC = inBCStorage[row];
+                        bool colInBC = inBCStorage[col];
+                        if(!rowInBC && !colInBC){ // i not in BC AND j not in BC
+                            T value = vol * (currKnet / _eta) * localMatrix(row, col);
+                            tripletList.push_back(Eigen::Triplet<T>(rowIdx, colIdx, value));
+                        }
                     }
                 }
 
+            }
+        });
+
+        //Project for BCs
+        //Now, look for the case where both i and j are inside BC, Hij = 1 (also take this chance to set RHS correctly)
+        grid.iterateGridSerial([&](const Vector<int, dim>& node1, DFGMPM::GridState<T, dim>& g1) {
+            if(g1.chemPotIdx > -1){
+                Vector<T, dim> xi1 = node1.template cast<T>() * dx;
+                bool inBC1 = false;
+                for(auto& bc : BC.level_set_objects){
+                    if(bc->signed_distance(xi1) <= 0){
+                        inBC1 = true;
+                    }
+                }
+                grid.iterateGridSerial([&](const Vector<int, dim>& node2, DFGMPM::GridState<T, dim>& g2) {
+                    if(g2.chemPotIdx > -1){
+                        Vector<T, dim> xi2 = node2.template cast<T>() * dx;
+                        bool inBC2 = false;
+                        for(auto& bc : BC.level_set_objects){
+                            if(bc->signed_distance(xi2) <= 0){
+                                inBC2 = true;
+                            }
+                        }
+
+                        if(inBC1 && inBC2){
+                            T idx1 = g1.chemPotIdx;
+                            T idx2 = g2.chemPotIdx;
+                            tripletList.push_back(Eigen::Triplet<T>(idx1, idx2, 1)); // add 1 at i,j
+                        }
+                    }
+                });
             }
         });
 

@@ -114,6 +114,8 @@ public:
         gridCi = 0.0;
         mappedParticles.clear();
 
+        padding = Vector<T, (-36 * dim) + 120>::Zero();
+
         idx = -1; //dummy idx
     }
 
