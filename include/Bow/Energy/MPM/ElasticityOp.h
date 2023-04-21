@@ -425,7 +425,8 @@ public:
             Matrix<T, dim, dim> P;
             T J = F.determinant();
             T mu = m_chemPotential[i];
-            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P);
+            bool printComponents = i == 1238 ? true : false;
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P, printComponents);
             cauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
         });
     }
@@ -524,7 +525,7 @@ public:
 
     void update_chemPotential(Field<T>& _m_chemPotential) override
     {
-        tbb::parallel_for(size_t(0), m_vol.size(), [&](size_t i) {
+        tbb::parallel_for(size_t(0), m_chemPotential.size(), [&](size_t i) {
             m_chemPotential[i] = _m_chemPotential[m_global_index[i]];
         });
     }
@@ -549,13 +550,13 @@ public:
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
         T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
 
-        muC = 0; //set chemPot = 0 for now
+        //muC = 0; //set chemPot = 0 for now
 
         T correction = phi_s0 * a1 * log(J); // psi += a1 * ln(J), log here = ln
         return psiNet + psiMix - psi0 - muC + correction;
     }
 
-    void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1, Matrix<T, dim, dim>& P)
+    void first_piola_poro(const Matrix<T, dim, dim>& F, const T mu, const T c1, const T c2, const T phi_s0, const T pi_0, const T beta_1, const T a1, Matrix<T, dim, dim>& P, bool printStressComponents = false)
     {
         T J = F.determinant();
         T I1 = (F.transpose() * F).trace();
@@ -570,10 +571,14 @@ public:
         }
 
         T chemPotential = mu;
-        chemPotential = 0; //set chemPot = 0 for now
+        //chemPotential = 0; //set chemPot = 0 for now
 
         Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - chemPotential) * JFinvT;
         Eigen::Matrix<T, dim, dim> Pcorrection = phi_s0 * a1 * (JFinvT / J); // P += a1 * F^-T
+        
+        if(printStressComponents){
+            std::cout << "P: " << Pnet+Pmix+Pcorrection << "\nPnet: " << Pnet << "\nPmix: " << Pmix << "\nPcorrection: " << Pcorrection << "\nMu: " << mu << std::endl;
+        }
         P = Pnet + Pmix + Pcorrection;
     }
 

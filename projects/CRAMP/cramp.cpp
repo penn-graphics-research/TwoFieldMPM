@@ -4225,7 +4225,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_NewFibrinModelRatio1_Mode1AfterRHSFixWithNoStressVerbose_ChemPotentialSolve_1e-6_ICCG_FBarOff_APIC";
+        std::string path = "output/234_NewFibrinModelRatio1_Mode1AfterRHSFixWithStressVerbose_ChemPotentialSolve_1e-6_ICCG_FBarOff_APIC";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params

@@ -2639,7 +2639,7 @@ public:
                     g.chemicalPotential += chemPotential * w;
                     g.chemPotIdx = 0; //mark this grid node to be a DOF for our system
                     g.padding(0) += vol * dcdt * w; //with dcdt
-                    g.cauchy1(1,1) += w; //sum up weights, need for transfer of chemical potential
+                    g.padding(1) += w; //sum up weights, need for transfer of chemical potential
                 });
             }
         });
@@ -2663,7 +2663,7 @@ public:
         grid.iterateGridSerial([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
             if(g.chemPotIdx > -1){
                 Vector<T, dim> xi = node.template cast<T>() * dx;
-                g.chemicalPotential /= g.cauchy1(1,1); // divide out the interpolation weight sum
+                g.chemicalPotential /= g.padding(1); // divide out the interpolation weight sum
                 
                 //Check if in BC
                 bool inBC = false;
@@ -2830,8 +2830,7 @@ public:
             if(g.chemPotIdx > -1){
                 g.chemPotIdx = -1;
                 g.padding(0) = 0;
-                g.cauchy1 = Matrix<T,dim,dim>::Zero();
-                g.cauchy2 = Matrix<T,dim,dim>::Zero();
+                g.padding(1) = 0;
             }
         });
 

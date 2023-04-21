@@ -577,6 +577,11 @@ public:
             for (auto& model : Base::elasticity_models){
                 model->update_chemPotential(m_chemPotential);
             }
+            //Collect cauchy stress for this step in terms of the new chemPot!
+            for (auto& model : Base::elasticity_models){
+                model->compute_cauchy(m_cauchy);
+            }
+            
         }
 
         //Compute Scaled Cauchy Stress from Elasticity Degradation or for FBar since we need to use Cauchy for that
@@ -850,7 +855,7 @@ public:
             
             ofs << std::to_string(currSubstep);
             ofs << ",";
-            ofs << std::to_string(m_scaledCauchy[collectDataAcrossFramesIndex](1,1));
+            ofs << std::to_string(m_cauchy[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
             ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
@@ -1088,7 +1093,7 @@ public:
             
             ofs << std::to_string(frame_num);
             ofs << ",";
-            ofs << std::to_string(m_scaledCauchy[collectDataAcrossFramesIndex](1,1));
+            ofs << std::to_string(m_cauchy[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
             ofs << std::to_string(m_F[collectDataAcrossFramesIndex](1,1));
             ofs << ",";
