@@ -4225,7 +4225,7 @@ int main(int argc, char *argv[])
         //     }
         //     cleanedStrings.push_back(cleanString);
         // }
-        std::string path = "output/234_NewFibrinModelRatio1_Mode1AfterRHSFixWithStressVerbose_ChemPotentialSolve_1e-6_ICCG_FBarOff_APIC";
+        std::string path = "output/234_NewFibrinModelRatio1_Mode1_WithStress_Damp1e-6_ChemPotentialSolve_1e-4_ICCG_FBarOff_APIC";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -4247,13 +4247,14 @@ int main(int argc, char *argv[])
         //sim.massRatio = 15.0;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
         
         //solid material (fibrin clot)
         T c1, c2;
         T ratio = 1.0;
         bool newModel = true;
+        T chemPotDampingFactor = 1e-6; //multiply chemical potential by this factor when computing stress
         if(newModel){
             c1 = 30e3;
             c2 = c1 * ratio;
@@ -4269,11 +4270,11 @@ int main(int argc, char *argv[])
         T rhoSolid2 = 1200;
 
         //Compute time step for symplectic
-        sim.suggested_dt = 1e-6;
+        sim.suggested_dt = 1e-4;
 
         auto material3 = sim.create_elasticity(new MPM::FungFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
         if(newModel){
-            material3 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+            material3 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1, chemPotDampingFactor));
         }
         sim.useFBarStabilization = false;
         
@@ -4288,11 +4289,12 @@ int main(int argc, char *argv[])
         T width = sim.dx * 25;
         T height = width;
         sim.sampleGridAlignedBox(material3, Vector<T,dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rhoSolid2, false, 5);
+        //sim.sampleGridAlignedBoxWithPoissonDisk(material3, Vector<T, dim>(minX, minY), Vector<T, dim>(minX + width, minY + height), Vector<T, dim>(0,0), ppc, rhoSolid2, false, 5);
 
         //DATA COLLECTION
         sim.collectDataAcrossFrames = true;
         sim.collectDataAcrossFramesIndex = 1238;
-        sim.collectDataAcrossFrames_Verbose = true;
+        sim.collectDataAcrossFrames_Verbose = false;
 
         //-----BOUNDARY CONDITIONS-----
 

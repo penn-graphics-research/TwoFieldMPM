@@ -359,6 +359,7 @@ public:
     T beta_1;
     //T r_f;
     T a1; //for correcting initial stress state
+    T chemPotDamp;
 
     Field<Matrix<T, dim, dim>> t_F; // only used in implicit
     
@@ -369,7 +370,7 @@ public:
     SERIALIZATION_REGISTER(m_mu)
     SERIALIZATION_REGISTER(m_lambda)
 
-    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0,  T _mu_0, T _beta_1)
+    FBasedPoroelasticityOp(T _c1, T _c2, T _phi_s0, T _pi_0,  T _mu_0, T _beta_1, T _chemPotDamp = 1.0)
     {
         mu = 0;
         lambda = 0;
@@ -385,6 +386,7 @@ public:
         else{
             a1 = (pi_0 / phi_s0) - (2.0 * c1);
         }
+        chemPotDamp = _chemPotDamp;
     }
     void append(int start, int end, T vol) override
     {
@@ -426,7 +428,7 @@ public:
             T J = F.determinant();
             T mu = m_chemPotential[i];
             bool printComponents = i == 1238 ? true : false;
-            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P, printComponents);
+            first_piola_poro(F, mu, c1, c2, phi_s0, pi_0, beta_1, a1, P, false);
             cauchy[m_global_index[i]] = (1.0 / J) * P * F.transpose();
         });
     }
@@ -548,7 +550,7 @@ public:
         T psiNet = newFiberModel ? phi_s0 * ((c1 / 2.0)*(I1-3) + (c2 / 4.0)*(I1-3)*(I1-3)) : ((phi_s0 * c1) / c2) * (exp(c2 * (I1 - dim)) - 1);
         T psiMix = (pi_0 / (beta_1 - 1)) * ((pow(1 - phi_s0, beta_1)) / (pow(J - phi_s0, beta_1 - 1)));
         T psi0 = (pi_0 * (1 - phi_s0)) / (beta_1 - 1);
-        T muC = (mu * (J - phi_s0)); //C = det(F) - phi_s0
+        T muC = (mu * (J - phi_s0)) * chemPotDamp; //C = det(F) - phi_s0
 
         //muC = 0; //set chemPot = 0 for now
 
@@ -570,7 +572,7 @@ public:
             Pnet = phi_s0 * 2.0 * c1 * exp(c2 * (I1 - dim)) * F;
         }
 
-        T chemPotential = mu;
+        T chemPotential = chemPotDamp * mu;
         //chemPotential = 0; //set chemPot = 0 for now
 
         Eigen::Matrix<T, dim, dim> Pmix = ((-pi_0 * (pow(1-phi_s0, beta_1) / pow(J - phi_s0, beta_1))) - chemPotential) * JFinvT;
