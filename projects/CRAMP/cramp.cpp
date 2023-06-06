@@ -5619,5 +5619,113 @@ int main(int argc, char *argv[])
         sim.run(start_frame);
     }
 
+    //-----3D TESTS BEGIN-----
+
+    if (testcase == 300) {
+        using T = double;
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/300_cubeRoom3D");
+
+        //Params
+        sim.dx = 0.1;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = (T)1. / 60;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        //sim.st = 0.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        //sim.useDFG = true;
+        //sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = true;
+        sim.writeGrid = true;
+
+        //material
+        T E = 1000;
+        T nu = 0.4;
+        T rho = 10;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5, 0.5), Vector<T, dim>(1.49, 1.5, 1.5), Vector<T, dim>(0, 0, 0), 8, rho, false);
+        
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 2, 0), Vector<T, dim>(0, -1, 0))); //ceil
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 1, 0))); //floor
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(1, 0, 0))); //left
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(2, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 0, 1))); //front
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 2), Vector<T, dim>(0, 0, -1))); //back
+
+        //Add Elasticity Degradation
+        //sim.elasticityDegradationType = 1;
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 301) {
+        using T = double;
+        static const int dim = 2;
+        MPM::CRAMPSimulator<T, dim> sim("output/301_cubeRoom2D");
+
+        //Params
+        sim.dx = 0.1;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = (T)1. / 60;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        //sim.st = 0.0; //4.0 is close to working, but we actually don't want surfacing for this demo
+        //sim.useDFG = true;
+        //sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = true;
+        sim.writeGrid = true;
+
+        //material
+        T E = 1000;
+        T nu = 0.4;
+        T rho = 10;
+        
+        //Compute time step for symplectic
+        sim.cfl = 0.4;
+        T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        sim.suggested_dt = 0.9 * maxDt;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5), Vector<T, dim>(1.49, 1.5), Vector<T, dim>(0, 0), 4, rho, false);
+        
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 2, 0), Vector<T, dim>(0, -1, 0))); //ceil
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 1, 0))); //floor
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(1, 0, 0))); //left
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(2, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 0, 1))); //front
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 2), Vector<T, dim>(0, 0, -1))); //back
+
+        //Add Elasticity Degradation
+        //sim.elasticityDegradationType = 1;
+
+        sim.run(start_frame);
+    }
+
     return 0;
 }

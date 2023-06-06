@@ -1193,8 +1193,10 @@ public:
 
         unsigned int seed = (unsigned int)currSubstep;
 
-        TV minCorner(center[0] - radius, center[1] - radius);
-        TV maxCorner(center[0] + radius, center[1] + radius);
+        TV minCorner = center.array() - radius;
+        TV maxCorner = center.array() + radius;
+        // TV minCorner(center[0] - radius, center[1] - radius);
+        // TV maxCorner(center[0] + radius, center[1] + radius);
         Geometry::PoissonDisk<T, dim> poisson_disk(minCorner, maxCorner, Base::dx, T(source_ppc), seed);
         poisson_disk.sample(new_samples);
         for(auto position : new_samples){
