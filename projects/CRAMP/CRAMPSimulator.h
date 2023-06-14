@@ -1235,6 +1235,15 @@ public:
         fluidSourceModels[idx]->append(start, end, vol);
     }
 
+    //Single Point
+    void sampleSinglePoint(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& position, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0){
+        int start = Base::m_X.size();
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     //Random Cube
     void sampleRandomCube(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0)
     {

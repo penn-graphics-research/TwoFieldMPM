@@ -1038,6 +1038,7 @@ public:
                         picV += w * g.v1;
                         oldV += w * g.vn1; 
                         picX += w * g.x1;
+                        //std::cout << "oidx: " << oidx << ", g.x1: " << g.x1 << std::endl;
                         gradXp.noalias() += (g.x1 - xn) * dw.transpose();
                         gradVp.noalias() += g.v1 * dw.transpose();
                     }

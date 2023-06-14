@@ -521,6 +521,7 @@ public:
 
         /* Iterate grid to divide out the grid masses from cauchy and defGrad */
         grid.iterateGrid([&](const Vector<int, dim>& node, DFGMPM::GridState<T, dim>& g) {
+            //std::cout << "grid node hit" << std::endl;
             g.cauchy1 /= g.m1;
             g.Fi1 /= g.m1;
             if (g.separable != 0) { //don't treat field 2 if coupling case (solid-fluid is sep = 3)

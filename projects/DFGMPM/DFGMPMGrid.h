@@ -253,6 +253,7 @@ public:
                     auto x = 1 << SparseMask::block_xbits;
                     auto y = 1 << SparseMask::block_ybits;
                     auto z = 1 << SparseMask::block_zbits;
+                    //x++; //TODO: why does x need to be incremented by 1 in 3D???
                     auto c = SparseMask::LinearToCoord(base_offset);
                     for (int i = -1 + (c[0] == 0); i < 2; i++) {
                         for (int j = -1 + (c[1] == 0); j < 2; j++) {
@@ -466,6 +467,7 @@ public:
         auto& dw = spline.dw;
         const Vector<int, dim>& base_coord = spline.base_node;
         Vector<int, dim> coord;
+        //std::cout << "base_coord: " << base_coord << std::endl;
         int oidx = 0;
         if constexpr (dim == 2) {
             for (int i = 0; i < interpolation_degree + 1; ++i) {
@@ -507,6 +509,7 @@ public:
                         GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
                         target(coord, oidx, wijk, Vector<T, dim>{ wijkdxi, wijkdxj, wijkdxk }, g);
                         ++oidx;
+                        //std::cout << "oidx: " << oidx << " coord: " << coord << " weight: " << wijk << std::endl;
                     }
                 }
             }
@@ -802,8 +805,9 @@ public:
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
+                //x++; //TODO: why does x need to be incremented by 1 in 3D???
                 for (int i = 0; i < x; ++i)
-                    for (int j = 0; j < y; ++j)
+                    for (int j = 0; j < y; ++j) 
                         for (int k = 0; k < z; ++k) {
                             auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j, k));
                             GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
@@ -826,6 +830,7 @@ public:
                 Vector<int, dim> base_coord{ stdarray_base_coord[0] - half_spgrid_size, stdarray_base_coord[1] - half_spgrid_size };
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
+                //std::cout <<  "From iterateGridSerial: x: " << x << ", y: " << y << std::endl;
                 for (int i = 0; i < x; ++i)
                     for (int j = 0; j < y; ++j) {
                         auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j));
@@ -836,6 +841,7 @@ public:
             }
         }
         else {
+            //std::cout << "iterateGridSerial in 3D BEGIN:" << std::endl;
             for (unsigned b = 0; b < blocks.second; ++b) {
                 uint64_t base_offset = blocks.first[b];
                 auto stdarray_base_coord = SparseMask::LinearToCoord(base_offset);
@@ -843,14 +849,21 @@ public:
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
+                //x++; //TODO: why does x need to be incremented by 1 in 3D???
+                std::cout <<  "From iterateGridSerial: x: " << x << ", y: " << y << ", z: " << z << std::endl;
                 for (int i = 0; i < x; ++i)
-                    for (int j = 0; j < y; ++j)
+                    for (int j = 0; j < y; ++j) 
                         for (int k = 0; k < z; ++k) {
                             auto offset = SparseMask::Packed_Add(base_offset, SparseMask::Linear_Offset(i, j, k));
                             GridState<T, dim>& g = reinterpret_cast<GridState<T, dim>&>(grid_array(offset));
-                            if (g.m1 > 0)
+                            //std::cout << "check if node has mass?" << std::endl;
+                            //target(base_coord + Vector<int, dim>{ i, j, k }, g);
+                            if (g.m1 > 0){
                                 target(base_coord + Vector<int, dim>{ i, j, k }, g);
+                                //std::cout << "has mass!" << std::endl;
+                            }
                         }
+                
             }
         }
     }
@@ -884,6 +897,7 @@ public:
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
+                //x++; //TODO: why does x need to be incremented by 1 in 3D???
                 for (int i = 0; i < x; ++i)
                     for (int j = 0; j < y; ++j)
                         for (int k = 0; k < z; ++k) {
@@ -925,6 +939,7 @@ public:
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
+                //x++; //TODO: why does x need to be incremented by 1 in 3D???
                 for (int i = 0; i < x; ++i)
                     for (int j = 0; j < y; ++j)
                         for (int k = 0; k < z; ++k) {
@@ -965,6 +980,7 @@ public:
                 auto x = 1 << SparseMask::block_xbits;
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
+                //x++; //TODO: why does x need to be incremented by 1 in 3D???
                 for (int i = 0; i < x; ++i)
                     for (int j = 0; j < y; ++j)
                         for (int k = 0; k < z; ++k) {
