@@ -1629,6 +1629,27 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleTubeWithPoissonDisk(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const T& length, const T& r1, const T& r2, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        // center = center of starting face of the tube
+        if constexpr (dim == 3){
+            ppc = (T)_ppc;
+            T vol = std::pow(Base::dx, dim) / T(_ppc);
+            int start = Base::m_X.size();
+            Field<TV> new_samples;
+            Geometry::PoissonDisk<T, dim> poisson_disk(TV(center[0] - r2, center[1] - r2, center[2]), TV(center[0] + r2, center[1] + r2, center[2] + length), Base::dx, T(_ppc));
+            poisson_disk.sample(new_samples);
+            for(auto position : new_samples){
+                T radialDist = std::sqrt((position[0] - center[0])*(position[0] - center[0]) +  (position[1] - center[1])*(position[1] - center[1]));
+                if(radialDist > r1 && radialDist < r2){
+                    addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+                }
+            }
+            int end = Base::m_X.size();
+            model->append(start, end, vol);
+        }
+    }
+
     void sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T& radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false, bool parabolicVelocity = false){
         // sample particles
         ppc = (T)_ppc;
@@ -1906,8 +1927,14 @@ public:
         for(int i = 0; i < (int)Base::m_X.size(); i++){ //iter normal material particles
             TV p = Base::m_X[i];
             
-            if(p[0] >= minPoint[0] && p[0] <= maxPoint[0] && p[1] >= minPoint[1] && p[1] <= maxPoint[1]){
-                Dp[i] = 1.0;
+            for(int d = 0; d < dim; d++){
+                if(p[d] >= minPoint[d] && p[d] <= maxPoint[d]){
+                    Dp[i] = 1.0;
+                }
+                else{
+                    Dp[i] = 0.0; //reset back to 0 if any dimension is false!
+                    break;
+                }
             }
         }
     }

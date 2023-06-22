@@ -850,7 +850,7 @@ public:
                 auto y = 1 << SparseMask::block_ybits;
                 auto z = 1 << SparseMask::block_zbits;
                 //x++; //TODO: why does x need to be incremented by 1 in 3D???
-                std::cout <<  "From iterateGridSerial: x: " << x << ", y: " << y << ", z: " << z << std::endl;
+                //std::cout <<  "From iterateGridSerial: x: " << x << ", y: " << y << ", z: " << z << std::endl;
                 for (int i = 0; i < x; ++i)
                     for (int j = 0; j < y; ++j) 
                         for (int k = 0; k < z; ++k) {

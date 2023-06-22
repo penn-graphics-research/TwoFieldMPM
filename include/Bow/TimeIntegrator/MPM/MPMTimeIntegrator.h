@@ -68,7 +68,7 @@ public:
         std::vector<T> val(dim * dim * BC_basis.size());
         memcpy(val.data(), reinterpret_cast<const T*>(BC_basis.data()), sizeof(T) * dim * dim * BC_basis.size());
         m_transform_matrix.setZero();
-        Math::sparse_from_csr(ptr, row, val, BC_basis.size() * dim, BC_basis.size() * dim, m_transform_matrix);
+        //TODO put this back -- Math::sparse_from_csr(ptr, row, val, BC_basis.size() * dim, BC_basis.size() * dim, m_transform_matrix);
     }
 
     void update_predictive_pos()

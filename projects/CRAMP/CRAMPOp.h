@@ -341,7 +341,7 @@ public:
                 //Step 2.) Update Damage based on maxEigVal
                 if(maxEigVal > m_sigmaC[i]){
                     T newD = (1 + Hs[i]) * (1 - (m_sigmaC[i] / maxEigVal)); 
-                    m_Dp[i] = std::max(m_Dp[i], std::min(1.0, newD));
+                    m_Dp[i] = std::max(m_Dp[i], std::min((T)1.0, newD));
                 }
             }
         });
@@ -2654,6 +2654,7 @@ public:
             }
         });
 
+        /* TODO: make this work for floats (VectorXd -> VectorXf)
         //Set RHS => Build A (num_nodes x 1)
         Eigen::VectorXd b(dofs);
         Eigen::VectorXd guess(dofs);
@@ -2696,7 +2697,7 @@ public:
         //--DIRECT SOLVER--
 
         //Build Matrix, A
-        Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView(0.5, 1);
+        Eigen::SparseMatrix<T> A = Eigen::MatrixXd::Zero(dofs, dofs).sparseView((T)0.5, 1);
         A.resize(dofs, dofs);
         buildMatrix(A, eta, r_f, phi_s0);
         
@@ -2834,7 +2835,7 @@ public:
                 g.padding(1) = 0;
             }
         });
-
+        */ //TODO: make work for float! VectorXd -> VectorXf
         return;
     }
 
@@ -2962,6 +2963,7 @@ public:
         //     throw std::runtime_error("makePD: Input matrix not symmetric!");
         // }
         
+        /* TODO: make this work for floats (VectorXd -> VectorXf)
         Eigen::SelfAdjointEigenSolver<Matrix<T, 9, 9>> eigenSolver(A);
         if(eigenSolver.eigenvalues()[0] >= 0){
             return;
@@ -2976,6 +2978,7 @@ public:
             }
         }
         A = eigenSolver.eigenvectors() * D.asDiagonal() * eigenSolver.eigenvectors().transpose();
+        */
 
         //SYMMETRY CHECK
         // if(!A.isApprox(A.transpose())){

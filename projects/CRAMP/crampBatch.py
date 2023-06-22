@@ -5,8 +5,9 @@ import subprocess
 sectorA = [0, 0, 0, 0]            #[uniaxialTension with AnisoMPM, SENT with Rankine Damage, SENT with Tanh Damage, Shear Fracture with Rankine] 
 sectorB = [0, 0]                  #[Damage Suite FCR, Damage Suite NH]
 sectorC = [0]                     #[Numerical Fracture Exploration (SENT, 150% Displacement Stretch, No Damage)]
-sectorD = [1]                     #[Pipe Flow with Viscous Fluid]
+sectorD = [0]                     #[Pipe Flow with Viscous Fluid]
 sectorE = [0]                     #Final Tests Towards Paper 1
+sectorF = [1]                     #Three Deeee
 
 #TEST CONTROL SUBSTATION
 #Set what runs you want for each demo (e.g. run 0 degree and 90 degree fibers whenever diskShoot is run)
@@ -19,6 +20,7 @@ test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Vari
 pipeFlowTests = [0, 0, 0, 0, 0, 0, 0]   #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls, Horizontal with Elastic Walls and Constant Pressure, Clot Inclusion with Const Pressure, Fluid Generator Test, Fluid Gen + Clot]
 pressureGradients = [0, 0, 0, 1, 0]     #Pressure Gradient Tests [30 Diameter Pipe, 30 Diameter Pipe with Clot, with clot and Dirichlet pipe walls, Dirichlet walls w/o clot, Dam Break Test (Zhao2022 to test FBar)]
 paper1Tests = [0, 1, 0, 0]              #[SENT with const width crack and variable dx for 1F MPM, then with 2F MPM, Hole in Plate with SF, Hole in Plate with TF]
+goingThreeDee = [1]                     #[slicedCube3D, ]
 
 ################################
 ########### SECTOR A ###########
@@ -506,3 +508,16 @@ if sectorE[0]:
             print(runCommand)
             subprocess.call([runCommand], shell=True)
 
+################################
+########### SECTOR F ###########
+################################
+
+# 3D Demos
+
+if sectorF[0]:
+    if goingThreeDee[0]:
+        lamC = 1.2 #2.0 too low
+        tanhWidth = 0.08
+        runCommand = './cramp 302 ' + str(lamC) + ' ' + str(tanhWidth)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)

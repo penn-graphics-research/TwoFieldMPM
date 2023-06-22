@@ -552,7 +552,7 @@ public:
                 T phi = ((T)1 / (sigmaC * sigmaC)) * contraction;
 
                 //Compute dTilde
-                T dTilde = std::max(m_dTildeH[i], zeta * (((phi - 1) + std::abs(phi - 1)) / 2.0)); //remember macaulay function is y(x) = (x+|x|)/2
+                T dTilde = std::max(m_dTildeH[i], zeta * (((phi - 1) + std::abs(phi - 1)) / (T)2.0)); //remember macaulay function is y(x) = (x+|x|)/2
                 m_dTildeH[i] = dTilde; //update max history
 
                 //Update damage if necessary

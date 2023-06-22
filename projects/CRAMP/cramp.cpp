@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     //USED FOR TESTING GRID STATE SIZE
     if(testcase == 0){
         using T = float;
-        static const int dim = 2;
+        static const int dim = 3;
         Bow::DFGMPM::GridState<T, dim> gs;
         std::cout << "GridState size: " << sizeof(gs) << std::endl;
         //std::cout << "Padding: " << sizeof(gs.padding) << std::endl;
@@ -5622,9 +5622,9 @@ int main(int argc, char *argv[])
     //-----3D TESTS BEGIN-----
 
     if (testcase == 300) {
-        using T = double;
+        using T = float; //NOTE: need to use float for 3D!!
         static const int dim = 3;
-        MPM::CRAMPSimulator<T, dim> sim("output/300_singlePoint3D");
+        MPM::CRAMPSimulator<T, dim> sim("output/300_cubeRoom3D");
 
         //Params
         sim.dx = 0.04;
@@ -5632,7 +5632,7 @@ int main(int argc, char *argv[])
         sim.symplectic = true;
         sim.end_frame = 240;
         sim.frame_dt = (T)1. / 60;
-        sim.gravity = 0;
+        sim.gravity = -10;
 
         //Interpolation Scheme
         sim.useAPIC = true;
@@ -5644,7 +5644,7 @@ int main(int argc, char *argv[])
         //sim.fricCoeff = 0.4;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
 
         //material
@@ -5659,8 +5659,8 @@ int main(int argc, char *argv[])
 
         // Using `new` to avoid redundant copy constructor
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
-        //sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5, 0.5), Vector<T, dim>(1.49, 1.5, 1.5), Vector<T, dim>(0, 0, 0), 8, rho, false);
-        sim.sampleSinglePoint(material1, Vector<T, dim>(0.321932, 0.452119, 0.434341), Vector<T, dim>(0, 0, 0), 8, rho, false, 0);
+        sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5, 0.5), Vector<T, dim>(1.49, 1.5, 1.5), Vector<T, dim>(0, 0, 0), 8, rho, false);
+        //sim.sampleSinglePoint(material1, Vector<T, dim>(0.321932, 0.452119, 0.434341), Vector<T, dim>(0, 0, 0), 8, rho, false, 0);
 
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 2, 0), Vector<T, dim>(0, -1, 0))); //ceil
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 1, 0))); //floor
@@ -5676,9 +5676,9 @@ int main(int argc, char *argv[])
     }
 
     if (testcase == 301) {
-        using T = double;
-        static const int dim = 2;
-        MPM::CRAMPSimulator<T, dim> sim("output/301_singlePoint2D");
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/301_fluidRoom3D");
 
         //Params
         sim.dx = 0.04;
@@ -5686,7 +5686,7 @@ int main(int argc, char *argv[])
         sim.symplectic = true;
         sim.end_frame = 240;
         sim.frame_dt = (T)1. / 60;
-        sim.gravity = 0;
+        sim.gravity = -10;
 
         //Interpolation Scheme
         sim.useAPIC = true;
@@ -5698,33 +5698,254 @@ int main(int argc, char *argv[])
         //sim.fricCoeff = 0.4;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
 
+        //water material
+        T bulk = 1e5;
+        T gamma = 7;
+        T rho = 1000; //density of water
+        T viscosity = 0.004;
+        
+        //Compute time step for symplectic
+        sim.suggested_dt = 1e-4;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        //auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
+        sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5, 0.5), Vector<T, dim>(1.49, 1.5, 1.5), Vector<T, dim>(0, 0, 0), 8, rho, false, 4);
+        //sim.sampleSinglePoint(material1, Vector<T, dim>(0.321932, 0.452119), Vector<T, dim>(0, 0), 4, rho, false, 0);
+        
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 2, 0), Vector<T, dim>(0, -1, 0))); //ceil
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0.4, 0), Vector<T, dim>(0, 1, 0))); //floor
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(1, 0, 0))); //left
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(2, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 0, 1))); //front
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 2), Vector<T, dim>(0, 0, -1))); //back
+
+        //Add Elasticity Degradation
+        //sim.elasticityDegradationType = 1;
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 302) {
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/302_slicedCubeRoom3D");
+
+        if (argc < 4) {
+            puts("ERROR: please add parameters");
+            puts("TEST 302 USAGE: ./cramp testcase lamC tanhWidth");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        // T Gf = std::atof(argv[2]);
+        // T sigmaC = std::atof(argv[3]);
+
+        //Params
+        sim.dx = 0.04;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 240;
+        sim.frame_dt = (T)1. / 60;
+        sim.gravity = -5;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        sim.st = 25.0; //20 doesnt capture all
+        sim.useDFG = true;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //Fibrin Material
+        // T c1, c2;
+        // T ratio = 0.5;
+        
+        // c1 = 30e3;
+        // c2 = c1 * ratio;
+        
+        // T phi_s0 = 0.01;
+        // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
+        // T beta_1 = 1.02;
+        
         //material
-        T E = 1000;
+        T E = 100000;
         T nu = 0.4;
-        T rho = 10;
+        T rho = 1200;
         
         //Compute time step for symplectic
         sim.cfl = 0.4;
         T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
         sim.suggested_dt = 0.9 * maxDt;
+        //sim.suggested_dt = 5e-4;
 
         // Using `new` to avoid redundant copy constructor
         auto material1 = sim.create_elasticity(new MPM::FixedCorotatedOp<T, dim>(E, nu));
-        //sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5), Vector<T, dim>(1.49, 1.5), Vector<T, dim>(0, 0), 4, rho, false);
-        sim.sampleSinglePoint(material1, Vector<T, dim>(0.321932, 0.452119), Vector<T, dim>(0, 0), 4, rho, false, 0);
+        //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+        sim.sampleGridAlignedBox(material1, Vector<T, dim>(0.5, 0.5, 0.5), Vector<T, dim>(1.49, 1.5, 1.5), Vector<T, dim>(0, 0, 0), 8, rho, true);
+        sim.addRectangularDamageRegion(Vector<T,dim>(0.4, 0.98, 0.4), Vector<T,dim>(1.6, 1.02, 1.0));
+
+        //sim.sampleSinglePoint(material1, Vector<T, dim>(0.321932, 0.452119, 0.434341), Vector<T, dim>(0, 0, 0), 8, rho, false, 0);
+
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 1.4, 0), Vector<T, dim>(0, -1, 0))); //ceil
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 1, 0))); //floor
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(1, 0, 0))); //left
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(2, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 0, 1))); //front
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 2), Vector<T, dim>(0, 0, -1))); //back
+
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        T dMin = 0.25;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+
+        //Add Rankine Damage Model
+        // T dMin = 0.25;
+        // T l0 = sim.dx * sqrt(3.0);
+        // int degType = 1;
+        // sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 303) {
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/303_pipeWithClot3D");
+
+        // if (argc < 4) {
+        //     puts("ERROR: please add parameters");
+        //     puts("TEST 303 USAGE: ./cramp testcase lamC tanhWidth");
+        //     exit(0);
+        // }
+
+        //T lamC = std::atof(argv[2]);
+        //T tanhWidth = std::atof(argv[3]);
+        // T Gf = std::atof(argv[2]);
+        // T sigmaC = std::atof(argv[3]);
+
+        //Params
+        sim.dx = 0.1;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 360;
+        sim.frame_dt = (T)1. / 60;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
         
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 2, 0), Vector<T, dim>(0, -1, 0))); //ceil
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 1, 0))); //floor
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(1, 0, 0))); //left
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(2, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 0), Vector<T, dim>(0, 0, 1))); //front
-        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, 2), Vector<T, dim>(0, 0, -1))); //back
+        //DFG Specific Params
+        sim.st = 25.0; //20 doesnt capture all
+        sim.useDFG = false;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //Fibrin Material
+        // T c1, c2;
+        // T ratio = 0.5;
+        
+        // c1 = 30e3;
+        // c2 = c1 * ratio;
+        
+        // T phi_s0 = 0.01;
+        // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
+        // T beta_1 = 1.02;
+        
+        //pipe material
+        T E = 100000;
+        T nu = 0.4;
+        T rhoPipe = 1200;
+
+        //fluid material
+        T bulk = 1e5;
+        T gamma = 7;
+        T rhoFluid = 1000; //density of water
+        T viscosity = 0.004;
+        
+        //Compute time step for symplectic
+        //sim.cfl = 0.4;
+        //T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        //sim.suggested_dt = 0.9 * maxDt;
+        sim.suggested_dt = 5e-4;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+
+        //Configuration
+        T minVal = 0.0;
+        T pipeRadius1 = sim.dx * 10;
+        T pipeRadius2 = sim.dx * 13;
+        T pipeLength = (pipeRadius1 * 2.0) * 10; //40 pipe diameters long
+        T tankWidth = pipeRadius2 * 2.0 * 3.0;
+        T boxHolderWidth = sim.dx * 3.0;
+        T fluidMargin = sim.dx * 2.0;
+        T pipeMouthWidth = (2.0 * pipeRadius1) / sqrt(2.0); //width of square inscribed inside pipe mouth defined by radius1
+        T extraBoxHolderMargin = sim.dx * 2.0;
+
+        //Particle Sampling
+        sim.sampleGridAlignedBoxWithPoissonDisk(material1, Vector<T,dim>(minVal + (fluidMargin), minVal + (fluidMargin), minVal + (fluidMargin)), Vector<T,dim>(minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin)), Vector<T,dim>(0,0,0), 8, rhoFluid, false, 4);
+        sim.sampleTubeWithPoissonDisk(material2, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + tankWidth + (0.5 * boxHolderWidth)), pipeLength, pipeRadius1, pipeRadius2, Vector<T,dim>(0,0,0), 8, rhoPipe, false, 0);
+
+        //Boundary Conditions
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minVal + tankWidth, 0), Vector<T, dim>(0, -1, 0))); //ceil
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, minVal, 0), Vector<T, dim>(0, 1, 0))); //floor
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minVal, 0, 0), Vector<T, dim>(1, 0, 0))); //left
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minVal + tankWidth, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
+        //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1))); //front
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal + tankWidth + boxHolderWidth + pipeLength + tankWidth), Vector<T, dim>(0, 0, -1))); //back
+
+        //Piston Wall
+        T dist = tankWidth; //distance to compress in one second
+        T duration = 4;
+        T speed = dist / duration;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
+
+        //Left Side Holders
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //left
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //top
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //right
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //bottom
+
+        //Right Side Holders
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
 
         //Add Elasticity Degradation
         //sim.elasticityDegradationType = 1;
+
+        //Add Tanh Damage Model
+        // int degType = 1;
+        // T dMin = 0.25;
+        // sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+
+        //Add Rankine Damage Model
+        // T dMin = 0.25;
+        // T l0 = sim.dx * sqrt(3.0);
+        // int degType = 1;
+        // sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
 
         sim.run(start_frame);
     }
