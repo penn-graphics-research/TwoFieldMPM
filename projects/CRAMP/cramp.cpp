@@ -5841,8 +5841,8 @@ int main(int argc, char *argv[])
         sim.dx = 0.1;
         sim.ppc = 8;
         sim.symplectic = true;
-        sim.end_frame = 360;
-        sim.frame_dt = (T)1. / 60;
+        sim.end_frame = 24 * 8;
+        sim.frame_dt = (T)1. / 24;
         sim.gravity = 0;
 
         //Interpolation Scheme
@@ -5896,12 +5896,13 @@ int main(int argc, char *argv[])
         T minVal = 0.0;
         T pipeRadius1 = sim.dx * 10;
         T pipeRadius2 = sim.dx * 13;
-        T pipeLength = (pipeRadius1 * 2.0) * 10; //40 pipe diameters long
+        T pipeLength = (pipeRadius1 * 2.0) * 5; //40 pipe diameters long
         T tankWidth = pipeRadius2 * 2.0 * 3.0;
         T boxHolderWidth = sim.dx * 3.0;
         T fluidMargin = sim.dx * 2.0;
         T pipeMouthWidth = (2.0 * pipeRadius1) / sqrt(2.0); //width of square inscribed inside pipe mouth defined by radius1
         T extraBoxHolderMargin = sim.dx * 2.0;
+        T pipeOutletMargin = sim.dx * 1.0;
 
         //Particle Sampling
         sim.sampleGridAlignedBoxWithPoissonDisk(material1, Vector<T,dim>(minVal + (fluidMargin), minVal + (fluidMargin), minVal + (fluidMargin)), Vector<T,dim>(minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin)), Vector<T,dim>(0,0,0), 8, rhoFluid, false, 4);
@@ -5913,25 +5914,32 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minVal, 0, 0), Vector<T, dim>(1, 0, 0))); //left
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(minVal + tankWidth, 0, 0), Vector<T, dim>(-1, 0, 0))); //right
         //sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::SLIP, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1))); //front
-        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal + tankWidth + boxHolderWidth + pipeLength + tankWidth), Vector<T, dim>(0, 0, -1))); //back
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal + tankWidth + boxHolderWidth + pipeLength + tankWidth + 20.0), Vector<T, dim>(0, 0, -1))); //back
 
         //Piston Wall
         T dist = tankWidth; //distance to compress in one second
-        T duration = 4;
+        T duration = 8;
         T speed = dist / duration;
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
 
         //Left Side Holders
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //left
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //top
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //right
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //bottom
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth), minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //left
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth), minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //top
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth), -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //right
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth), minVal + tankWidth + boxHolderWidth), Vector<T,4>(0,0,0,1.0))); //bottom
 
-        //Right Side Holders
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
-        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        //Right Side Holders OUTSIDE pipe outlet
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + (0.5*tankWidth) - pipeRadius1 - pipeOutletMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + pipeRadius1 + pipeOutletMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + pipeRadius1 + pipeOutletMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - pipeRadius1 - pipeOutletMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+
+        //Right side holders forming square at pipe outlet
+        // sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        // sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        // sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(minVal + (0.5*tankWidth) + (0.5*pipeMouthWidth) - extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+        // sim.add_boundary_condition(new Geometry::BoxLevelSet<T,dim>(Geometry::STICKY, Vector<T,dim>(-extraBoxHolderMargin, -extraBoxHolderMargin, minVal + tankWidth + pipeLength), Vector<T,dim>(minVal + tankWidth + extraBoxHolderMargin, minVal + (0.5*tankWidth) - (0.5*pipeMouthWidth) + extraBoxHolderMargin, minVal + tankWidth + pipeLength + boxHolderWidth), Vector<T,4>(0,0,0,1.0)));
+
 
         //Add Elasticity Degradation
         //sim.elasticityDegradationType = 1;
@@ -5940,6 +5948,129 @@ int main(int argc, char *argv[])
         // int degType = 1;
         // T dMin = 0.25;
         // sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+
+        //Add Rankine Damage Model
+        // T dMin = 0.25;
+        // T l0 = sim.dx * sqrt(3.0);
+        // int degType = 1;
+        // sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 304) {
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/304_DirichletPipeWithClot3D");
+
+        if (argc < 4) {
+            puts("ERROR: please add parameters");
+            puts("TEST 304 USAGE: ./cramp testcase lamC tanhWidth");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        // T Gf = std::atof(argv[2]);
+        // T sigmaC = std::atof(argv[3]);
+
+        //Params
+        sim.dx = 0.1;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 24 * 11;
+        sim.frame_dt = (T)1. / 24;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        sim.st = 23.0; //Need less surface particles? Make st LOWER, Need more surface particles? HIGHER
+        sim.useDFG = true;
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //Fibrin Material
+        // T c1, c2;
+        // T ratio = 0.5;
+        
+        // c1 = 30e3;
+        // c2 = c1 * ratio;
+        
+        // T phi_s0 = 0.01;
+        // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
+        // T beta_1 = 1.02;
+        
+        //clot material
+        T E = 100000;
+        T nu = 0.4;
+        T rhoPipe = 1200;
+
+        //fluid material
+        T bulk = 1e5;
+        T gamma = 7;
+        T rhoFluid = 1000; //density of water
+        T viscosity = 0.004;
+        
+        //Compute time step for symplectic
+        //sim.cfl = 0.4;
+        //T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        //sim.suggested_dt = 0.9 * maxDt;
+        sim.suggested_dt = 5e-4;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+
+        //Configuration
+        T minVal = 0.0;
+        T pipeRadius1 = sim.dx * 10;
+        T pipeRadius2 = sim.dx * 13;
+        T pipeRadiusDirichlet = sim.dx * 12;
+        T pipeLength = (pipeRadius1 * 2.0) * 40; //40 pipe diameters long
+        T tankWidth = pipeRadius2 * 2.0 * 3.0;
+        T boxHolderWidth = sim.dx * 3.0;
+        T fluidMargin = sim.dx * 2.0;
+        T pipeMouthWidth = (2.0 * pipeRadius1) / sqrt(2.0); //width of square inscribed inside pipe mouth defined by radius1
+        T extraBoxHolderMargin = sim.dx * 2.0;
+        T pipeOutletMargin = sim.dx * 1.0;
+
+        //Particle Sampling
+        //sim.sampleGridAlignedBoxWithPoissonDisk(material1, Vector<T,dim>(minVal + (fluidMargin), minVal + (fluidMargin), minVal + (fluidMargin)), Vector<T,dim>(minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin), minVal + tankWidth - (fluidMargin)), Vector<T,dim>(0,0,0), 8, rhoFluid, false, 4);
+        T initialFluidSpeed = 5.0;
+        sim.sampleTubeWithPoissonDisk(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, pipeRadiusDirichlet * 0.9, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4);
+        //sim.sampleTubeWithPoissonDisk(material2, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + tankWidth + (0.5 * boxHolderWidth)), pipeLength, pipeRadius1, pipeRadius2, Vector<T,dim>(0,0,0), 8, rhoPipe, false, 0);
+    
+        //Clot Particle Sampling
+        T radiusY = pipeRadius1;
+        T radiusZ = radiusY * 1.5;
+        T radiusX = radiusY;
+        sim.sampleEllipsoid(material2, Vector<T,dim>(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - radiusY, minVal + fluidMargin + pipeLength + radiusZ + fluidMargin), Vector<T,dim>(radiusX, radiusY, radiusZ), Vector<T,dim>(0,0,0), 8, rhoPipe, true, 0, false);
+    
+
+        //Boundary Conditions
+        sim.add_boundary_condition(new Geometry::TubeLevelSet<T,dim>(Geometry::STICKY, Vector<T, dim>(minVal + (0.5*tankWidth), minVal + (0.5*tankWidth), 0), Vector<T, dim>(0,0,1), pipeRadiusDirichlet));
+
+        //Piston Wall
+        T dist = pipeLength; //distance to compress in one second
+        T duration = 10;
+        T speed = dist / duration;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
+
+        //Add Elasticity Degradation
+        sim.elasticityDegradationType = 1;
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        T dMin = 0.25;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
 
         //Add Rankine Damage Model
         // T dMin = 0.25;

@@ -80,6 +80,21 @@ public:
 };
 
 template <class T, int dim>
+class TubeLevelSet : public AnalyticalLevelSet<T, dim> {
+    using TV = Vector<T, dim>;
+
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    TV origin;
+    TV outward_normal;
+    T radius;
+    TubeLevelSet(Type type, const TV& origin, const TV& normal, T radius);
+    T signed_distance(const TV& X) override;
+    TV normal(const TV& X) override;
+    TV closest_point(const TV& X) override;
+};
+
+template <class T, int dim>
 class MovingBallLevelSet : public BallLevelSet<T, dim> {
     using TV = Vector<T, dim>;
     using Base = BallLevelSet<T, dim>;

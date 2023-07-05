@@ -1795,6 +1795,33 @@ public:
         model->append(start, end, vol);
     }
 
+    void sampleEllipsoid(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const TV& radiiVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        TV min_corner, max_corner;
+        for(int d = 0; d < dim; ++d){
+            min_corner[d] = center[d] - radiiVector[d];
+            max_corner[d] = center[d] + radiiVector[d];
+        }
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            TV dist = position - center;
+            T lhs = 0; //sum up contributions, level set defined by x^2/r1^2 + y^2/r2^2 + z^2/r3^2 = 1, keep points with lhs < 1
+            for(int d = 0; d < dim; ++d){
+                lhs += (dist[d] * dist[d]) / (radiiVector[d] * radiiVector[d]);
+            }
+            if(lhs < 1){
+                addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
     //------------CRACK DEFINITION--------------
 
     void addHorizontalCrack(const TV& minPoint, const TV& maxPoint, T increment, T radius, int _crackType = 0)

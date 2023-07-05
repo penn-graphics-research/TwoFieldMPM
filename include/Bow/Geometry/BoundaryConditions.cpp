@@ -114,6 +114,44 @@ Vector<T, dim> InverseBallLevelSet<T, dim>::closest_point(const TV& X)
     return center - n * radius;
 }
 
+//----Tube---//
+
+template <class T, int dim>
+TubeLevelSet<T, dim>::TubeLevelSet(Type type, const TV& origin, const TV& normal, T radius)
+    : AnalyticalLevelSet<T, dim>(type), origin(origin), outward_normal(normal.normalized()), radius(radius)
+{
+}
+
+template <class T, int dim>
+T TubeLevelSet<T, dim>::signed_distance(const TV& X)
+{
+    //T closest = origin + ((X - origin).dot(outward_normal) * outward_normal);
+    T result = radius - ((origin + ((X - origin).dot(outward_normal) * outward_normal)) - X).norm();
+    return result;
+}
+
+template <class T, int dim>
+Vector<T, dim> TubeLevelSet<T, dim>::normal(const TV& X)
+{
+    //T closest = (origin + ((X - origin).dot(outward_normal) * outward_normal));
+    TV n = (origin + ((X - origin).dot(outward_normal) * outward_normal)) - X;
+    if (n.norm() < 1e-12)
+        n = TV::Unit(0);
+    else
+        n.normalize();
+    return n;
+}
+
+template <class T, int dim>
+Vector<T, dim> TubeLevelSet<T, dim>::closest_point(const TV& X)
+{
+    //T closest = origin + ((X - origin).dot(outward_normal) * outward_normal);
+    TV n = normal(X);
+    return (origin + ((X - origin).dot(outward_normal) * outward_normal)) - n * radius;
+}
+
+//----End Tube------//
+
 template <class T, int dim>
 MovingBallLevelSet<T, dim>::MovingBallLevelSet(Type type, const TV& center, T radius, const TV& center_velocity)
     : BallLevelSet<T, dim>(type, center, radius), center_velocity(center_velocity)
@@ -299,6 +337,8 @@ template class HalfSpaceLevelSet<float, 2>;
 template class HalfSpaceLevelSet<float, 3>;
 template class InverseBallLevelSet<float, 2>;
 template class InverseBallLevelSet<float, 3>;
+template class TubeLevelSet<float, 2>;
+template class TubeLevelSet<float, 3>;
 template class MovingBallLevelSet<float, 2>;
 template class MovingBallLevelSet<float, 3>;
 template class BoxLevelSet<float, 2>;
@@ -313,6 +353,8 @@ template class HalfSpaceLevelSet<double, 2>;
 template class HalfSpaceLevelSet<double, 3>;
 template class InverseBallLevelSet<double, 2>;
 template class InverseBallLevelSet<double, 3>;
+template class TubeLevelSet<double, 2>;
+template class TubeLevelSet<double, 3>;
 template class MovingBallLevelSet<double, 2>;
 template class MovingBallLevelSet<double, 3>;
 template class BoxLevelSet<double, 2>;
