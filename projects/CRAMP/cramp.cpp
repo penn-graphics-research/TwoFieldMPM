@@ -2145,7 +2145,7 @@ int main(int argc, char *argv[])
         
         using T = double;
         static const int dim = 2;
-        std::string path = "output/SolidFluidCouplingDemo_AddSolidCube_withViscosity4e-1";
+        std::string path = "output/SolidFluidCouplingDemo_AddSolidCube_withViscosity4e-1_useSolidFluidCoupling";
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //water material
@@ -2172,7 +2172,8 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 5.5; //5.5 good for dx = 0.2, 
         sim.useDFG = false;
-        sim.fricCoeff = 0; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useSolidFluidCoupling = true;
+        sim.fricCoeff = 0.2; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
         //Debug mode
@@ -6066,6 +6067,292 @@ int main(int argc, char *argv[])
 
         //Add Elasticity Degradation
         sim.elasticityDegradationType = 1;
+
+        //Add Tanh Damage Model
+        int degType = 1;
+        T dMin = 0.25;
+        sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+
+        //Add Rankine Damage Model
+        // T dMin = 0.25;
+        // T l0 = sim.dx * sqrt(3.0);
+        // int degType = 1;
+        // sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 305) {
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/305_PressureGradient_ElasticTube");
+
+        if (argc < 6) {
+            puts("ERROR: please add parameters");
+            puts("TEST 305 USAGE: ./cramp testcase lamC tanhWidth pStart pGrad");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T pStart = std::atof(argv[4]);
+        T pGrad = std::atof(argv[5]);
+
+        //Params
+        sim.dx = 4e-4;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 1;//60 * 11;
+        sim.frame_dt = (T)1. / 60;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        sim.st = 0.0; //Need less surface particles? Make st LOWER, Need more surface particles? HIGHER
+        sim.useDFG = true; //TODO turn on
+        sim.fricCoeff = 0.4;
+        
+        //Debug mode
+        sim.verbose = false;
+        sim.writeGrid = true;
+
+        //Fibrin Material
+        // T c1, c2;
+        // T ratio = 0.5;
+        
+        // c1 = 30e3;
+        // c2 = c1 * ratio;
+        
+        // T phi_s0 = 0.01;
+        // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
+        // T beta_1 = 1.02;
+        
+        //pipe material
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoPipe = 1300;
+
+        //fluid material
+        T bulk = 1e4; //1e5 too stiff maybe? crashing early
+        T gamma = 7;
+        T rhoFluid = 1000; //density of water
+        T viscosity = 0.004;
+        
+        //Compute time step for symplectic
+        //sim.cfl = 0.4;
+        //T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        //sim.suggested_dt = 0.9 * maxDt;
+        sim.suggested_dt = 1e-5;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+
+        //Configuration
+        T minVal = 0.0;
+
+        T fluidRadius = sim.dx * 5;
+        T pipeRadius1 = fluidRadius + (2.0 * sim.dx);
+        T pipeThickness = 3 * sim.dx;
+        T pipeRadius2 = pipeRadius1 + pipeThickness;
+        T pipeRadiusDirichlet = pipeRadius1 + (2*sim.dx);
+
+        T pipeLength = (fluidRadius * 2.0) * 30; //in terms of pipe diameters long
+        T tankWidth = pipeRadius2 * 2.0 * 3.0;
+        T boxHolderWidth = sim.dx * 3.0;
+        T fluidMargin = sim.dx * 2.0;
+        T pipeMouthWidth = (2.0 * pipeRadius1) / sqrt(2.0); //width of square inscribed inside pipe mouth defined by radius1
+        T extraBoxHolderMargin = sim.dx * 2.0;
+        T pipeOutletMargin = sim.dx * 1.0;
+
+        //Particle Sampling
+        T initialFluidSpeed = 0.0;
+        T tubeExtraLength = sim.dx * 2;
+        sim.sampleTubeWithPoissonDisk(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
+        sim.sampleTubeWithPoissonDisk(material2, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin - tubeExtraLength), pipeLength + (tubeExtraLength * 2.0), pipeRadius1, pipeRadius2, Vector<T,dim>(0,0,0), 8, rhoPipe, false, 0); //elastic tube
+    
+        //Clot Particle Sampling
+        //T radiusY = pipeRadiusDirichlet;
+        //T radiusZ = radiusY * 1.5;
+        //T radiusX = radiusY;
+        //sim.sampleEllipsoid(material2, Vector<T,dim>(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - radiusY, minVal + fluidMargin + pipeLength + radiusZ + fluidMargin), Vector<T,dim>(radiusX, radiusY, radiusZ), Vector<T,dim>(0,0,0), 8, rhoPipe, true, 0, false);
+
+        //Boundary Conditions
+        sim.add_boundary_condition(new Geometry::TubeLevelSet<T,dim>(Geometry::STICKY, Vector<T, dim>(minVal + (0.5*tankWidth), minVal + (0.5*tankWidth), 0), Vector<T, dim>(0,0,1), pipeRadiusDirichlet));
+
+        //Piston Wall
+        // T dist = pipeLength; //distance to compress in one second
+        // T duration = 10;
+        // T speed = dist / duration;
+        // sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
+
+        //Add Elasticity Degradation
+        //sim.elasticityDegradationType = 1;
+
+        //Add Tanh Damage Model
+        //int degType = 1;
+        //T dMin = 0.25;
+        //sim.addHyperbolicTangentDamage(lamC, tanhWidth, dMin, degType);
+
+        //Add Rankine Damage Model
+        // T dMin = 0.25;
+        // T l0 = sim.dx * sqrt(3.0);
+        // int degType = 1;
+        // sim.addRankineDamage(dMin, Gf, l0, degType, -1.0, sigmaC); //-1 is for p which we dont want to use here
+
+        //Pressure Gradient Config
+        Vector<T,dim> pgMin = Vector<T,dim>(minVal + (0.5 * tankWidth) - pipeRadiusDirichlet - sim.dx, minVal + (0.5*tankWidth) - pipeRadiusDirichlet - sim.dx, minVal + fluidMargin - sim.dx);
+        Vector<T,dim> pgMax = Vector<T,dim>(minVal + (0.5 * tankWidth) + pipeRadiusDirichlet + sim.dx, minVal + (0.5*tankWidth) + pipeRadiusDirichlet + sim.dx, minVal + fluidMargin + pipeLength + sim.dx);
+        Vector<T,dim> toroidMin = pgMin;
+        //toroidMin[2] -= sim.dx; //toroid starts 1*dx before fluid
+        Vector<T,dim> toroidMax = pgMax;
+        bool toroidal = true;
+        //pgMin[2] -= (sim.dx * 10);
+        pgMax[2] += (sim.dx * 10); //make sure fluid will keep moving!
+        //dp/dx = -u_max * (2mu / b^2)
+        //want u_max = 0.15 -> dp/dx = -48 (b = 0.005, mu = 0.004)
+        sim.addPressureGradient(pgMin, pgMax, pStart, pGrad, toroidMin, toroidMax, toroidal);
+
+        sim.run(start_frame);
+    }
+
+    if (testcase == 306) {
+        using T = float; //NOTE: need to use float for 3D!!
+        static const int dim = 3;
+        MPM::CRAMPSimulator<T, dim> sim("output/306_DirichletPiston_with40DirichletTube_LargerConfig_withClotCutout_solidFluidCoupling_45DegFilled");
+
+        if (argc < 6) {
+            puts("ERROR: please add parameters");
+            puts("TEST 306 USAGE: ./cramp testcase lamC tanhWidth pStart pGrad");
+            exit(0);
+        }
+
+        T lamC = std::atof(argv[2]);
+        T tanhWidth = std::atof(argv[3]);
+        T pStart = std::atof(argv[4]);
+        T pGrad = std::atof(argv[5]);
+
+        //Params
+        sim.dx = 2.5e-4;
+        sim.ppc = 8;
+        sim.symplectic = true;
+        sim.end_frame = 60;
+        sim.frame_dt = (T)1. / 120;
+        sim.gravity = 0;
+
+        //Interpolation Scheme
+        sim.useAPIC = true;
+        //sim.flipPicRatio = 0.0; //full PIC
+        
+        //DFG Specific Params
+        sim.st = 0.0; //Need less surface particles? Make st LOWER, Need more surface particles? HIGHER
+        sim.useDFG = false; //TODO turn on
+        sim.useSolidFluidCoupling = true;
+        sim.fricCoeff = 0.2; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
+        sim.useExplicitContact = true;
+        
+        //Debug mode
+        sim.verbose = true;
+        sim.writeGrid = true;
+
+        //Fibrin Material
+        // T c1, c2;
+        // T ratio = 0.5;
+        
+        // c1 = 30e3;
+        // c2 = c1 * ratio;
+        
+        // T phi_s0 = 0.01;
+        // T pi_0 = 1000.0;
+        // T mu_0 = 0.0;
+        // T beta_1 = 1.02;
+        
+        //pipe material
+        T E = 1e6;
+        T nu = 0.2;
+        T rhoPipe = 1300;
+
+        //fluid material
+        T bulk = 1e4; //1e5 too stiff maybe? crashing early
+        T gamma = 7;
+        T rhoFluid = 1000; //density of water
+        T viscosity = 0.004;
+        
+        //Compute time step for symplectic
+        //sim.cfl = 0.4;
+        //T maxDt = sim.suggestedDt(E, nu, rho, sim.dx, sim.cfl);
+        //sim.suggested_dt = 0.9 * maxDt;
+        sim.suggested_dt = 1e-5;
+
+        // Using `new` to avoid redundant copy constructor
+        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
+
+        //Configuration
+        T minVal = 0.0;
+
+        T fluidRadius = sim.dx * 10;
+        T pipeRadius1 = fluidRadius + (2.0 * sim.dx);
+        T pipeThickness = 3 * sim.dx;
+        T pipeRadius2 = pipeRadius1 + pipeThickness;
+        T pipeRadiusDirichlet = fluidRadius + (1*sim.dx);
+
+        T pipeLength = (fluidRadius * 2.0) * 40; //in terms of pipe diameters long
+        T tankWidth = pipeRadius2 * 2.0 * 3.0;
+        T boxHolderWidth = sim.dx * 3.0;
+        T fluidMargin = sim.dx * 2.0;
+        T pipeMouthWidth = (2.0 * pipeRadius1) / sqrt(2.0); //width of square inscribed inside pipe mouth defined by radius1
+        T extraBoxHolderMargin = sim.dx * 2.0;
+        T pipeOutletMargin = sim.dx * 1.0;
+
+        //Clot Particle Sampling
+        T radiusY = pipeRadiusDirichlet;
+        T radiusZ = radiusY * 1.5;
+        T radiusX = radiusY;
+        Vector<T,dim> clotCenter(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - radiusY, minVal + fluidMargin + (fluidRadius * 2.0 * 25.0));
+        Vector<T,dim> radiiVec(radiusX, radiusY, radiusZ);
+        //sim.sampleEllipsoid(material2, clotCenter, radiiVec, Vector<T,dim>(0,0,0), 8, rhoPipe, true, 0, false);
+        
+        
+        Vector<T,dim> cutoutCenter = clotCenter;
+
+        //45 deg cutout (struggling to get fluid to enter at this angle)
+        cutoutCenter[1] += (0.7*radiusY);
+        cutoutCenter[2] -= (0.7*radiusY);
+        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 0.5, sim.dx * 2);
+        Vector<T,dim> eulerRotVec(45.0, 0.0, 0.0); //45 deg 
+        
+        //90 deg cutout (paralell to flow for easier entry)
+        /*cutoutCenter[1] += (0.25*radiusY);
+        cutoutCenter[2] -= (1.2*radiusY);
+        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 1.0, sim.dx * 3);
+        Vector<T,dim> eulerRotVec(90.0, 0.0, 0.0); //90 deg */
+
+        sim.sampleEllipsoid_CulledWithCutout(material2, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoPipe, rhoFluid, true, 0, false);
+
+        //Particle Sampling
+        T initialFluidSpeed = 0.0;
+        T tubeExtraLength = sim.dx * 2;
+        //sim.sampleTubeWithPoissonDisk(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
+        sim.sampleTubeWithPoissonDisk_clotCutOut(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, clotCenter, radiiVec * 1.1, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
+    
+        //Boundary Conditions
+        sim.add_boundary_condition(new Geometry::TubeLevelSet<T,dim>(Geometry::STICKY, Vector<T, dim>(minVal + (0.5*tankWidth), minVal + (0.5*tankWidth), 0), Vector<T, dim>(0,0,1), pipeRadiusDirichlet));
+
+        //Piston Wall
+        T dist = (fluidRadius * 2.0) * 15; //distance to compress in one second
+        T duration = 0.589; //computed to match desired Q of 4.17e-7 m^3/s
+        T speed = dist / duration;
+        sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
+
+        //Add Elasticity Degradation
+        //sim.elasticityDegradationType = 1;
 
         //Add Tanh Damage Model
         int degType = 1;

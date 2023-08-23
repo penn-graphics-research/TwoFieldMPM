@@ -60,6 +60,7 @@ public:
     T massRatio;
 
     bool useFBarStabilization;
+    bool useSolidFluidCoupling;
 
     void operator()()
     {
@@ -96,7 +97,7 @@ public:
 
                     //Notice we treat single-field and two-field nodes differently
                     //NOTE: remember we are also including explicit force here if symplectic!
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         if (useAPIC) {
                             g.v1 += delta_APIC;
@@ -107,7 +108,7 @@ public:
                         }
 
                         //Now transfer mass if we aren't using DFG (this means we skipped massP2G earlier)
-                        if (!useDFG) {
+                        if (!useDFG && !useSolidFluidCoupling) {
                             g.m1 += mass * w;
                         }
 
@@ -122,7 +123,7 @@ public:
                         //Transfer volume so we can add our Mode 1 loading
                         //g.gridViYi1 += vol * w;
                     }
-                    else if (g.separable != 0 && useDFG) {
+                    else if (g.separable != 0) {
                         //Treat node as having two fields
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2
@@ -442,6 +443,7 @@ public:
 
     bool useDFG;
     Field<int>& m_marker;
+    bool useSolidFluidCoupling;
 
     void operator()()
     {
@@ -456,13 +458,13 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         g.cauchy1 += cauchyXmass * w;
                         g.Fi1 += defGradXmass * w;
 
                     }
-                    else if (g.separable != 0 && useDFG) {
+                    else if (g.separable != 0) {
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             g.cauchy1 += cauchyXmass * w;
@@ -489,12 +491,12 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         g.Fi1(0,0) += m_F[i](0,0) * mass * w; //fluid J
                         g.Fi1(1,1) += m_F[i](1,1) * mass * w; //fluid pressure
                     }
-                    else if (g.separable != 0 && useDFG) {
+                    else if (g.separable != 0) {
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 -- here we already know it's FLUID (field2)
                             g.Fi2(0,0) += m_F[i](0,0) * mass * w; //fluid J
@@ -548,6 +550,7 @@ public:
 
     bool useDFG;
     Field<int>& m_marker;
+    bool useSolidFluidCoupling;
 
     void operator()()
     {
@@ -562,12 +565,12 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         cauchySmooth += g.cauchy1 * w;
                         FSmooth += g.Fi1 * w;
                     }
-                    else if (g.separable != 0 && useDFG) {
+                    else if (g.separable != 0) {
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's solid)
                             cauchySmooth += g.cauchy1 * w;
@@ -601,12 +604,12 @@ public:
                 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     //Notice we treat single-field and two-field nodes differently
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //Single-field treatment if separable = 0 OR if we are using single field MPM
                         FSmooth(0,0) += g.Fi1(0,0) * w;
                         FSmooth(1,1) += g.Fi1(1,1) * w;
                     }
-                    else if (g.separable != 0 && useDFG) {
+                    else if (g.separable != 0) {
 
                         if(g.separable == 3 || g.separable == 6){ //coupling case, always transfer solid to field 1 and fluid to field 2 (here we already know it's FLUID)
                             FSmooth(0,0) += g.Fi2(0,0) * w;
@@ -1077,28 +1080,41 @@ public:
         BOW_TIMER_FLAG("applyPressureGradientForces");
 
         grid.colored_for([&](int i) {
-            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //skip crack particles if we have them
+            if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //Check if we have a fluid particle, we only want to allow these to be influenced by the pressure gradient forces
                 const Vector<T, dim> pos = m_X[i];
                 BSplineWeights<T, dim> spline(pos, dx);
 
                 grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, DFGMPM::GridState<T, dim>& g) {
                     
                     Vector<T,dim> xi = node.template cast<T>() * dx;
-                    //Check if we have a fluid particle, we only want to allow these to influence the pressure gradient forces
                     
                     //p is a fluid particle, so check if current node is inside the pressureGradient region
-                    if(xi[0] > minCorner[0] && xi[0] < maxCorner[0] && xi[1] > minCorner[1] && xi[1] < maxCorner[1]){
+                    bool nodeInsideGradient = true;
+                    for(int d = 0; d < dim; ++d){
+                        if(xi[d] > minCorner[d] && xi[d] < maxCorner[d]){
+                            continue;
+                        }
+                        else{
+                            nodeInsideGradient = false;
+                        }
+                    }
+                    
+                    if(nodeInsideGradient){
                         //node is inside pressure gradient
                         Matrix<T, dim, dim> hydrostaticStress = Matrix<T, dim, dim>::Zero();
-                        T pressure = pStart + (pGrad * (xi[0] - minCorner[0])); //pressure should change based on pressureGrad and the distance through the pressureGrad region
+                        int axis = 0; //x-axis for 2D
+                        if constexpr(dim == 3){
+                            axis = 2; //z-axis for 3D
+                        }
+                        T pressure = pStart + (pGrad * (xi[axis] - minCorner[axis])); //pressure should change based on pressureGrad and the distance through the pressureGrad region
                         for(int d = 0; d < dim; ++d){
                             hydrostaticStress(d,d) = -pressure; // / (T)dim; //cauchy_hydro = diagonal of -p/dim
                         }
                         // if(xi[0] == 0.124){
                         //     std::cout << "xi = (" << xi[0] << "," << xi[1] << ") -> hydrostaticStress: " << hydrostaticStress << std::endl;
                         // }
+
                         //Store f_i in u1 since we only use that when we compute J-Integrals with displacement gradients!
-                        
                         g.u1 += -m_currentVolume[i] * hydrostaticStress * dw; //computed only based on fluid particles
                     }
                     
@@ -1140,11 +1156,15 @@ public:
         grid.parallel_for([&](int i) {
             if((!grid.crackInitialized || i < grid.crackParticlesStartIdx) && m_marker[i] == 4){ //skip crack particles if we have them
                 const Vector<T, dim> pos = m_X[i];
-                if(pos[0] > maxCorner[0]){
+                int axis = 0; //x-axis for 2D
+                if constexpr(dim == 3){
+                    axis = 2; //z-axis for 3D
+                }
+                if(pos[axis] > maxCorner[axis]){
                     //went past max x-direction
                     T newX;
-                    newX = minCorner[0] + (pos[0] - maxCorner[0]);
-                    m_X[i][0] = newX;
+                    newX = minCorner[axis] + (pos[axis] - maxCorner[axis]);
+                    m_X[i][axis] = newX;
                 }
             }
         });

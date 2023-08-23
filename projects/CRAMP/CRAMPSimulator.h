@@ -222,6 +222,7 @@ public:
 
     //Solid-Fluid Coupling Parameters
     T massRatio = 0.0; //the minimal massRatio required to be considered sep3 (two field separable), otherwise sep6 (two field nonseparable)
+    bool useSolidFluidCoupling = false;
 
     //Grid Data to Save and Vis
     Field<TV> activeNodesX;
@@ -340,8 +341,8 @@ public:
 
     //DFG specific routines (partitioning)
     void partitioningRoutines(){
-        
-        if(damageType != 0 || elasticityDegradationType != 0){ //allow DFG with damage region and elast.Deg.
+
+        if(useDFG && (damageType != 0 || elasticityDegradationType != 0)){ //allow DFG with damage region and elast.Deg.
             //First sort particles into a grid with dx = rp
             grid.sortParticles(Base::m_X, rp);
 
@@ -358,30 +359,37 @@ public:
         grid.sortParticles(Base::m_X, Base::dx);
 
         //Surface Detection -> only on first substep
-        if (elapsedTime == 0.0) {
+        if (useDFG && elapsedTime == 0.0) {
             Bow::DFGMPM::SurfaceDetectionOp<T, dim> surface_detection{ {}, Base::m_X, particleNeighbors, rp, st, sp, grid, m_marker };
             surface_detection(); //Detect surface particles on first substep
         }
         
         //Damage Routines (Rankine or Tanh)
-        if (damageType == 1) { //Rankine
+        if (useDFG && damageType == 1) { //Rankine
             //NOTE: we can put rankine damage here because, unlike AnisoMPM damage, we update this BEFORE computing DGs!
             Bow::CRAMP::UpdateRankineDamageOp<T, dim> update_rankine{ {}, m_cauchy, Dp, grid, sigmaC, Hs, m_useDamage, m_marker};
             update_rankine();
         }
-        else if(damageType == 3){ //tanh damage
+        else if(useDFG && damageType == 3){ //tanh damage
             Bow::CRAMP::UpdateTanhDamageOp<T,dim> update_tanh{ {}, m_F, Dp, grid, lamC, tanhWidth, m_useDamage, m_lamMax, m_marker };
             update_tanh();
         }
 
-        if(damageType != 0 || elasticityDegradationType != 0){ //allow DFG with damage region and elast.Deg.
+        if(useDFG && (damageType != 0 || elasticityDegradationType != 0)){ //allow DFG with damage region and elast.Deg.
             Bow::DFGMPM::ComputeDamageGradientsOp<T, dim> compute_DGs{ {}, Base::m_X, particleNeighbors, rp, Base::dx, particleDG, Dp, sp, grid, m_marker, m_useDamage };
             compute_DGs(); //Compute particle damage gradients
             Bow::Logging::info("Damage Gradients Computed...");
         }
 
-        Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker, massRatio };
-        partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
+        if(useDFG){
+            Bow::DFGMPM::PartitioningOp<T, dim> partition{ {}, Base::m_X, Base::m_mass, particleDG, particleAF, Dp, sp, Base::dx, minDp, dMin, grid, m_marker, massRatio, useSolidFluidCoupling };
+            partition(); //Partition particles into their fields, transfer mass to those fields, and compute node separability
+        }
+        else if(useSolidFluidCoupling){
+            Bow::DFGMPM::SolidFluidPartitioningOp<T, dim> solidFluidPartition{ {}, Base::m_X, Base::m_mass, Base::dx, grid, m_marker, massRatio };
+            solidFluidPartition();
+        }
+        
     }
 
     //AnisoMPM Routines
@@ -395,7 +403,7 @@ public:
 
     //Compute forces, P2G, and grid update --> all depends on symplectic or not
     void p2g(T dt){
-        if(!useDFG){
+        if(!useDFG && !useSolidFluidCoupling){
             //if single field MPM, sort particles before P2G (for two field we already did this)
             Bow::Logging::info("Starting sorting particles for single-field MPM...");
             grid.sortParticles(Base::m_X, Base::dx);
@@ -409,7 +417,8 @@ public:
             }
         }
         //Notice that this P2G is from CRAMPOp.h
-        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral, massRatio, useFBarStabilization };
+        Bow::Logging::info("Begin P2G...");
+        Bow::CRAMP::ParticlesToGridOp<T, dim> P2G{ {}, Base::m_X, m_Xinitial, Base::m_V, Base::m_mass, Base::m_C, Base::stress, gravity, particleAF, grid, Base::dx, dt, Base::symplectic, useDFG, useAPIC, useImplicitContact, elasticityDegradationType, m_currentVolume, m_scaledCauchy, m_marker, computeJIntegral, massRatio, useFBarStabilization, useSolidFluidCoupling };
         P2G();
     }
 
@@ -451,7 +460,7 @@ public:
         
         std::cout << "G2P Starting..." << std::endl;
 
-        Bow::DFGMPM::GridToParticlesOp<T, dim> G2P{ {}, Base::m_X, Base::m_V, Base::m_C, particleAF, grid, Base::dx, dt, flipPicRatio, useDFG, m_marker };
+        Bow::DFGMPM::GridToParticlesOp<T, dim> G2P{ {}, Base::m_X, Base::m_V, Base::m_C, particleAF, grid, Base::dx, dt, flipPicRatio, useDFG, m_marker, useSolidFluidCoupling };
         G2P(useAPIC); //P2G
 
         std::cout << "G2P Done..." << std::endl;
@@ -481,6 +490,8 @@ public:
     /* Write our own advance function to override*/
     void advance(T dt, int end_frame, T frame_dt) override
     {
+
+        BOW_ASSERT_INFO(!(useDFG && useSolidFluidCoupling), "Cannot use both DFG and solidFluidCoupling at the same time!");
 
         std::cout << "Begin advance with dt= " << dt << std::endl;
 
@@ -515,7 +526,8 @@ public:
             std::cout << "Finished collecting lamMax..." << std::endl;
         }
 
-        if(useDFG) {
+        //Partitioning Routines (damage or solid-fluid)
+        if(useDFG || useSolidFluidCoupling) {
             //DFG specific routines (partitioning)
             partitioningRoutines();
             
@@ -597,12 +609,12 @@ public:
 
         //Now transfer cauchy and F to the grid (requires grid masses, so, after P2G)
         if(elasticityDegradationType != 0){
-            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use scaledCauchy if we are using RankineDamage
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_scaledCauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker, useSolidFluidCoupling }; //use scaledCauchy if we are using RankineDamage
             tensorP2G();
             std::cout << "Tensor P2G Done (Scaled)..." << std::endl;
         }
         else{
-            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker }; //use regular Cauchy stress otherwise
+            Bow::CRAMP::TensorP2GOp<T,dim>tensorP2G{ {}, Base::m_X, Base::m_mass, m_cauchy, m_F, particleAF, grid, Base::dx, useDFG, m_marker, useSolidFluidCoupling }; //use regular Cauchy stress otherwise
             tensorP2G();
             std::cout << "Tensor P2G Done (Unscaled)..." << std::endl;
         }
@@ -618,7 +630,7 @@ public:
         }
 
         //Transfer grid stress and F back to particles for smooth F and sigma
-        Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker };
+        Bow::CRAMP::TensorG2POp<T,dim>tensorG2P{ {}, Base::m_X, m_cauchySmoothed, m_FSmoothed, particleAF, grid, Base::dx, useDFG, m_marker, useSolidFluidCoupling };
         tensorG2P();
         std::cout << "Tensor G2P Done..." << std::endl;
         
@@ -805,7 +817,7 @@ public:
         }
 
         //Frictional Contact -> apply directly for symplectic, for implicit we compute normals here (but only if we want implicit contact)
-        if (useDFG && ((Base::symplectic && useExplicitContact) || (!Base::symplectic && useImplicitContact))) {
+        if ((useDFG || useSolidFluidCoupling) && ((Base::symplectic && useExplicitContact) || (!Base::symplectic && useImplicitContact))) {
             Bow::DFGMPM::ContactForcesOp<T, dim> frictional_contact{ {}, dt, fricCoeff, Base::symplectic, useImplicitContact, grid };
             frictional_contact();
             std::cout << "Frictional Contact Applied..." << std::endl;
@@ -816,7 +828,7 @@ public:
         std::cout << "Grid Updated..." << std::endl;
 
         //Explicit Frictional Contact -> ONLY for implicit two field with EXPLICIT frictional contact
-        if (useDFG && (!Base::symplectic && !useImplicitContact)) {
+        if ((useDFG || useSolidFluidCoupling) && (!Base::symplectic && !useImplicitContact)) {
             Bow::DFGMPM::ContactForcesOp<T, dim> frictional_contact{ {}, dt, fricCoeff, Base::symplectic, useImplicitContact, grid };
             frictional_contact();
             std::cout << "Applied Explicit Frictional Contact..." << std::endl;
@@ -872,7 +884,7 @@ public:
         currSubstep++;
 
         //Make sure we capture the stress field even if we don't scale stress! (we always write based on what's in scaledCauchy)
-        if(!useDFG || elasticityDegradationType == 0){
+        if((!useDFG && !useSolidFluidCoupling) || elasticityDegradationType == 0){
             m_scaledCauchy = m_cauchy;
         }
 
@@ -1650,6 +1662,34 @@ public:
         }
     }
 
+    void sampleTubeWithPoissonDisk_clotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const T& length, const T& r1, const T& r2, const TV& clotCenter, const TV& radiiVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        // center = center of starting face of the tube
+        if constexpr (dim == 3){
+            ppc = (T)_ppc;
+            T vol = std::pow(Base::dx, dim) / T(_ppc);
+            int start = Base::m_X.size();
+            Field<TV> new_samples;
+            Geometry::PoissonDisk<T, dim> poisson_disk(TV(center[0] - r2, center[1] - r2, center[2]), TV(center[0] + r2, center[1] + r2, center[2] + length), Base::dx, T(_ppc));
+            poisson_disk.sample(new_samples);
+            for(auto position : new_samples){
+                T radialDist = std::sqrt((position[0] - center[0])*(position[0] - center[0]) +  (position[1] - center[1])*(position[1] - center[1]));
+                if(radialDist > r1 && radialDist < r2){
+                    TV dist = position - clotCenter;
+                    T lhs = 0;
+                    for(int d = 0; d < dim; ++d){
+                        lhs += (dist[d] * dist[d]) / (radiiVector[d] * radiiVector[d]);
+                    }
+                    if(lhs > 1){
+                        addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+                    }
+                }
+            }
+            int end = Base::m_X.size();
+            model->append(start, end, vol);
+        }
+    }
+
     void sampleGridAlignedBoxWithPoissonDisk_ClotCutOut(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& min_corner, const TV& max_corner, const TV& center, const T& radius, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., bool useDamage = false, int marker = 0, bool surfaced = false, bool parabolicVelocity = false){
         // sample particles
         ppc = (T)_ppc;
@@ -1820,6 +1860,76 @@ public:
         }
         int end = Base::m_X.size();
         model->append(start, end, vol);
+    }
+
+    void sampleEllipsoid_CulledWithCutout(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const TV& radiiVector, const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., T fluidDensity = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+        // sample particles
+        ppc = (T)_ppc;
+        T vol = std::pow(Base::dx, dim) / T(_ppc);
+        int start = Base::m_X.size();
+        Field<TV> new_samples;
+        TV min_corner, max_corner;
+        for(int d = 0; d < dim; ++d){
+            min_corner[d] = center[d] - radiiVector[d];
+            max_corner[d] = center[d] + radiiVector[d];
+        }
+        Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
+        poisson_disk.sample(new_samples);
+        for(auto position : new_samples){
+            TV dist = position - center;
+            T lhs = 0; //sum up contributions, level set defined by x^2/r1^2 + y^2/r2^2 + z^2/r3^2 = 1, keep points with lhs < 1
+            for(int d = 0; d < dim; ++d){
+                lhs += (dist[d] * dist[d]) / (radiiVector[d] * radiiVector[d]);
+            }
+            if(lhs < 1){ //is inside ellipsoid?
+                if(position[1] >= center[1]){ //above center? otherwise cull lower particles for efficiency
+                    TV rotatedP = rotatePoint(position, cutoutCenter, eulerRotVector[0], eulerRotVector[1], eulerRotVector[2]); //get point rotated around box cutout center
+                    //std::cout << "position: " << position << " rotatedP: " << rotatedP << std::endl;
+                    if( rotatedP[0] >= (cutoutCenter[0] - lengthsVector[0] / 2.0) 
+                     && rotatedP[0] <= (cutoutCenter[0] + lengthsVector[0] / 2.0) 
+                     && rotatedP[1] >= (cutoutCenter[1] - lengthsVector[1] / 2.0) 
+                     && rotatedP[1] <= (cutoutCenter[1] + lengthsVector[1] / 2.0)
+                     && rotatedP[2] >= (cutoutCenter[2] - lengthsVector[2] / 2.0)
+                     && rotatedP[2] <= (cutoutCenter[2] + lengthsVector[2] / 2.0)){
+                        //std::cout << "found particle inside cutout region!" << std::endl;
+                        addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
+                        //continue; //inside box, ignore
+                    }
+                    else{
+                        //outside box, add to sample
+                        addParticle(position, velocity, density*vol, 0.0, 0, marker, useDamage);
+                    }
+                }
+            }
+        }
+        int end = Base::m_X.size();
+        model->append(start, end, vol);
+    }
+
+    //Only rotating around x axis for now
+    TV rotatePoint(const TV& p, const TV& c, T thetaX, T thetaY, T thetaZ){
+        TV translatedP = p - c;
+
+        //degrees to radians
+        thetaX *= (M_PI  / 180.0);
+
+        //rotate around X-axis
+        T rotatedX = translatedP[0];
+        T rotatedY = translatedP[1] * std::cos(thetaX) - translatedP[2] * std::sin(thetaX);
+        T rotatedZ = translatedP[1] * std::sin(thetaX) + translatedP[2] * std::cos(thetaX);
+
+        // # Rotate the point around the y-axis by thetaY.
+        // rotated_x = rotated_x * math.cos(thetaY) - rotated_z * math.sin(thetaY)
+        // rotated_y = rotated_y
+        // rotated_z = rotated_x * math.sin(thetaY) + rotated_z * math.cos(thetaY)
+
+        // # Rotate the point around the z-axis by thetaZ.
+        // rotated_x = rotated_x * math.cos(thetaZ) - rotated_y * math.sin(thetaZ)
+        // rotated_y = rotated_y * math.cos(thetaZ) + rotated_x * math.sin(thetaZ)
+        // rotated_z = rotated_z
+
+        TV rotatedP = TV(rotatedX + c[0], rotatedY + c[1], rotatedZ + c[2]);
+        return rotatedP;
     }
 
     //------------CRACK DEFINITION--------------

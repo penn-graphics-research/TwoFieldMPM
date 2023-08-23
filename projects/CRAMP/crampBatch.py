@@ -20,7 +20,7 @@ test6 = [0, 1]                          #Num Frax Exploration [Variable dx, Vari
 pipeFlowTests = [0, 0, 0, 0, 0, 0, 0]   #Pipe Flow Tests [Horizontal with Dirichlet, Vertical with Dirichlet, Horizontal with Elastic Walls, Horizontal with Elastic Walls and Constant Pressure, Clot Inclusion with Const Pressure, Fluid Generator Test, Fluid Gen + Clot]
 pressureGradients = [0, 0, 0, 1, 0]     #Pressure Gradient Tests [30 Diameter Pipe, 30 Diameter Pipe with Clot, with clot and Dirichlet pipe walls, Dirichlet walls w/o clot, Dam Break Test (Zhao2022 to test FBar)]
 paper1Tests = [0, 1, 0, 0]              #[SENT with const width crack and variable dx for 1F MPM, then with 2F MPM, Hole in Plate with SF, Hole in Plate with TF]
-goingThreeDee = [0, 1]                  #[slicedCube3D, Dirichlet pipe with ellipsoid clot]
+goingThreeDee = [0, 0, 0, 1]                  #[slicedCube3D, Dirichlet pipe with ellipsoid clot, Pressure Gradient Tube]
 
 ################################
 ########### SECTOR A ###########
@@ -525,5 +525,23 @@ if sectorF[0]:
         lamC = 1.2 #2.0 too low
         tanhWidth = 0.08
         runCommand = './cramp 304 ' + str(lamC) + ' ' + str(tanhWidth)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if goingThreeDee[2]:
+        lamC = 1.2 #2.0 too low
+        tanhWidth = 0.08
+        pStart = 5000  #v0 = 0.3: 10k too high still, segfault at 1 m/s, 5k too high seg fault at 0.6 m/s, 3k seg faults after wrap around with 0.2 m/s, 4k a little too high at 0.4 m/s
+        #3k too low with v0 = 0                         
+        pGrad = -318.3
+        runCommand = './cramp 305 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(pStart) + ' ' + str(pGrad)
+        print(runCommand)
+        subprocess.call([runCommand], shell=True)
+    if goingThreeDee[3]:
+        lamC = 1.05 #2.0 too low
+        tanhWidth = 0.08
+        pStart = 5000  #v0 = 0.3: 10k too high still, segfault at 1 m/s, 5k too high seg fault at 0.6 m/s, 3k seg faults after wrap around with 0.2 m/s, 4k a little too high at 0.4 m/s
+        #3k too low with v0 = 0                         
+        pGrad = -318.3
+        runCommand = './cramp 306 ' + str(lamC) + ' ' + str(tanhWidth) + ' ' + str(pStart) + ' ' + str(pGrad)
         print(runCommand)
         subprocess.call([runCommand], shell=True)

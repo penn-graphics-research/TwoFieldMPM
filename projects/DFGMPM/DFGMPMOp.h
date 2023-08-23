@@ -247,6 +247,7 @@ public:
     Field<int>& m_marker;
 
     T massRatio;
+    bool useSolidFluidCoupling;
 
     void operator()()
     {   
@@ -403,6 +404,126 @@ public:
         }
 
         grid.countSeparableNodes();
+    }
+};
+
+/* Detect solid-fluid DOFs and set them up for P2G later */
+template <class T, int dim>
+class SolidFluidPartitioningOp : public AbstractOp {
+public:
+    using SparseMask = typename DFGMPMGrid<T, dim>::SparseMask;
+    Field<Vector<T, dim>>& m_X;
+    std::vector<T>& m_mass;
+
+    T dx;
+
+    DFGMPMGrid<T, dim>& grid;
+    Field<int>& m_marker;
+
+    T massRatio;
+
+    void operator()()
+    {   
+        //SEPARABLE VALUE KEY
+        //0 = single field
+        //3 = solid and fluid detected
+        //4 = only fluid detected so far
+        //5 = only solid detected so far
+        
+        BOW_TIMER_FLAG("Solid-Fluid Partitioning");
+        grid.colored_for([&](int i) {
+            if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+                const Vector<T, dim> pos = m_X[i];
+                const T mass = m_mass[i];
+
+                //Set Active Fields for each grid node!
+                BSplineWeights<T, dim> spline(pos, dx);
+                grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
+
+                        
+                    //field 1
+                    g.m1 += mass * w; //add mass to active field for this particle
+
+                    //Now mark separable = 4 if this was fluid, 5 if it was solid, and mark it 3 if we've now been hit by both solid and fluid!
+                    if(g.separable == 0){ //if previously never mapped to
+                        if(m_marker[i] == 0 || m_marker[i] == 5){
+                            g.separable = 5;
+                        }
+                        else if(m_marker[i] == 4){
+                            g.separable = 4;
+                        }
+                    }
+                    else if(g.separable == 4){ //if previously hit fluid
+                        if(m_marker[i] == 5){
+                            g.separable = 3; //already hit by fluid, now hit by solid
+                        }
+                    }
+                    else if(g.separable == 5){ //if previously hit solid
+                        if(m_marker[i] == 4){
+                            g.separable = 3; //already hit by solid, now hit by fluid
+                        }
+                    }
+                    
+                });
+            }
+        });
+
+        //Now iterate grid nodes to compute each one's separability
+        grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
+
+            if(g.separable != 3){
+                g.separable = 0; //if nothing in field 2 and we didn't detect solid-fluid coupling reset separable = 0
+            }
+
+            if(g.separable == 3){
+                g.m1 = 0;
+                g.m2 = 0; //if solid-fluid coupling, set these 0 for later transfer in P2G
+            }
+        });
+
+        
+        //if massRatio is set, we accumulate solid and fluid masses for this sep3 node, then check the mass ratio to see whether it should be sep3 or sep6
+        // if(massRatio > 0){
+
+        //     //Now accumulate solid and fluid mass for separable = 3 case to detect whether massRatio is low enough
+        //     grid.colored_for([&](int i) {
+        //         if(!grid.crackInitialized || i < grid.crackParticlesStartIdx){ //skip crack particles if we have them
+        //             const Vector<T, dim> pos = m_X[i];
+        //             const T mass = m_mass[i];
+        //             BSplineWeights<T, dim> spline(pos, dx);
+        //             grid.iterateKernel(spline, [&](const Vector<int, dim>& node, int oidx, T w, const Vector<T, dim>& dw, GridState<T, dim>& g) {
+        //                 if(g.separable == 3){ //coupling case, always transfer solid to field 1 and fluid to field 2
+        //                     int materialIdx = m_marker[i];
+        //                     if(materialIdx == 0 || materialIdx == 5){
+        //                         g.m1 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+        //                     }
+        //                     else if(materialIdx == 4){ //transfer fluid particles to field 2
+        //                         g.m2 += mass * w; //have to do this here since we couldn't earlier without interfering with DFG partitioning
+        //                     }
+        //                 }
+        //             });
+        //         }
+        //     });
+
+        //     //check massRatio (if it's set), if good stay sep = 3, otherwise switch to sep = 0
+        //     grid.iterateGrid([&](const Vector<int, dim>& node, GridState<T, dim>& g) {
+        //         //Now check massRatio to determine whether it should model solid fluid coupling or not
+        //         T maxMass, minMass, particleMassRatio;
+        //         if(g.separable == 3){
+        //             maxMass = std::max(g.m1, g.m2);
+        //             minMass = std::min(g.m1, g.m2);
+        //             particleMassRatio = maxMass / minMass;
+        //             if(particleMassRatio > massRatio){ //TODO: massRatio can be user defined!!
+        //                 g.separable = 6; //like sep = 2 case but for solid fluid coupling
+        //                 // g.separable = 0;
+        //                 // g.m1 += g.m2;
+        //                 // g.m2 = 0.0;
+        //             }
+        //         }
+        //     });
+        // }
+
+        // grid.countSeparableNodes();
     }
 };
 
@@ -1008,6 +1129,8 @@ public:
     bool useDFG;
     Field<int>& m_marker;
 
+    bool useSolidFluidCoupling;
+
     Field<Matrix<T, dim, dim>> m_gradXp = Field<Matrix<T, dim, dim>>();
     Field<Matrix<T, dim, dim>> m_deformationRates = Field<Matrix<T, dim, dim>>();
 
@@ -1033,7 +1156,7 @@ public:
                     
                     Vector<T, dim> xn = node.template cast<T>() * dx; //same regardless of separability
                     //these steps depend on which field the particle is in
-                    if (g.separable == 0 || !useDFG) {
+                    if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                         //treat as single field node
                         picV += w * g.v1;
                         oldV += w * g.vn1; 
@@ -1086,7 +1209,7 @@ public:
                         Vector<T, dim> xn = dx * node.template cast<T>();
                         Vector<T, dim> g_v_new = g.v1;
                         Vector<T, dim> g_v2_new = g.v2;
-                        if (g.separable == 0 || !useDFG) {
+                        if (g.separable == 0 || (!useDFG && !useSolidFluidCoupling)) {
                             Bp += 0.5 * w * (g_v_new * (xn - m_X[i] + g.x1 - picX).transpose() + (xn - m_X[i] - g.x1 + picX) * g_v_new.transpose());
                         }
                         else if (g.separable == 1 || g.separable == 2){
