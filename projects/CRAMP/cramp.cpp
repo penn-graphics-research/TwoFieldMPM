@@ -6224,7 +6224,7 @@ int main(int argc, char *argv[])
     if (testcase == 306) {
         using T = float; //NOTE: need to use float for 3D!!
         static const int dim = 3;
-        MPM::CRAMPSimulator<T, dim> sim("output/306_DirichletPiston_with40DirichletTube_LargerConfig_withClotCutout_solidFluidCoupling_45DegFilled");
+        MPM::CRAMPSimulator<T, dim> sim("output/306_DirichletPiston_with40DirichletTube_withClotCutout_NOsolidFluidCoupling_45DegBottomLeft");
 
         if (argc < 6) {
             puts("ERROR: please add parameters");
@@ -6252,12 +6252,12 @@ int main(int argc, char *argv[])
         //DFG Specific Params
         sim.st = 0.0; //Need less surface particles? Make st LOWER, Need more surface particles? HIGHER
         sim.useDFG = false; //TODO turn on
-        sim.useSolidFluidCoupling = true;
+        sim.useSolidFluidCoupling = false;
         sim.fricCoeff = 0.2; //try making this friction coefficient 0 to prevent any friction forces, only normal contact forces
         sim.useExplicitContact = true;
         
         //Debug mode
-        sim.verbose = true;
+        sim.verbose = false;
         sim.writeGrid = true;
 
         //Fibrin Material
@@ -6273,9 +6273,9 @@ int main(int argc, char *argv[])
         // T beta_1 = 1.02;
         
         //pipe material
-        T E = 1e6;
+        T E = 1e4; //10-100 kPa is good here
         T nu = 0.2;
-        T rhoPipe = 1300;
+        T rhoClot = 1100;
 
         //fluid material
         T bulk = 1e4; //1e5 too stiff maybe? crashing early
@@ -6323,10 +6323,16 @@ int main(int argc, char *argv[])
         Vector<T,dim> cutoutCenter = clotCenter;
 
         //45 deg cutout (struggling to get fluid to enter at this angle)
-        cutoutCenter[1] += (0.7*radiusY);
-        cutoutCenter[2] -= (0.7*radiusY);
-        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 0.5, sim.dx * 2);
-        Vector<T,dim> eulerRotVec(45.0, 0.0, 0.0); //45 deg 
+        // cutoutCenter[1] += (0.7*radiusY);
+        // cutoutCenter[2] -= (0.7*radiusY);
+        // Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 0.5, sim.dx * 2);
+        // Vector<T,dim> eulerRotVec(45.0, 0.0, 0.0); //45 deg 
+
+        //45 deg cutout at bottom left of clot
+        //cutoutCenter[1] += (0.7*radiusY);
+        cutoutCenter[2] -= (1.0*radiusZ);
+        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 3.0, sim.dx * 13);
+        Vector<T,dim> eulerRotVec(60.0, 0.0, 0.0); //45 deg 
         
         //90 deg cutout (paralell to flow for easier entry)
         /*cutoutCenter[1] += (0.25*radiusY);
@@ -6334,13 +6340,13 @@ int main(int argc, char *argv[])
         Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 1.0, sim.dx * 3);
         Vector<T,dim> eulerRotVec(90.0, 0.0, 0.0); //90 deg */
 
-        sim.sampleEllipsoid_CulledWithCutout(material2, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoPipe, rhoFluid, true, 0, false);
+        sim.sampleEllipsoid_CulledWithCutout(material2, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoClot, rhoFluid, true, 0, false);
 
         //Particle Sampling
         T initialFluidSpeed = 0.0;
         T tubeExtraLength = sim.dx * 2;
         //sim.sampleTubeWithPoissonDisk(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
-        sim.sampleTubeWithPoissonDisk_clotCutOut(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, clotCenter, radiiVec * 1.1, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
+        sim.sampleTubeWithPoissonDisk_clotCutOut(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, clotCenter, radiiVec, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
     
         //Boundary Conditions
         sim.add_boundary_condition(new Geometry::TubeLevelSet<T,dim>(Geometry::STICKY, Vector<T, dim>(minVal + (0.5*tankWidth), minVal + (0.5*tankWidth), 0), Vector<T, dim>(0,0,1), pipeRadiusDirichlet));
