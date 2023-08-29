@@ -537,8 +537,8 @@ if sectorF[0]:
         print(runCommand)
         subprocess.call([runCommand], shell=True)
     if goingThreeDee[3]:
-        lamC = 1.05 #2.0 too low
-        tanhWidth = 0.08
+        lamC = 1.7 
+        tanhWidth = 0.1
         pStart = 5000  #v0 = 0.3: 10k too high still, segfault at 1 m/s, 5k too high seg fault at 0.6 m/s, 3k seg faults after wrap around with 0.2 m/s, 4k a little too high at 0.4 m/s
         #3k too low with v0 = 0                         
         pGrad = -318.3

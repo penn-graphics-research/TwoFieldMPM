@@ -1862,7 +1862,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleEllipsoid_CulledWithCutout(std::shared_ptr<ElasticityOp<T, dim>> model, const TV& center, const TV& radiiVector, const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., T fluidDensity = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+    void sampleEllipsoid_CulledWithCutout(std::shared_ptr<ElasticityOp<T, dim>> modelSolid, std::shared_ptr<ElasticityOp<T, dim>> modelFluid, const TV& center, const TV& radiiVector, const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., T fluidDensity = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1875,6 +1875,7 @@ public:
         }
         Geometry::PoissonDisk<T, dim> poisson_disk(min_corner, max_corner, Base::dx, T(_ppc));
         poisson_disk.sample(new_samples);
+        Field<TV> fluid_samples;
         for(auto position : new_samples){
             TV dist = position - center;
             T lhs = 0; //sum up contributions, level set defined by x^2/r1^2 + y^2/r2^2 + z^2/r3^2 = 1, keep points with lhs < 1
@@ -1892,7 +1893,8 @@ public:
                      && rotatedP[2] >= (cutoutCenter[2] - lengthsVector[2] / 2.0)
                      && rotatedP[2] <= (cutoutCenter[2] + lengthsVector[2] / 2.0)){
                         //std::cout << "found particle inside cutout region!" << std::endl;
-                        addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
+                        fluid_samples.push_back(position);
+                        //addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
                         //continue; //inside box, ignore
                     }
                     else{
@@ -1903,7 +1905,32 @@ public:
             }
         }
         int end = Base::m_X.size();
-        model->append(start, end, vol);
+        modelSolid->append(start, end, vol);
+
+        int fluidStart = end;
+        for(auto position : fluid_samples){
+            addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
+        }
+        int fluidEnd = Base::m_X.size();
+        modelFluid->append(fluidStart, fluidEnd, vol);
+    }
+
+    void addRectangularDamageRegion(const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector){
+        for(int i = 0; i < (int)Base::m_X.size(); ++i){
+            TV position = Base::m_X[i];
+            TV rotatedP = rotatePoint(position, cutoutCenter, eulerRotVector[0], eulerRotVector[1], eulerRotVector[2]); //get point rotated around box cutout center
+            if( rotatedP[0] >= (cutoutCenter[0] - lengthsVector[0] / 2.0) 
+                && rotatedP[0] <= (cutoutCenter[0] + lengthsVector[0] / 2.0) 
+                && rotatedP[1] >= (cutoutCenter[1] - lengthsVector[1] / 2.0) 
+                && rotatedP[1] <= (cutoutCenter[1] + lengthsVector[1] / 2.0)
+                && rotatedP[2] >= (cutoutCenter[2] - lengthsVector[2] / 2.0)
+                && rotatedP[2] <= (cutoutCenter[2] + lengthsVector[2] / 2.0)){
+                //if inside rectangular region, set to full damage
+                if(m_marker[i] == 0 || m_marker[i] == 5){
+                    Dp[i] = 1.0;
+                }
+            }
+        }
     }
 
     //Only rotating around x axis for now

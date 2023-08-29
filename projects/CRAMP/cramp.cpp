@@ -6224,7 +6224,7 @@ int main(int argc, char *argv[])
     if (testcase == 306) {
         using T = float; //NOTE: need to use float for 3D!!
         static const int dim = 3;
-        MPM::CRAMPSimulator<T, dim> sim("output/306_DirichletPiston_with40DirichletTube_withClotCutout_NOsolidFluidCoupling_45DegBottomLeft");
+        //MPM::CRAMPSimulator<T, dim> sim("output/306_DirichletPiston_with40DirichletTube_withClotCutout_NOsolidFluidCoupling_45DegBottomLeft_withDamageRegion");
 
         if (argc < 6) {
             puts("ERROR: please add parameters");
@@ -6236,12 +6236,22 @@ int main(int argc, char *argv[])
         T tanhWidth = std::atof(argv[3]);
         T pStart = std::atof(argv[4]);
         T pGrad = std::atof(argv[5]);
+        std::vector<std::string> cleanedStrings;
+        for(int i = 2; i < 4; ++i){
+            std::string cleanString = argv[i];
+            if(i == 2 || i == 3 ){
+                cleanString.erase(cleanString.find_last_not_of('0') + 1, std::string::npos);
+            }
+            cleanedStrings.push_back(cleanString);
+        }
+        std::string path = "output/306_DirichletPiston_with40DirichletTube_withClotCutout_NOsolidFluidCoupling_45DegBottomLeft_withDamageRegion_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1];
+        MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
         sim.dx = 2.5e-4;
         sim.ppc = 8;
         sim.symplectic = true;
-        sim.end_frame = 60;
+        sim.end_frame = 120;
         sim.frame_dt = (T)1. / 120;
         sim.gravity = 0;
 
@@ -6290,8 +6300,8 @@ int main(int argc, char *argv[])
         sim.suggested_dt = 1e-5;
 
         // Using `new` to avoid redundant copy constructor
-        auto material1 = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
-        auto material2 = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
+        auto fluidMaterial = sim.create_elasticity(new MPM::ViscousEquationOfStateOp<T, dim>(bulk, gamma, viscosity)); //K = 1e7 from glacier, gamma = 7 always for water
+        auto clotMaterial = sim.create_elasticity(new MPM::NeoHookeanOp<T, dim>(E, nu));
         //auto material1 = sim.create_elasticity(new MPM::NewFibrinPoroelasticityOp<T, dim>(c1, c2, phi_s0, pi_0, mu_0, beta_1));
 
         //Configuration
@@ -6312,10 +6322,10 @@ int main(int argc, char *argv[])
         T pipeOutletMargin = sim.dx * 1.0;
 
         //Clot Particle Sampling
-        T radiusY = pipeRadiusDirichlet;
+        T radiusY = pipeRadiusDirichlet * 1.2;
         T radiusZ = radiusY * 1.5;
         T radiusX = radiusY;
-        Vector<T,dim> clotCenter(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - radiusY, minVal + fluidMargin + (fluidRadius * 2.0 * 25.0));
+        Vector<T,dim> clotCenter(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - pipeRadiusDirichlet, minVal + fluidMargin + (fluidRadius * 2.0 * 25.0));
         Vector<T,dim> radiiVec(radiusX, radiusY, radiusZ);
         //sim.sampleEllipsoid(material2, clotCenter, radiiVec, Vector<T,dim>(0,0,0), 8, rhoPipe, true, 0, false);
         
@@ -6331,8 +6341,8 @@ int main(int argc, char *argv[])
         //45 deg cutout at bottom left of clot
         //cutoutCenter[1] += (0.7*radiusY);
         cutoutCenter[2] -= (1.0*radiusZ);
-        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 3.0, sim.dx * 13);
-        Vector<T,dim> eulerRotVec(60.0, 0.0, 0.0); //45 deg 
+        Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 3.0, sim.dx * 25); //13 for 60 deg
+        Vector<T,dim> eulerRotVec(45.0, 0.0, 0.0); //45 deg 
         
         //90 deg cutout (paralell to flow for easier entry)
         /*cutoutCenter[1] += (0.25*radiusY);
@@ -6340,13 +6350,13 @@ int main(int argc, char *argv[])
         Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 1.0, sim.dx * 3);
         Vector<T,dim> eulerRotVec(90.0, 0.0, 0.0); //90 deg */
 
-        sim.sampleEllipsoid_CulledWithCutout(material2, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoClot, rhoFluid, true, 0, false);
+        sim.sampleEllipsoid_CulledWithCutout(clotMaterial, fluidMaterial, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoClot, rhoFluid, true, 0, false);
 
         //Particle Sampling
         T initialFluidSpeed = 0.0;
         T tubeExtraLength = sim.dx * 2;
         //sim.sampleTubeWithPoissonDisk(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
-        sim.sampleTubeWithPoissonDisk_clotCutOut(material1, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, clotCenter, radiiVec, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
+        sim.sampleTubeWithPoissonDisk_clotCutOut(fluidMaterial, Vector<T,dim>(minVal + (0.5 * tankWidth), minVal + (0.5*tankWidth), minVal + fluidMargin), pipeLength, 0, fluidRadius, clotCenter, radiiVec, Vector<T,dim>(0,0,initialFluidSpeed), 8, rhoFluid, false, 4); //fluid cylinder
     
         //Boundary Conditions
         sim.add_boundary_condition(new Geometry::TubeLevelSet<T,dim>(Geometry::STICKY, Vector<T, dim>(minVal + (0.5*tankWidth), minVal + (0.5*tankWidth), 0), Vector<T, dim>(0,0,1), pipeRadiusDirichlet));
@@ -6358,7 +6368,13 @@ int main(int argc, char *argv[])
         sim.add_boundary_condition(new Geometry::HalfSpaceLevelSet<T, dim>(Geometry::STICKY, Vector<T, dim>(0, 0, minVal), Vector<T, dim>(0, 0, 1), Vector<T, dim>(0, 0, speed), duration)); //left side piston wall
 
         //Add Elasticity Degradation
-        //sim.elasticityDegradationType = 1;
+        sim.elasticityDegradationType = 1;
+
+        //Add rectangular damage region
+        Vector<T,dim> damageCenter = clotCenter;
+        Vector<T,dim> damageLengths(sim.dx * 30, radiusY * 1.0, sim.dx * 4); //13 for 60 deg
+        Vector<T,dim> damageRots(90.0, 0.0, 0.0); //45 deg 
+        sim.addRectangularDamageRegion(damageCenter, damageLengths, damageRots);
 
         //Add Tanh Damage Model
         int degType = 1;
