@@ -6244,7 +6244,7 @@ int main(int argc, char *argv[])
             }
             cleanedStrings.push_back(cleanString);
         }
-        std::string path = "output/306_DirichletPiston_with40DirichletTube_withClotCutout_NOsolidFluidCoupling_45DegBottomLeft_withDamageRegion_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1];
+        std::string path = "output/306_DirichletPiston_with40DirichletTube_withClotCutout_UNFILLED_SFMPM_45DegBottomLeft_withDamageRegion_lamC" + cleanedStrings[0] + "_tanhWidth" + cleanedStrings[1];
         MPM::CRAMPSimulator<T, dim> sim(path);
 
         //Params
@@ -6350,7 +6350,8 @@ int main(int argc, char *argv[])
         Vector<T,dim> lengthsVector(sim.dx * 30, radiusY * 1.0, sim.dx * 3);
         Vector<T,dim> eulerRotVec(90.0, 0.0, 0.0); //90 deg */
 
-        sim.sampleEllipsoid_CulledWithCutout(clotMaterial, fluidMaterial, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoClot, rhoFluid, true, 0, false);
+        bool fillCutout = false;
+        sim.sampleEllipsoid_CulledWithCutout(clotMaterial, fluidMaterial, clotCenter, radiiVec, cutoutCenter, lengthsVector, eulerRotVec, Vector<T,dim>(0,0,0), 8, rhoClot, rhoFluid, true, 0, false, fillCutout);
 
         //Particle Sampling
         T initialFluidSpeed = 0.0;

@@ -1862,7 +1862,7 @@ public:
         model->append(start, end, vol);
     }
 
-    void sampleEllipsoid_CulledWithCutout(std::shared_ptr<ElasticityOp<T, dim>> modelSolid, std::shared_ptr<ElasticityOp<T, dim>> modelFluid, const TV& center, const TV& radiiVector, const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., T fluidDensity = 1000., bool useDamage = false, int marker = 0, bool surfaced = false){
+    void sampleEllipsoid_CulledWithCutout(std::shared_ptr<ElasticityOp<T, dim>> modelSolid, std::shared_ptr<ElasticityOp<T, dim>> modelFluid, const TV& center, const TV& radiiVector, const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector, const TV& velocity = TV::Zero(), int _ppc = 4, T density = 1000., T fluidDensity = 1000., bool useDamage = false, int marker = 0, bool surfaced = false, bool fillCutout = true){
         // sample particles
         ppc = (T)_ppc;
         T vol = std::pow(Base::dx, dim) / T(_ppc);
@@ -1907,12 +1907,15 @@ public:
         int end = Base::m_X.size();
         modelSolid->append(start, end, vol);
 
-        int fluidStart = end;
-        for(auto position : fluid_samples){
-            addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
+        if(fillCutout){
+            int fluidStart = end;
+            for(auto position : fluid_samples){
+                addParticle(position, velocity, fluidDensity*vol, 0.0, 0, 4, false); //sample fluid inside the crack!
+            }
+            int fluidEnd = Base::m_X.size();
+            modelFluid->append(fluidStart, fluidEnd, vol);
         }
-        int fluidEnd = Base::m_X.size();
-        modelFluid->append(fluidStart, fluidEnd, vol);
+        
     }
 
     void addRectangularDamageRegion(const TV& cutoutCenter, const TV& lengthsVector, const TV& eulerRotVector){
