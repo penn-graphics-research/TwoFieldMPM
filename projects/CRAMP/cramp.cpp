@@ -6322,9 +6322,9 @@ int main(int argc, char *argv[])
         T pipeOutletMargin = sim.dx * 1.0;
 
         //Clot Particle Sampling
-        T radiusY = pipeRadiusDirichlet * 1.2;
-        T radiusZ = radiusY * 1.5;
-        T radiusX = radiusY;
+        T radiusY = pipeRadiusDirichlet * 1.5;
+        T radiusZ = pipeRadiusDirichlet * 1.5;
+        T radiusX = pipeRadiusDirichlet;
         Vector<T,dim> clotCenter(minVal + (0.5* tankWidth), minVal + (0.5*tankWidth) - pipeRadiusDirichlet, minVal + fluidMargin + (fluidRadius * 2.0 * 25.0));
         Vector<T,dim> radiiVec(radiusX, radiusY, radiusZ);
         //sim.sampleEllipsoid(material2, clotCenter, radiiVec, Vector<T,dim>(0,0,0), 8, rhoPipe, true, 0, false);
